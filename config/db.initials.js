@@ -1,4 +1,10 @@
 import {sequelize} from "./db.js";
+
+import "../models/reportModel/reportModel.js";
+import "../models/templateModel/templateModel.js";
+import "../models/portfolioModel/portfolioModel.js";
+
+
 const initDB = async () => {
   try {
     await sequelize.authenticate();
