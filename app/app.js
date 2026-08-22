@@ -1,10 +1,10 @@
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import initDB from "../config/db.initials.js";
+import authRoute from "../routes/authRoute/authRoute.js"; // ✅ import your user routes
+import userRoute from "../routes/authRoute/userRotes.js"; // ✅ import your user routes
 
-import  express from"express";
-import  cors  from "cors";
-import  dotenv from "dotenv";
-// import intiDB from "../config/db.initials.js";
-// import authRoute  from "../routes/authRoute/authRoute.js"
-// import taskRoute from "../routes/taskRoute/taskRoute.js"
 dotenv.config();
 
 const app = express();
@@ -14,16 +14,16 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-
-// app.use("/api/users", userRoutes);
-// app.use("/api/tasks", taskRoutes);
-
 // Health check
 app.get("/", (req, res) => {
   res.send("API is running...");
 });
 
 // Initialize database
-// intiDB();
+initDB();
+
+// ✅ Mount user routes
+app.use("/api/auth", authRoute);
+app.use("/api/users", userRoute); // ✅ Mount your user routes
 
 export default app;
