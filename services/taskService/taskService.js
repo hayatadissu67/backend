@@ -1,5 +1,6 @@
 import {TaskRepository} from "../../repository/taskRepository/taskRepository.js"
 
+const taskRepository = new TaskRepository();
 class TaskService {
   async createTask(data) {
     const hours = parseInt(data.estimatedWorkHours, 10);
