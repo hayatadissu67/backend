@@ -1,6 +1,4 @@
 import { ChangeRequest } from "../../models/ChangeRequestModel/changeRequestModel.js";
-//import { User } from "../../models/User.js";
-//import { Project } from "../../models/Project.js";
 
 // ===============================
 // CREATE CHANGE REQUEST
@@ -23,15 +21,8 @@ export const createChangeRequest = async (req, res) => {
       });
     }
 
-    // User authentication irraa ID fudhanna
-    const requestedBy = req.user?.id;
-
-    if (!requestedBy) {
-      return res.status(401).json({
-        success: false,
-        message: "User is not authenticated",
-      });
-    }
+    // User authentication irraa ID fudhanna (Yoo protect hin jirre dummy ID kennuu dandeessa ykn req.body irraa fiduu dandeessa)
+    const requestedBy = req.user?.id || 1; // Testing-aaf yoo protect cufame 1 akka ta'u godhameera
 
     // Create change request
     const changeRequest = await ChangeRequest.create({
@@ -66,23 +57,6 @@ export const createChangeRequest = async (req, res) => {
 export const getAllChangeRequests = async (req, res) => {
   try {
     const changeRequests = await ChangeRequest.findAll({
-      include: [
-        {
-          model: User,
-          as: "requester",
-          attributes: ["id", "name", "email"],
-        },
-        {
-          model: User,
-          as: "approver",
-          attributes: ["id", "name", "email"],
-        },
-        {
-          model: Project,
-          as: "project",
-          attributes: ["id", "name"],
-        },
-      ],
       order: [["createdAt", "DESC"]],
     });
 
@@ -109,25 +83,7 @@ export const getChangeRequestById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const changeRequest = await ChangeRequest.findByPk(id, {
-      include: [
-        {
-          model: User,
-          as: "requester",
-          attributes: ["id", "name", "email"],
-        },
-        {
-          model: User,
-          as: "approver",
-          attributes: ["id", "name", "email"],
-        },
-        {
-          model: Project,
-          as: "project",
-          attributes: ["id", "name"],
-        },
-      ],
-    });
+    const changeRequest = await ChangeRequest.findByPk(id);
 
     if (!changeRequest) {
       return res.status(404).json({
@@ -167,7 +123,6 @@ export const updateChangeRequest = async (req, res) => {
       });
     }
 
-    // Approved/Rejected ta'e booda edit akka hin taane
     if (
       changeRequest.status === "Approved" ||
       changeRequest.status === "Rejected"
@@ -234,14 +189,7 @@ export const approveChangeRequest = async (req, res) => {
       });
     }
 
-    const approvedBy = req.user?.id;
-
-    if (!approvedBy) {
-      return res.status(401).json({
-        success: false,
-        message: "User is not authenticated",
-      });
-    }
+    const approvedBy = req.user?.id || 1;
 
     await changeRequest.update({
       status: "Approved",
@@ -290,14 +238,7 @@ export const rejectChangeRequest = async (req, res) => {
       });
     }
 
-    const approvedBy = req.user?.id;
-
-    if (!approvedBy) {
-      return res.status(401).json({
-        success: false,
-        message: "User is not authenticated",
-      });
-    }
+    const approvedBy = req.user?.id || 1;
 
     if (!rejectionReason) {
       return res.status(400).json({

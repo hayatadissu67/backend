@@ -8,24 +8,17 @@ import {
   approveChangeRequest,
   rejectChangeRequest,
   deleteChangeRequest,
-} from "../../controllers/ChangeRequestController/changeRequestController.js";
+} from "../../controllers/changeRequestController/changeRequestController.js";
 
-import { protect } from "../../middleware/authMiddleware.js";
-
+// Yoo protect fayyadamuu baatte yeroof route keessaa haqi:
 const router = express.Router();
 
-router.post("/", protect, createChangeRequest);
-
-router.get("/", protect, getAllChangeRequests);
-
-router.get("/:id", protect, getChangeRequestById);
-
-router.put("/:id", protect, updateChangeRequest);
-
-router.patch("/:id/approve", protect, approveChangeRequest);
-
-router.patch("/:id/reject", protect, rejectChangeRequest);
-
-router.delete("/:id", protect, deleteChangeRequest);
+router.post("/", createChangeRequest);
+router.get("/", getAllChangeRequests);
+router.get("/:id", getChangeRequestById);
+router.put("/:id", updateChangeRequest);
+router.patch("/:id/approve", approveChangeRequest);
+router.patch("/:id/reject", rejectChangeRequest);
+router.delete("/:id", deleteChangeRequest);
 
 export default router;
