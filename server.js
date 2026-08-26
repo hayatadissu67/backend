@@ -1,8 +1,4 @@
-
-import app from "./app/app.js";
-import initDB from "./config/db.initials.js";
 // server.js
-
 import dotenv from "dotenv";
 import initDB from "./config/db.initials.js";
 

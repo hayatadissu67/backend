@@ -1,15 +1,13 @@
-<<<<<<< HEAD
-import {sequelize} from "./db.js";
+import { sequelize } from "./db.js";
 
 import "../models/reportModel/reportModel.js";
 import "../models/templateModel/templateModel.js";
 import "../models/portfolioModel/portfolioModel.js";
-
-=======
-import { sequelize } from "./db.js";
 import "../models/budgetModel/budgetModel.js";
 import "../models/ChangeRequestModel/changeRequestModel.js";
->>>>>>> ad6e8334b72d0cccc5d08b78a939db8c3c668301
+import "../models/authModel/roleModel.js";
+import "../models/authModel/userModel.js";
+import "../models/authModel/association.js";
 
 const initDB = async () => {
   try {
