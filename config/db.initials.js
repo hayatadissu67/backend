@@ -1,6 +1,8 @@
 import { sequelize } from "./db.js";
 import "../models/budgetModel/budgetModel.js";
 import "../models/ChangeRequestModel/changeRequestModel.js";
+import "../models/projectModel/projectModel.js";
+import "../models/riskModel/riskModel.js";
 
 const initDB = async () => {
   try {
