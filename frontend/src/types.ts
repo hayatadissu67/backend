@@ -50,7 +50,12 @@ export interface Project {
   teamMembers?: string[];
   lifecycleStage?: LifecycleStage;
   lifecycle?: ProjectLifecycleInfo;
+  approvalStatus?: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+  approvedBy?: string;
+  approvedAt?: string;
+  rejectionReason?: string;
 }
+
 
 export interface RiskItem {
   id: string;

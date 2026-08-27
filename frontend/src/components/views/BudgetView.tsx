@@ -4,6 +4,7 @@ import { BudgetItem } from '../../types';
 interface BudgetViewProps {
   budgets?: BudgetItem[];
   onUpdateBudget?: (budgetId: string, allocated: number, spent: number) => void;
+  currentPersona?: any;
 }
 
 type SubTab = 'Overview' | 'Planning' | 'Allocation' | 'Expenses' | 'Approvals' | 'Monitoring' | 'Forecast';
@@ -58,8 +59,9 @@ interface ExpenseItem {
   category: string;
 }
 
-export const BudgetView: React.FC<BudgetViewProps> = ({ budgets }) => {
+export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona }) => {
   const [activeTab, setActiveTab] = useState<SubTab>('Overview');
+
 
   // KPI Overall State
   const [totalBudget, setTotalBudget] = useState<number>(150000);
@@ -237,8 +239,27 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets }) => {
         </div>
       </div>
 
+      {/* Project Manager Read-Only Notice Banner */}
+      {currentPersona?.roleType === 'PROJECT_MANAGER' && (
+        <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl text-blue-900 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-blue-700 text-[24px]">lock</span>
+            <div>
+              <strong className="block text-sm">Project Manager Budget View (Read-Only)</strong>
+              <p className="text-[11px] text-blue-800 mt-0.5">
+                Project budgets are established during project creation and submitted for Executive Approval. The Project Manager has read-only access to portfolio budgets. Reallocations or modifications require Executive Manager approval.
+              </p>
+            </div>
+          </div>
+          <span className="bg-blue-100 text-blue-900 border border-blue-300 font-mono font-bold text-[10px] uppercase px-3 py-1 rounded-md shrink-0">
+            Read-Only Access
+          </span>
+        </div>
+      )}
+
       {/* TAB 1: OVERVIEW */}
       {activeTab === 'Overview' && (
+
         <div className="space-y-6 animate-fadeIn">
           {/* Top KPI Cards Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

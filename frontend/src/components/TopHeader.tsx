@@ -7,7 +7,6 @@ interface TopHeaderProps {
   unreadNotificationsCount?: number;
   onOpenNewProject: () => void;
   onOpenUserProfile?: () => void;
-  onLogout?: () => void;
   currentPersona?: LoggedInPersona;
   notificationsList?: NotificationItem[];
   onMarkNotificationsRead?: () => void;
@@ -22,7 +21,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   unreadNotificationsCount = 0,
   onOpenNewProject,
   onOpenUserProfile,
-  onLogout,
   currentPersona,
   notificationsList = [],
   onMarkNotificationsRead,
@@ -30,6 +28,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   selectedProject = null,
   onSelectProject
 }) => {
+
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -215,18 +214,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             <span className="material-symbols-outlined text-[22px]">help_outline</span>
           </button>
 
-          {/* Quick Sign Out Icon Button */}
-          {onLogout && (
-            <button
-              onClick={onLogout}
-              className="w-10 h-10 flex items-center justify-center text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-full transition-colors"
-              title="Sign Out of Session"
-            >
-              <span className="material-symbols-outlined text-[22px]">logout</span>
-            </button>
-          )}
-
           <div className="w-[1px] h-6 bg-slate-300 mx-1"></div>
+
 
           {/* Profile User Dropdown */}
           <div className="relative">
@@ -265,7 +254,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                     setShowProfileMenu(false);
                     if (onOpenUserProfile) onOpenUserProfile();
                   }}
-                  className="w-full text-left px-4 py-2 text-indigo-950 font-bold hover:bg-indigo-50 flex items-center gap-2 border-b border-slate-100"
+                  className="w-full text-left px-4 py-2 text-indigo-950 font-bold hover:bg-indigo-50 flex items-center gap-2 border-b border-slate-100 cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-[16px] text-indigo-900">account_circle</span>
                   View User Profile Details
@@ -275,26 +264,15 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                     setShowProfileMenu(false);
                     onOpenNewProject();
                   }}
-                  className="w-full text-left px-4 py-2 text-slate-700 hover:bg-slate-50 flex items-center gap-2 border-b border-slate-100"
+                  className="w-full text-left px-4 py-2 text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-[16px]">add_box</span>
                   Create New Project
                 </button>
-                {onLogout && (
-                  <button
-                    onClick={() => {
-                      setShowProfileMenu(false);
-                      onLogout();
-                    }}
-                    className="w-full text-left px-4 py-2 text-rose-600 hover:bg-rose-50 font-bold flex items-center gap-2"
-                  >
-                    <span className="material-symbols-outlined text-[16px] text-rose-600">logout</span>
-                    Sign Out of PMO
-                  </button>
-                )}
               </div>
             )}
           </div>
+
         </div>
       </header>
 

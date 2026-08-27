@@ -5,18 +5,20 @@ interface NewProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddProject: (newProject: Project) => void;
+  currentUserName?: string;
 }
 
 export const NewProjectModal: React.FC<NewProjectModalProps> = ({
   isOpen,
   onClose,
-  onAddProject
+  onAddProject,
+  currentUserName
 }) => {
   const [name, setName] = useState('');
   const [department, setDepartment] = useState('Engineering');
-  const [owner, setOwner] = useState('Sarah Jenkins');
+  const [owner, setOwner] = useState(currentUserName || 'Alex Rivers');
   const [budget, setBudget] = useState('750000');
-  const [status, setStatus] = useState<ProjectStatus>('ACTIVE');
+  const [status, setStatus] = useState<ProjectStatus>('PLANNING');
   const [health, setHealth] = useState<HealthStatus>('GREEN');
   const [gate, setGate] = useState('Gate 1');
   const [targetDate, setTargetDate] = useState('2026-12-31');
@@ -27,7 +29,12 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
     e.preventDefault();
     if (!name.trim()) return;
 
-    const numBudget = parseFloat(budget) || 500000;
+    const numBudget = parseFloat(budget);
+    if (isNaN(numBudget) || numBudget <= 0) {
+      alert('Please enter a valid project budget allocation.');
+      return;
+    }
+
     const stageMap: Record<string, LifecycleStage> = {
       'Gate 1': 'Initiation',
       'Gate 2': 'Planning',
@@ -40,27 +47,28 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
     const newPrj: Project = {
       id: `p-${Date.now()}`,
       name,
-      code: `PRJ-${name.substring(0, 4).toUpperCase()}`,
+      code: `PRJ-${name.substring(0, 4).toUpperCase().replace(/[^A-Z0-9]/g, '') || 'PMO'}`,
       department,
       owner,
-      status,
+      status: 'PLANNING',
       health,
       budget: numBudget,
-      spent: Math.round(numBudget * 0.15),
-      progress: stage === 'Initiation' ? 20 : stage === 'Planning' ? 40 : stage === 'Execution' ? 60 : stage === 'Governance' ? 80 : 100,
+      spent: 0,
+      progress: 0,
       gate,
       lifecycleStage: stage,
+      approvalStatus: 'PENDING_APPROVAL',
       lifecycle: {
         stage,
-        stageNumber: stage === 'Initiation' ? 1 : stage === 'Planning' ? 2 : stage === 'Execution' ? 3 : stage === 'Governance' ? 4 : 5,
+        stageNumber: 1,
         phaseDurationDays: 14,
         health: health === 'GREEN' ? 'Green' : health === 'YELLOW' ? 'Amber' : 'Red',
         approver: owner,
         signOffDate: new Date().toISOString().split('T')[0],
         criteria: [
           { id: 'c1', label: 'Project Charter & Scope Finalized', completed: true },
-          { id: 'c2', label: 'Architecture & Technical Sign-off', completed: stage !== 'Initiation' },
-          { id: 'c3', label: 'Security & Compliance Clearances', completed: stage === 'Governance' || stage === 'Closure' }
+          { id: 'c2', label: 'Architecture & Technical Sign-off', completed: false },
+          { id: 'c3', label: 'Security & Compliance Clearances', completed: false }
         ]
       },
       targetDate
@@ -76,9 +84,16 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
         <div className="bg-[#131b2e] text-white p-4 flex justify-between items-center">
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-[#497cff]">add_circle</span>
-            <h3 className="font-bold text-[15px]">Create New Portfolio Project</h3>
+            <h3 className="font-bold text-[15px]">Create New Project &amp; Initial Budget</h3>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white">✕</button>
+        </div>
+
+        <div className="bg-blue-50 border-b border-blue-100 p-3 text-xs text-blue-900 flex items-center gap-2">
+          <span className="material-symbols-outlined text-blue-600 text-[18px]">verified_user</span>
+          <span>
+            <strong>Executive Governance:</strong> Newly created projects and their initial budgets are submitted for <strong>Executive Manager Approval</strong> before project execution can begin.
+          </span>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
@@ -118,10 +133,11 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
 
             <div>
               <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Project Owner
+                Project Manager / Owner
               </label>
               <input
                 type="text"
+                required
                 value={owner}
                 onChange={(e) => setOwner(e.target.value)}
                 className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none"
@@ -132,14 +148,19 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
           <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Budget ($)
+                Project Budget ($) *
               </label>
               <input
                 type="number"
+                required
+                min="1000"
+                step="1000"
                 value={budget}
                 onChange={(e) => setBudget(e.target.value)}
-                className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none"
+                placeholder="e.g. 750000"
+                className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none font-mono font-bold"
               />
+              <span className="text-[10px] text-slate-500 block mt-0.5">Read-only after creation</span>
             </div>
 
             <div>
@@ -153,7 +174,7 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
               >
                 <option value="Gate 1">Gate 1: Charter</option>
                 <option value="Gate 2">Gate 2: Architecture</option>
-                <option value="Gate 3">Gate 3: Build & QA</option>
+                <option value="Gate 3">Gate 3: Build &amp; QA</option>
                 <option value="Gate 4">Gate 4: Pre-Launch</option>
               </select>
             </div>
@@ -164,9 +185,10 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
               </label>
               <input
                 type="date"
+                required
                 value={targetDate}
                 onChange={(e) => setTargetDate(e.target.value)}
-                className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none"
+                className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none font-mono"
               />
             </div>
           </div>
@@ -174,18 +196,12 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Initial Status
+                Approval Submission
               </label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as ProjectStatus)}
-                className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none"
-              >
-                <option value="ACTIVE">ACTIVE</option>
-                <option value="PLANNING">PLANNING</option>
-                <option value="DELAYED">DELAYED</option>
-                <option value="COMPLETED">COMPLETED</option>
-              </select>
+              <div className="p-2 bg-slate-50 rounded-sm border border-slate-200 text-amber-800 font-bold text-xs flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-amber-600 text-[16px]">pending_actions</span>
+                <span>Pending Executive Approval</span>
+              </div>
             </div>
 
             <div>
@@ -214,9 +230,10 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-[#00174b] text-white hover:bg-indigo-900 rounded-sm font-bold uppercase tracking-wider text-[11px]"
+              className="px-5 py-2 bg-[#00174b] text-white hover:bg-indigo-900 rounded-sm font-bold uppercase tracking-wider text-[11px] shadow-xs flex items-center gap-1.5"
             >
-              Add Project
+              <span className="material-symbols-outlined text-[16px]">send</span>
+              Submit for Approval
             </button>
           </div>
         </form>

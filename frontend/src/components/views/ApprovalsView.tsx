@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ApprovalRequest, NavigationTab } from '../../types';
+import { ApprovalRequest, NavigationTab, Project } from '../../types';
 
 interface ApprovalsViewProps {
   approvals: ApprovalRequest[];
@@ -7,6 +7,9 @@ interface ApprovalsViewProps {
   onApproveMemberAssignment?: (id: string, loginEmail: string, generatedPassword: string) => void;
   onNavigate?: (tab: NavigationTab) => void;
   onOpenAssignModal?: () => void;
+  projects?: Project[];
+  onApproveProject?: (id: string) => void;
+  onRejectProject?: (id: string, reason: string) => void;
 }
 
 export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
@@ -14,8 +17,14 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
   onAction,
   onApproveMemberAssignment,
   onNavigate,
-  onOpenAssignModal
+  onOpenAssignModal,
+  projects = [],
+  onApproveProject,
+  onRejectProject
 }) => {
+  const [rejectingProjectId, setRejectingProjectId] = useState<string | null>(null);
+  const [rejectionReasonInput, setRejectionReasonInput] = useState('');
+
   // Provision Modal State for Executive
   const [provisioningRequest, setProvisioningRequest] = useState<ApprovalRequest | null>(null);
   const [loginEmail, setLoginEmail] = useState('');
@@ -114,6 +123,77 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
         </div>
       </div>
 
+      {/* PROJECT CHARTERS & BUDGET APPROVALS TABLE */}
+      {projects.filter(p => p.approvalStatus === 'PENDING_APPROVAL' || !p.approvalStatus).length > 0 && (
+        <div className="bg-white border-2 border-amber-300 rounded-sm overflow-hidden shadow-xs animate-fadeIn">
+          <div className="p-4 bg-amber-50/80 border-b border-amber-200 flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-amber-800 text-[20px]">account_balance</span>
+              <h3 className="font-extrabold text-xs uppercase tracking-wider text-amber-950">
+                Project Charters &amp; Budget Allocations Pending Executive Approval ({projects.filter(p => p.approvalStatus === 'PENDING_APPROVAL' || !p.approvalStatus).length})
+              </h3>
+            </div>
+            <span className="text-[11px] font-mono font-bold text-amber-900 bg-amber-200/80 border border-amber-300 px-2.5 py-0.5 rounded-xs">
+              Executive Gate Decision Required
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-amber-100/40 text-slate-700 font-extrabold uppercase text-[10px] tracking-wider border-b border-amber-200">
+                  <th className="px-5 py-3">Project Code &amp; Title</th>
+                  <th className="px-5 py-3">Department</th>
+                  <th className="px-5 py-3">PM Requester</th>
+                  <th className="px-5 py-3">Requested Budget</th>
+                  <th className="px-5 py-3">Gate Phase</th>
+                  <th className="px-5 py-3">Target Launch</th>
+                  <th className="px-5 py-3 text-right">Executive Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-amber-100 font-sans">
+                {projects.filter(p => p.approvalStatus === 'PENDING_APPROVAL' || !p.approvalStatus).map((p) => (
+                  <tr key={p.id} className="hover:bg-amber-50/40 transition-colors">
+                    <td className="px-5 py-4">
+                      <span className="font-mono font-bold text-slate-900 block">{p.code}</span>
+                      <strong className="text-blue-950 font-bold text-xs">{p.name}</strong>
+                    </td>
+                    <td className="px-5 py-4 font-semibold text-slate-700">{p.department}</td>
+                    <td className="px-5 py-4 font-bold text-slate-900">{p.owner}</td>
+                    <td className="px-5 py-4 font-mono font-extrabold text-emerald-800 text-sm">
+                      ${p.budget?.toLocaleString() || '0'}
+                    </td>
+                    <td className="px-5 py-4 font-mono text-indigo-900 font-bold">{p.gate || 'Gate 1'}</td>
+                    <td className="px-5 py-4 font-mono text-slate-600">{p.targetDate}</td>
+                    <td className="px-5 py-4 text-right space-x-1.5 whitespace-nowrap">
+                      <button
+                        onClick={() => onApproveProject && onApproveProject(p.id)}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] uppercase rounded-xs shadow-2xs cursor-pointer inline-flex items-center gap-1 transition-colors"
+                        title="Approve Project Charter & Budget"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">check_circle</span>
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => {
+                          setRejectingProjectId(p.id);
+                          setRejectionReasonInput('');
+                        }}
+                        className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[11px] uppercase rounded-xs shadow-2xs cursor-pointer inline-flex items-center gap-1 transition-colors"
+                        title="Reject Project Charter"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">cancel</span>
+                        Reject
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Approvals Table */}
       <div className="bg-white border border-slate-200 rounded-sm overflow-hidden shadow-2xs">
         <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
@@ -124,6 +204,7 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
           <span className="text-[11px] font-mono font-bold text-indigo-900 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-xs">
             {approvals.filter(a => a.status === 'Pending').length} Action Required
           </span>
+
         </div>
 
         <div className="overflow-x-auto">
@@ -376,6 +457,56 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* REJECT PROJECT CHARTER MODAL */}
+      {rejectingProjectId && (
+
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white max-w-md w-full p-6 rounded-xl border border-slate-300 shadow-2xl space-y-4 text-xs">
+            <div className="flex justify-between items-center border-b pb-2">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-rose-600 text-[22px]">cancel</span>
+                <h3 className="font-extrabold text-slate-900 text-sm">Reject Project Charter</h3>
+              </div>
+              <button onClick={() => setRejectingProjectId(null)} className="text-slate-400 hover:text-slate-700 font-bold text-base cursor-pointer">✕</button>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-slate-600">
+                Please provide an executive rejection note explaining why this project charter or budget allocation is rejected:
+              </p>
+              <textarea
+                rows={3}
+                value={rejectionReasonInput}
+                onChange={(e) => setRejectionReasonInput(e.target.value)}
+                placeholder="e.g. Budget allocation exceeds departmental cap; please revise resource plan and resubmit..."
+                className="w-full border border-slate-300 rounded-lg p-2.5 text-slate-900 outline-none focus:border-rose-600"
+              />
+            </div>
+
+            <div className="pt-3 border-t flex justify-end gap-2">
+              <button
+                onClick={() => setRejectingProjectId(null)}
+                className="px-4 py-2 border rounded-lg font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (onRejectProject && rejectingProjectId) {
+                    onRejectProject(rejectingProjectId, rejectionReasonInput.trim() || 'Charter rejected by Executive Manager.');
+                  }
+                  setRejectingProjectId(null);
+                }}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg uppercase tracking-wider shadow-2xs cursor-pointer"
+              >
+                Confirm Rejection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

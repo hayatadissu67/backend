@@ -173,6 +173,27 @@ export const updateProjectApi = async (id: string, projectData: Partial<Project>
   }
 };
 
+export const approveProjectApi = async (id: string): Promise<Project | null> => {
+  try {
+    const res = await api.patch(`/projects/${id}/approve`);
+    return res.data?.success ? res.data.data : null;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to approve project.';
+    throw new Error(message);
+  }
+};
+
+export const rejectProjectApi = async (id: string, rejectionReason: string): Promise<Project | null> => {
+  try {
+    const res = await api.patch(`/projects/${id}/reject`, { rejectionReason });
+    return res.data?.success ? res.data.data : null;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to reject project.';
+    throw new Error(message);
+  }
+};
+
+
 // --- Risks API ---
 export const fetchRisksFromApi = async (): Promise<RiskItem[] | null> => {
   try {

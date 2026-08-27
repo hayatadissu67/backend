@@ -10,8 +10,8 @@ interface SidebarNavProps {
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   currentPersona?: LoggedInPersona;
-  onLogout?: () => void;
 }
+
 
 interface NavGroup {
   id: string;
@@ -30,9 +30,9 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   unreadNotificationsCount,
   isCollapsed = false,
   onToggleCollapse,
-  currentPersona,
-  onLogout
+  currentPersona
 }) => {
+
 
   // Keep track of expanded accordion groups in sidebar
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
@@ -274,7 +274,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
         })}
       </nav>
 
-      {/* Footer Settings & Sign Out */}
+      {/* Footer Settings */}
       <div className="p-3 border-t border-slate-800/80 space-y-1">
         <button
           onClick={() => onSelectTab('settings')}
@@ -288,19 +288,9 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
           <span className="material-symbols-outlined text-[20px]">settings</span>
           {!isCollapsed && <span className="text-[13px]">Settings</span>}
         </button>
-
-        {onLogout && (
-          <button
-            onClick={onLogout}
-            className="w-full flex items-center gap-3 transition-colors text-left px-2 py-2 rounded-xs text-rose-400 hover:text-rose-300 hover:bg-rose-950/30"
-            title="Sign Out of Session"
-          >
-            <span className="material-symbols-outlined text-[20px] text-rose-400">logout</span>
-            {!isCollapsed && <span className="text-[13px] font-bold">Sign Out</span>}
-          </button>
-        )}
       </div>
     </aside>
   );
 };
+
 

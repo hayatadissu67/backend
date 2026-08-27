@@ -3,6 +3,8 @@ import {
   fetchProjectsFromApi,
   createProjectApi,
   updateProjectApi,
+  approveProjectApi,
+  rejectProjectApi,
   fetchRisksFromApi,
   createRiskApi,
   updateRiskApi,
@@ -18,8 +20,8 @@ import {
   updateUserStatusApi,
   updateUserApi,
   getCurrentUserApi,
-  logoutApi,
 } from './services/api';
+
 
 import {
   UserRoleType,
@@ -74,86 +76,50 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
-  // Authentication State
+  // Authentication State: Always start on Login page
   const [currentUser, setCurrentUser] = useState<UserItem | null>(null);
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
 
-  // Check existing token and auto-restore authenticated session
+  // Sync navigation with browser back/forward buttons via hash
   useEffect(() => {
-    const handlePopState = () => {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setCurrentUser(null);
-      }
-    };
-    window.addEventListener('popstate', handlePopState);
-
-    const token = localStorage.getItem('token');
-    if (!token) {
-      setIsAuthLoading(false);
-      return () => window.removeEventListener('popstate', handlePopState);
-    }
-
-    const checkAuth = async () => {
-      try {
-        const user = await getCurrentUserApi();
-        if (user) {
-          setCurrentUser(user);
-          if (user.role === 'RISK_MANAGER') {
-            setCurrentTab('risks');
-          } else if (user.role === 'TEAM_MEMBER') {
-            setCurrentTab('tasks');
-          } else {
-            setCurrentTab('dashboard');
-          }
-        } else {
-          localStorage.removeItem('token');
+    const handleHashNavigation = () => {
+      const hash = window.location.hash.replace('#', '') as NavigationTab;
+      if (hash && currentUser) {
+        if (isTabAllowedForRole(currentUser.role, hash)) {
+          setCurrentTab(hash);
         }
-      } catch (e) {
-        localStorage.removeItem('token');
-      } finally {
-        setIsAuthLoading(false);
       }
     };
 
-    checkAuth();
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+    window.addEventListener('hashchange', handleHashNavigation);
+    window.addEventListener('popstate', handleHashNavigation);
+
+    return () => {
+      window.removeEventListener('hashchange', handleHashNavigation);
+      window.removeEventListener('popstate', handleHashNavigation);
+    };
+  }, [currentUser]);
+
+  const handleSelectTab = (tab: NavigationTab) => {
+    setCurrentTab(tab);
+    window.location.hash = tab;
+  };
 
   const handleLoginSuccess = (token: string, user: UserItem) => {
     localStorage.setItem('token', token);
     setCurrentUser(user);
 
     // Role-based redirection upon verified login
-    if (user.role === 'EXECUTIVE_MANAGER') {
-      setCurrentTab('dashboard');
-    } else if (user.role === 'PROJECT_MANAGER') {
-      setCurrentTab('dashboard');
-    } else if (user.role === 'RISK_MANAGER') {
-      setCurrentTab('risks');
+    let targetTab: NavigationTab = 'dashboard';
+    if (user.role === 'RISK_MANAGER') {
+      targetTab = 'risks';
+    } else if (user.role === 'TEAM_MEMBER') {
+      targetTab = 'tasks';
     } else {
-      setCurrentTab('tasks');
+      targetTab = 'dashboard';
     }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await logoutApi();
-    } catch (e) {
-      // Ignore network errors during logout
-    }
-    localStorage.removeItem('token');
-    sessionStorage.clear();
-    setCurrentUser(null);
-    setProjects([]);
-    setRisks([]);
-    setTasks([]);
-    setUsers([]);
-    setBudgets([]);
-    setChangeRequests([]);
-    setReports([]);
-    setTemplates([]);
-    window.history.replaceState(null, '', window.location.pathname);
+    setCurrentTab(targetTab);
+    window.location.hash = targetTab;
   };
 
   // Strict role-based authorization check for tabs
@@ -162,7 +128,7 @@ export default function App() {
     if (role === 'EXECUTIVE_MANAGER') return true;
 
     if (role === 'PROJECT_MANAGER') {
-      const restrictedForPM: NavigationTab[] = ['admin', 'approvals', 'budget'];
+      const restrictedForPM: NavigationTab[] = ['admin', 'approvals'];
       return !restrictedForPM.includes(tab);
     }
 
@@ -200,6 +166,46 @@ export default function App() {
 
     return false;
   };
+
+  // Project Approval Handlers for Executive Manager
+  const handleApproveProject = async (projectId: string) => {
+    try {
+      const updated = await approveProjectApi(projectId);
+      if (updated) {
+        setProjects((prev) => prev.map((p) => (p.id === projectId ? updated : p)));
+      } else {
+        setProjects((prev) =>
+          prev.map((p) =>
+            p.id === projectId
+              ? { ...p, approvalStatus: 'APPROVED', status: 'ACTIVE', approvedBy: currentUser?.name }
+              : p
+          )
+        );
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to approve project.');
+    }
+  };
+
+  const handleRejectProject = async (projectId: string, reason: string) => {
+    try {
+      const updated = await rejectProjectApi(projectId, reason);
+      if (updated) {
+        setProjects((prev) => prev.map((p) => (p.id === projectId ? updated : p)));
+      } else {
+        setProjects((prev) =>
+          prev.map((p) =>
+            p.id === projectId
+              ? { ...p, approvalStatus: 'REJECTED', status: 'DELAYED', rejectionReason: reason }
+              : p
+          )
+        );
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to reject project.');
+    }
+  };
+
 
   const currentPersona: LoggedInPersona | null = currentUser ? {
     id: String(currentUser.id),
@@ -657,14 +663,13 @@ export default function App() {
       {/* Left Collapsible Sidebar Navigation */}
       <SidebarNav
         currentTab={currentTab}
-        onSelectTab={setCurrentTab}
+        onSelectTab={handleSelectTab}
         pendingApprovalsCount={pendingApprovalsCount}
         openRisksCount={openRisksCount}
         unreadNotificationsCount={unreadNotificationsCount}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
         currentPersona={currentPersona}
-        onLogout={handleLogout}
       />
 
       {/* Top Header */}
@@ -674,7 +679,6 @@ export default function App() {
         unreadNotificationsCount={unreadNotificationsCount}
         onOpenNewProject={() => setIsNewProjectOpen(true)}
         onOpenUserProfile={() => handleOpenUserProfile()}
-        onLogout={handleLogout}
         currentPersona={currentPersona}
         projects={projects}
         selectedProject={selectedProject}
@@ -708,7 +712,7 @@ export default function App() {
                 tasks={tasks}
                 budgets={budgets}
                 meetings={meetings}
-                onNavigate={(tab) => setCurrentTab(tab)}
+                onNavigate={(tab) => handleSelectTab(tab)}
                 onOpenNewProject={() => setIsNewProjectOpen(true)}
                 onOpenExportPDF={() => setIsExportPDFOpen(true)}
                 onApprovalAction={handleApprovalAction}
@@ -756,7 +760,7 @@ export default function App() {
                 budgets={budgets}
                 risks={searchedRisks}
                 resources={resources}
-                onNavigate={(tab) => setCurrentTab(tab)}
+                onNavigate={(tab) => handleSelectTab(tab)}
                 onSelectProject={handleSelectProject}
               />
             )}
@@ -776,6 +780,9 @@ export default function App() {
                 onAddProject={handleAddProject}
                 onOpenAssignMemberModal={() => setIsAssignMemberModalOpen(true)}
                 onAddRisk={handleAddRisk}
+                currentPersona={currentPersona}
+                onApproveProject={handleApproveProject}
+                onRejectProject={handleRejectProject}
               />
             )}
 
@@ -812,7 +819,12 @@ export default function App() {
             )}
 
             {/* Budget View */}
-            {currentTab === 'budget' && <BudgetView budgets={budgets} />}
+            {currentTab === 'budget' && (
+              <BudgetView
+                budgets={budgets}
+                currentPersona={currentPersona}
+              />
+            )}
 
             {/* Communication Hub */}
             {(currentTab === 'collaboration' ||
@@ -843,11 +855,11 @@ export default function App() {
                     : 'discussions'
                 }
                 onSubTabChange={(subTab) => {
-                  if (subTab === 'chat') setCurrentTab('chat');
-                  else if (subTab === 'calendar') setCurrentTab('meetings');
-                  else if (subTab === 'notifications') setCurrentTab('notifications');
-                  else if (subTab === 'files') setCurrentTab('documents');
-                  else setCurrentTab('collaboration');
+                  if (subTab === 'chat') handleSelectTab('chat');
+                  else if (subTab === 'calendar') handleSelectTab('meetings');
+                  else if (subTab === 'notifications') handleSelectTab('notifications');
+                  else if (subTab === 'files') handleSelectTab('documents');
+                  else handleSelectTab('collaboration');
                 }}
                 currentPersona={currentPersona}
               />
@@ -862,10 +874,14 @@ export default function App() {
                 approvals={approvals}
                 onAction={handleApprovalAction}
                 onApproveMemberAssignment={handleApproveMemberAssignment}
-                onNavigate={(tab) => setCurrentTab(tab)}
+                onNavigate={(tab) => handleSelectTab(tab)}
                 onOpenAssignModal={() => setIsAssignMemberModalOpen(true)}
+                projects={projects}
+                onApproveProject={handleApproveProject}
+                onRejectProject={handleRejectProject}
               />
             )}
+
 
             {/* Action Templates View */}
             {currentTab === 'templates' && (

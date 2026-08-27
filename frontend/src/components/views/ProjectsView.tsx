@@ -26,6 +26,9 @@ interface ProjectsViewProps {
   onAddProject?: (newProject: Project) => void;
   onOpenAssignMemberModal?: () => void;
   onAddRisk?: (newRisk: RiskItem) => void;
+  currentPersona?: any;
+  onApproveProject?: (id: string) => void;
+  onRejectProject?: (id: string, reason: string) => void;
 }
 
 export const ProjectsView: React.FC<ProjectsViewProps> = ({
@@ -40,8 +43,12 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   onUpdateProject,
   onAddProject,
   onOpenAssignMemberModal,
-  onAddRisk
+  onAddRisk,
+  currentPersona,
+  onApproveProject,
+  onRejectProject,
 }) => {
+
   // Navigation sub-tabs inside Projects View
   const [activeSubTab, setActiveSubTab] = useState<
     'Directory' | 'Project Lifecycle' | 'Web Requirements' | 'Gate Roadmap' | 'Kanban Pipeline' | 'AI Charter Generator'
@@ -68,8 +75,11 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   const [inspectStage, setInspectStage] = useState<LifecycleStage>('Initiation');
   const [isEditing, setIsEditing] = useState(false);
   const [editedProject, setEditedProject] = useState<Project | null>(null);
+  const [rejectingProjectId, setRejectingProjectId] = useState<string | null>(null);
+  const [rejectionReasonInput, setRejectionReasonInput] = useState('');
 
   useEffect(() => {
+
     setSelectedProject(propsSelectedProject);
     if (propsSelectedProject) {
       setInspectStage(getProjectStage(propsSelectedProject));
@@ -366,6 +376,34 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
         return <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded-xs uppercase">Completed</span>;
     }
   };
+
+  // Handle Approval Status Badge
+  const renderApprovalBadge = (p: Project) => {
+    const approval = p.approvalStatus || 'PENDING_APPROVAL';
+    if (approval === 'APPROVED') {
+      return (
+        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold text-[9px] rounded-xs uppercase tracking-wider inline-flex items-center gap-1">
+          <span className="material-symbols-outlined text-[12px]">verified</span>
+          Approved &amp; Active
+        </span>
+      );
+    }
+    if (approval === 'REJECTED') {
+      return (
+        <span className="px-2 py-0.5 bg-rose-100 text-rose-900 border border-rose-300 font-bold text-[9px] rounded-xs uppercase tracking-wider inline-flex items-center gap-1">
+          <span className="material-symbols-outlined text-[12px]">cancel</span>
+          Rejected
+        </span>
+      );
+    }
+    return (
+      <span className="px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[9px] rounded-xs uppercase tracking-wider inline-flex items-center gap-1">
+        <span className="material-symbols-outlined text-[12px]">pending_actions</span>
+        Pending Executive Approval
+      </span>
+    );
+  };
+
 
   // Toggle web requirement status
   const handleToggleRequirement = (project: Project, reqId: string) => {
@@ -744,11 +782,35 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                             {renderStatusBadge(p.status)}
                           </div>
                           <div>{renderHealthBadge(p.health)}</div>
+                          <div className="pt-0.5">{renderApprovalBadge(p)}</div>
                         </td>
-                        <td className="px-4 py-3 text-right space-x-2 whitespace-nowrap">
+                        <td className="px-4 py-3 text-right space-x-1.5 whitespace-nowrap">
+                          {currentPersona?.roleType === 'EXECUTIVE_MANAGER' && (p.approvalStatus === 'PENDING_APPROVAL' || !p.approvalStatus) && (
+                            <>
+                              <button
+                                onClick={() => onApproveProject && onApproveProject(p.id)}
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-xs shadow-2xs cursor-pointer inline-flex items-center gap-1"
+                                title="Approve Project Charter & Budget"
+                              >
+                                <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                                Approve
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setRejectingProjectId(p.id);
+                                  setRejectionReasonInput('');
+                                }}
+                                className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] rounded-xs shadow-2xs cursor-pointer inline-flex items-center gap-1"
+                                title="Reject Project Charter"
+                              >
+                                <span className="material-symbols-outlined text-[13px]">cancel</span>
+                                Reject
+                              </button>
+                            </>
+                          )}
                           <button
                             onClick={() => { setSelectedProject(p); setIsEditing(false); }}
-                            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[10px] rounded-xs"
+                            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[10px] rounded-xs cursor-pointer"
                           >
                             Details
                           </button>
@@ -757,7 +819,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                               const nextHealth: HealthStatus = p.health === 'GREEN' ? 'YELLOW' : p.health === 'YELLOW' ? 'RED' : 'GREEN';
                               onUpdateProject({ ...p, health: nextHealth });
                             }}
-                            className="px-2 py-1 text-[10px] font-bold text-blue-800 hover:bg-blue-50 rounded-xs border border-blue-200"
+                            className="px-2 py-1 text-[10px] font-bold text-blue-800 hover:bg-blue-50 rounded-xs border border-blue-200 cursor-pointer"
                             title="Cycle Health State"
                           >
                             Cycle Health
@@ -765,6 +827,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                         </td>
                       </tr>
                     );
+
                   })}
                 </tbody>
               </table>
@@ -825,17 +888,44 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                       </div>
                     </div>
 
-                    <div className="pt-3 border-t border-slate-100 flex justify-between items-center text-xs">
-                      <div>
-                        <span className="text-[10px] text-slate-400 uppercase block">Owner &amp; Budget</span>
-                        <span className="font-bold text-slate-800">{p.owner}</span>
-                        <span className="text-slate-500 font-mono block text-[11px]">${(p.budget / 1000).toFixed(0)}k</span>
+                    <div className="pt-3 border-t border-slate-100 space-y-2 text-xs">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <span className="text-[10px] text-slate-400 uppercase block">Owner &amp; Budget</span>
+                          <span className="font-bold text-slate-800">{p.owner}</span>
+                          <span className="text-slate-500 font-mono block text-[11px]">${(p.budget / 1000).toFixed(0)}k</span>
+                        </div>
+                        <div>
+                          {renderApprovalBadge(p)}
+                        </div>
                       </div>
 
-                      <div className="flex gap-1">
+                      <div className="flex justify-between items-center pt-1 border-t border-slate-50">
+                        {currentPersona?.roleType === 'EXECUTIVE_MANAGER' && (p.approvalStatus === 'PENDING_APPROVAL' || !p.approvalStatus) ? (
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => onApproveProject && onApproveProject(p.id)}
+                              className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-xs shadow-2xs cursor-pointer"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => {
+                                setRejectingProjectId(p.id);
+                                setRejectionReasonInput('');
+                              }}
+                              className="px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] rounded-xs shadow-2xs cursor-pointer"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 font-mono">Stage: {stg}</span>
+                        )}
+
                         <button
                           onClick={() => { setSelectedProject(p); setIsEditing(false); }}
-                          className="px-3 py-1 bg-[#00174b] text-white font-bold text-[11px] rounded-xs hover:bg-indigo-950"
+                          className="px-3 py-1 bg-[#00174b] text-white font-bold text-[11px] rounded-xs hover:bg-indigo-950 cursor-pointer"
                         >
                           View Profile
                         </button>
@@ -846,6 +936,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
               })}
             </div>
           )}
+
         </div>
       )}
 
@@ -1511,6 +1602,31 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                     </button>
                   )}
 
+                  {currentPersona?.roleType === 'EXECUTIVE_MANAGER' && (selectedProject.approvalStatus === 'PENDING_APPROVAL' || !selectedProject.approvalStatus) && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          if (onApproveProject) onApproveProject(selectedProject.id);
+                          setSelectedProject({ ...selectedProject, approvalStatus: 'APPROVED', status: 'ACTIVE' });
+                        }}
+                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xs shadow-xs flex items-center gap-1 cursor-pointer transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                        Approve Project Charter
+                      </button>
+                      <button
+                        onClick={() => {
+                          setRejectingProjectId(selectedProject.id);
+                          setRejectionReasonInput('');
+                        }}
+                        className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xs shadow-xs flex items-center gap-1 cursor-pointer transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">cancel</span>
+                        Reject Charter
+                      </button>
+                    </div>
+                  )}
+
                   {userRoleMode === 'Stakeholder' && (
                     <span className="text-[11px] font-mono text-slate-300 bg-white/10 px-2.5 py-1 rounded-xs border border-white/15">
                       Read-Only Mode
@@ -1519,7 +1635,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
                   <button
                     onClick={() => setSelectedProject(null)}
-                    className="p-1.5 text-slate-300 hover:text-white hover:bg-white/10 rounded-full transition-colors ml-1"
+                    className="p-1.5 text-slate-300 hover:text-white hover:bg-white/10 rounded-full transition-colors ml-1 cursor-pointer"
                     title="Close"
                   >
                     <span className="material-symbols-outlined text-[20px]">close</span>
@@ -1537,6 +1653,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                     <span className="text-slate-300">•</span>
                     {renderHealthBadge(selectedProject.health)}
                     {renderStatusBadge(selectedProject.status)}
+                    {renderApprovalBadge(selectedProject)}
+
 
                     {/* Role Display Badge */}
                     {userRoleMode === 'Executive Admin' && (
@@ -2428,33 +2546,56 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                           </div>
                         </div>
 
-                        {/* Add New Deliverable Form */}
-                        <form onSubmit={handleAddDeliverable} className="bg-slate-50 p-3 rounded-xs border border-slate-200 space-y-2">
-                          <span className="text-[11px] font-bold text-slate-700 block uppercase">Log New Work Deliverable / Task</span>
-                          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
-                            <input
-                              type="text"
-                              placeholder="Deliverable title (e.g. Build API Endpoints)..."
-                              value={newDeliverableTitle}
-                              onChange={(e) => setNewDeliverableTitle(e.target.value)}
-                              className="sm:col-span-2 border p-1.5 rounded-xs text-xs outline-none focus:border-blue-600 bg-white"
-                            />
-                            <input
-                              type="text"
-                              placeholder="Assignee Name..."
-                              value={newDeliverableAssignee}
-                              onChange={(e) => setNewDeliverableAssignee(e.target.value)}
-                              className="border p-1.5 rounded-xs text-xs outline-none focus:border-blue-600 bg-white"
-                            />
-                            <button
-                              type="submit"
-                              className="bg-[#00174b] hover:bg-indigo-950 text-white font-bold text-xs uppercase rounded-xs py-1.5"
-                            >
-                              Add Deliverable
-                            </button>
+                        {/* Add New Deliverable Form or Approval Lock Banner */}
+                        {selectedProject.approvalStatus === 'PENDING_APPROVAL' || (!selectedProject.approvalStatus && currentPersona?.roleType === 'PROJECT_MANAGER') ? (
+                          <div className="bg-amber-50 border border-amber-200 p-4 rounded-xs text-amber-900 text-xs flex items-center gap-3">
+                            <span className="material-symbols-outlined text-amber-600 text-[24px]">pending_actions</span>
+                            <div>
+                              <strong className="block text-sm">Project Execution &amp; Task Logging Locked</strong>
+                              <p className="text-[11px] text-amber-800 mt-0.5">
+                                This project charter and budget allocation are currently awaiting <strong>Executive Manager Approval</strong>. Tasks, deliverables, and active sprints cannot be initiated until the charter is approved.
+                              </p>
+                            </div>
                           </div>
-                        </form>
+                        ) : selectedProject.approvalStatus === 'REJECTED' ? (
+                          <div className="bg-rose-50 border border-rose-200 p-4 rounded-xs text-rose-900 text-xs flex items-center gap-3">
+                            <span className="material-symbols-outlined text-rose-600 text-[24px]">cancel</span>
+                            <div>
+                              <strong className="block text-sm">Project Charter Rejected</strong>
+                              <p className="text-[11px] text-rose-800 mt-0.5">
+                                Rejection Note: {selectedProject.rejectionReason || 'Project was rejected by the Executive Manager.'}. Deliverables and task logs are disabled.
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <form onSubmit={handleAddDeliverable} className="bg-slate-50 p-3 rounded-xs border border-slate-200 space-y-2">
+                            <span className="text-[11px] font-bold text-slate-700 block uppercase">Log New Work Deliverable / Task</span>
+                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                              <input
+                                type="text"
+                                placeholder="Deliverable title (e.g. Build API Endpoints)..."
+                                value={newDeliverableTitle}
+                                onChange={(e) => setNewDeliverableTitle(e.target.value)}
+                                className="sm:col-span-2 border p-1.5 rounded-xs text-xs outline-none focus:border-blue-600 bg-white"
+                              />
+                              <input
+                                type="text"
+                                placeholder="Assignee Name..."
+                                value={newDeliverableAssignee}
+                                onChange={(e) => setNewDeliverableAssignee(e.target.value)}
+                                className="border p-1.5 rounded-xs text-xs outline-none focus:border-blue-600 bg-white"
+                              />
+                              <button
+                                type="submit"
+                                className="bg-[#00174b] hover:bg-indigo-950 text-white font-bold text-xs uppercase rounded-xs py-1.5 cursor-pointer"
+                              >
+                                Add Deliverable
+                              </button>
+                            </div>
+                          </form>
+                        )}
                       </div>
+
 
                       {/* Participant Deliverables / Tasks Table */}
                       <div className="bg-white border border-slate-200/80 rounded-sm overflow-x-auto shadow-2xs">
@@ -2791,9 +2932,65 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
               </span>
               <button
                 onClick={handleCloseProjectDetail}
-                className="px-5 py-2 bg-[#00174b] text-white font-bold rounded-xs uppercase tracking-wider text-xs hover:bg-indigo-950 shadow-2xs"
+                className="px-5 py-2 bg-[#00174b] text-white font-bold rounded-xs uppercase tracking-wider text-xs hover:bg-indigo-950 shadow-2xs cursor-pointer"
               >
                 Close Project Page
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* REJECT PROJECT CHARTER MODAL */}
+      {rejectingProjectId && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white max-w-md w-full p-6 rounded-xl border border-slate-300 shadow-2xl space-y-4 text-xs">
+            <div className="flex justify-between items-center border-b pb-2">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-rose-600 text-[22px]">cancel</span>
+                <h3 className="font-extrabold text-slate-900 text-sm">Reject Project Charter</h3>
+              </div>
+              <button onClick={() => setRejectingProjectId(null)} className="text-slate-400 hover:text-slate-700 font-bold text-base cursor-pointer">✕</button>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-slate-600">
+                Please provide an executive rejection note explaining why this project charter or budget allocation is rejected:
+              </p>
+              <textarea
+                rows={3}
+                value={rejectionReasonInput}
+                onChange={(e) => setRejectionReasonInput(e.target.value)}
+                placeholder="e.g. Budget allocation exceeds departmental cap; please revise resource plan and resubmit..."
+                className="w-full border border-slate-300 rounded-lg p-2.5 text-slate-900 outline-none focus:border-rose-600"
+              />
+            </div>
+
+            <div className="pt-3 border-t flex justify-end gap-2">
+              <button
+                onClick={() => setRejectingProjectId(null)}
+                className="px-4 py-2 border rounded-lg font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (onRejectProject && rejectingProjectId) {
+                    onRejectProject(rejectingProjectId, rejectionReasonInput.trim() || 'Charter rejected by Executive Manager.');
+                  }
+                  if (selectedProject?.id === rejectingProjectId) {
+                    setSelectedProject({
+                      ...selectedProject,
+                      approvalStatus: 'REJECTED',
+                      status: 'DELAYED',
+                      rejectionReason: rejectionReasonInput.trim() || 'Charter rejected by Executive Manager.'
+                    });
+                  }
+                  setRejectingProjectId(null);
+                }}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg uppercase tracking-wider shadow-2xs cursor-pointer"
+              >
+                Confirm Rejection
               </button>
             </div>
           </div>
@@ -2802,3 +2999,4 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     </div>
   );
 };
+

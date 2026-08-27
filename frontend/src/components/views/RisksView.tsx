@@ -524,19 +524,22 @@ export const RisksView: React.FC<RisksViewProps> = ({
                               Solve Issue
                             </button>
 
-                            <button
-                              onClick={() => {
-                                setEscalatingRisk(r);
-                                setEscalationNotesInput('');
-                              }}
-                              className="px-2.5 py-1 bg-purple-700 hover:bg-purple-800 text-white font-bold text-[10px] uppercase rounded-md transition-colors inline-flex items-center gap-1 shadow-2xs cursor-pointer"
-                              title="Cannot solve? Escalate to Risk Manager"
-                            >
-                              <span className="material-symbols-outlined text-[13px]">arrow_upward</span>
-                              Escalate to RM
-                            </button>
+                            {currentPersona?.roleType !== 'RISK_MANAGER' && (
+                              <button
+                                onClick={() => {
+                                  setEscalatingRisk(r);
+                                  setEscalationNotesInput('');
+                                }}
+                                className="px-2.5 py-1 bg-purple-700 hover:bg-purple-800 text-white font-bold text-[10px] uppercase rounded-md transition-colors inline-flex items-center gap-1 shadow-2xs cursor-pointer"
+                                title="Cannot solve? Escalate to Risk Manager"
+                              >
+                                <span className="material-symbols-outlined text-[13px]">arrow_upward</span>
+                                Escalate to RM
+                              </button>
+                            )}
                           </>
                         )}
+
 
                         {/* If status is ESCALATED: Risk Manager can Mitigate / Solve */}
                         {r.status === 'ESCALATED' && (
