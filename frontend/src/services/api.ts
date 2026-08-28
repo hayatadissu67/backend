@@ -442,6 +442,36 @@ export const createDiscussionApi = async (discussionData: any) => {
   }
 };
 
+export const fetchDocumentsApi = async () => {
+  try {
+    const res = await api.get('/communication/documents');
+    return res.data?.success ? res.data.data : [];
+  } catch (err) {
+    console.warn('Failed to fetch documents:', err);
+    return [];
+  }
+};
+
+export const createDocumentApi = async (documentData: any) => {
+  try {
+    const res = await api.post('/communication/documents', documentData);
+    return res.data?.success ? res.data.data : null;
+  } catch (err) {
+    console.error('API Error creating document:', err);
+    return null;
+  }
+};
+
+export const deleteDocumentApi = async (id: string) => {
+  try {
+    const res = await api.delete(`/communication/documents/${id}`);
+    return res.data?.success;
+  } catch (err) {
+    console.error('API Error deleting document:', err);
+    return false;
+  }
+};
+
 export const fetchMeetingsApi = async () => {
   try {
     const res = await api.get('/communication/meetings');

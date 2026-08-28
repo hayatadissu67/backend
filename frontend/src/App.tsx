@@ -128,7 +128,8 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
+    localStorage.clear();
+    sessionStorage.clear();
     setCurrentUser(null);
     window.location.hash = '';
     window.location.replace('/');

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { DiscussionItem, MeetingItem, NotificationItem, LoggedInPersona, Project } from '../../types';
-import { fetchChannelsApi, createChannelApi, fetchMessagesApi, createMessageApi } from '../../services/api';
+import { fetchChannelsApi, createChannelApi, fetchMessagesApi, createMessageApi, fetchDocumentsApi, createDocumentApi, deleteDocumentApi } from '../../services/api';
 
 export interface DocumentFileItem {
   id: string;
@@ -779,15 +779,28 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   // --- FILE SHARING MODULE STATE ---
-  const [documents, setDocuments] = useState<DocumentFileItem[]>(INITIAL_DOCUMENTS);
+  const [documents, setDocuments] = useState<DocumentFileItem[]>([]);
   const [documentSearch, setDocumentSearch] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileUpload = (files: FileList | null) => {
+  useEffect(() => {
+    const loadDocs = async () => {
+      const docs = await fetchDocumentsApi();
+      if (docs.length > 0) {
+        setDocuments(docs);
+      }
+    };
+    if (subTab === 'files') {
+      loadDocs();
+    }
+  }, [subTab]);
+
+  const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
-    Array.from(files).forEach((file) => {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
       const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
       const ext = file.name.split('.').pop()?.toUpperCase() || 'FILE';
 
@@ -797,20 +810,33 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
       else if (['XLS', 'XLSX', 'CSV'].includes(ext)) docType = 'Spreadsheet';
       else if (['PNG', 'JPG', 'SVG'].includes(ext)) docType = 'Architecture Diagram';
 
-      const newDoc: DocumentFileItem = {
-        id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      const newDocData = {
         title: file.name,
         type: docType,
         size: `${sizeMB} MB`,
         date: new Date().toISOString().split('T')[0],
-        author: currentPersona ? currentPersona.name : 'Sarah Jenkins',
-        projectCode: 'PRJ-DELTA'
+        projectCode: 'PRJ-DELTA' // Placeholder until project selector is added
       };
 
-      setDocuments((prev) => [newDoc, ...prev]);
-    });
+      const created = await createDocumentApi(newDocData);
+      if (created) {
+        setDocuments((prev) => [created, ...prev]);
+      }
+    }
 
     showToast(`Successfully uploaded ${files.length} document(s) to Communication Vault.`);
+  };
+
+  const handleDeleteDocument = async (id: string) => {
+    if (window.confirm("Are you sure you want to delete this document?")) {
+      const success = await deleteDocumentApi(id);
+      if (success) {
+        setDocuments(documents.filter((d) => d.id !== id));
+        showToast("Document deleted successfully");
+      } else {
+        alert("Failed to delete document. You might not have permission.");
+      }
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -2170,7 +2196,7 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
                     <td className="px-6 py-4 font-mono text-slate-500">{d.size}</td>
                     <td className="px-6 py-4 text-slate-600">{d.date}</td>
                     <td className="px-6 py-4 text-slate-700 font-medium">{d.author}</td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-6 py-4 text-right flex justify-end gap-2">
                       <button
                         onClick={() => showToast(`Downloading document: ${d.title}`)}
                         className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[10px] rounded-xs uppercase tracking-wider inline-flex items-center gap-1 transition-colors"
@@ -2178,6 +2204,15 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
                         <span className="material-symbols-outlined text-[14px]">download</span>
                         <span>Download</span>
                       </button>
+                      {(currentPersona?.role === 'EXECUTIVE_MANAGER' || d.author === currentPersona?.name) && (
+                        <button
+                          onClick={() => handleDeleteDocument(d.id)}
+                          className="px-3 py-1 bg-red-50 hover:bg-red-100 text-red-600 font-bold text-[10px] rounded-xs uppercase tracking-wider inline-flex items-center gap-1 transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-[14px]">delete</span>
+                          <span>Delete</span>
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
