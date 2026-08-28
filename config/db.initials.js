@@ -5,9 +5,14 @@ import "../models/templateModel/templateModel.js";
 import "../models/portfolioModel/portfolioModel.js";
 import "../models/budgetModel/budgetModel.js";
 import "../models/ChangeRequestModel/changeRequestModel.js";
+<<<<<<< HEAD
 import "../models/authModel/roleModel.js";
 import "../models/authModel/userModel.js";
 import "../models/authModel/association.js";
+=======
+import "../models/projectModel/projectModel.js";
+import "../models/riskModel/riskModel.js";
+>>>>>>> enkumariam
 
 const initDB = async () => {
   try {

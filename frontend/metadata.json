@@ -1,0 +1,6 @@
+{
+  "name": "Enterprise PMO",
+  "description": "Executive Control Tower and Strategic Portfolio Management dashboard for tracking projects, critical risks, resource loading, activity logs, and milestone timelines.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
