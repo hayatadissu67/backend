@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   fetchProjectsFromApi,
   createProjectApi,
@@ -15,6 +15,15 @@ import {
   fetchChangeRequestsFromApi,
   fetchReportsApi,
   fetchTemplatesApi,
+  createTemplateApi,
+  fetchDiscussionsApi,
+  createDiscussionApi,
+  fetchMeetingsApi,
+  createMeetingApi,
+  fetchNotificationsApi,
+  createNotificationApi,
+  markNotificationsReadApi,
+  clearNotificationsApi,
   fetchUsersFromApi,
   deleteUserApi,
   updateUserStatusApi,
@@ -122,7 +131,13 @@ export default function App() {
     window.location.hash = targetTab;
   };
 
-  // Strict role-based authorization check for tabs
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    setCurrentUser(null);
+    window.location.hash = '';
+    window.location.replace('/');
+  };
+
   const isTabAllowedForRole = (role?: UserRoleType, tab?: NavigationTab): boolean => {
     if (!role || !tab) return false;
     if (role === 'EXECUTIVE_MANAGER') return true;
@@ -284,10 +299,31 @@ export default function App() {
   ]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
 
+  // Compute projects accessible to the current user based on role and assigned project codes
+  const accessibleProjects = useMemo(() => {
+    if (!currentUser) return [];
+    if (currentUser.role === 'EXECUTIVE_MANAGER') return projects;
+    return projects.filter((p) => currentUser.assignedProjectCodes?.includes(p.code));
+  }, [projects, currentUser]);
+
   // Collections
   const [users, setUsers] = useState<UserItem[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [budgets, setBudgets] = useState<BudgetItem[]>([]);
+
+  // Compute tasks accessible to the current user based on role and assigned project codes
+  const accessibleTasks = useMemo(() => {
+    if (!currentUser) return [];
+    if (currentUser.role === 'EXECUTIVE_MANAGER') return tasks;
+    return tasks.filter((t) => currentUser.assignedProjectCodes?.includes(t.projectCode));
+  }, [tasks, currentUser]);
+
+  // Compute budgets accessible to the current user based on role and assigned project codes
+  const accessibleBudgets = useMemo(() => {
+    if (!currentUser) return [];
+    if (currentUser.role === 'EXECUTIVE_MANAGER') return budgets;
+    return budgets.filter((b) => currentUser.assignedProjectCodes?.includes(b.projectCode));
+  }, [budgets, currentUser]);
   const [meetings, setMeetings] = useState<MeetingItem[]>([]);
   const [discussions, setDiscussions] = useState<DiscussionItem[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -350,7 +386,10 @@ export default function App() {
     const syncWithBackendApi = async () => {
       setIsFetchingData(true);
       try {
-        const [apiUsers, apiProjects, apiRisks, apiTasks, apiBudgets, apiCRs, apiReports, apiTemplates] = await Promise.all([
+        const [
+          apiUsers, apiProjects, apiRisks, apiTasks, apiBudgets, apiCRs, apiReports, apiTemplates,
+          apiDiscussions, apiMeetings, apiNotifications
+        ] = await Promise.all([
           fetchUsersFromApi(),
           fetchProjectsFromApi(),
           fetchRisksFromApi(),
@@ -358,7 +397,10 @@ export default function App() {
           fetchBudgetsFromApi(),
           fetchChangeRequestsFromApi(),
           fetchReportsApi(),
-          fetchTemplatesApi()
+          fetchTemplatesApi(),
+          fetchDiscussionsApi(),
+          fetchMeetingsApi(),
+          fetchNotificationsApi()
         ]);
         
         if (apiUsers) setUsers(apiUsers);
@@ -369,6 +411,9 @@ export default function App() {
         if (apiCRs) setChangeRequests(apiCRs);
         if (apiReports) setReports(apiReports);
         if (apiTemplates) setTemplates(apiTemplates);
+        if (apiDiscussions) setDiscussions(apiDiscussions);
+        if (apiMeetings) setMeetings(apiMeetings);
+        if (apiNotifications) setNotifications(apiNotifications);
       } catch (err) {
         console.error('Failed to sync data with backend API:', err);
       } finally {
@@ -487,6 +532,7 @@ export default function App() {
 
   const handleAddMeeting = (newMeeting: MeetingItem) => {
     setMeetings([newMeeting, ...meetings]);
+    createMeetingApi(newMeeting);
     const act: ActivityItem = {
       id: `act-mtg-${Date.now()}`,
       type: 'gate',
@@ -500,14 +546,17 @@ export default function App() {
 
   const handleAddDiscussion = (newDiscussion: DiscussionItem) => {
     setDiscussions([newDiscussion, ...discussions]);
+    createDiscussionApi(newDiscussion);
   };
 
   const handleMarkAllNotificationsRead = () => {
     setNotifications(notifications.map((n) => ({ ...n, isRead: true })));
+    markNotificationsReadApi();
   };
 
   const handleClearNotifications = () => {
     setNotifications([]);
+    clearNotificationsApi();
   };
 
   const handleApprovalAction = (id: string, status: 'Approved' | 'Rejected') => {
@@ -616,14 +665,14 @@ export default function App() {
   const unreadNotificationsCount = notifications.filter((n) => !n.isRead).length;
 
   const searchedProjects = searchQuery
-    ? projects.filter(
+    ? accessibleProjects.filter(
         (p) =>
           p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           p.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
           p.department.toLowerCase().includes(searchQuery.toLowerCase()) ||
           p.owner.toLowerCase().includes(searchQuery.toLowerCase())
       )
-    : projects;
+    : accessibleProjects;
 
   const searchedRisks = searchQuery
     ? risks.filter(
@@ -679,8 +728,9 @@ export default function App() {
         unreadNotificationsCount={unreadNotificationsCount}
         onOpenNewProject={() => setIsNewProjectOpen(true)}
         onOpenUserProfile={() => handleOpenUserProfile()}
+        onLogout={handleLogout}
         currentPersona={currentPersona}
-        projects={projects}
+        projects={accessibleProjects}
         selectedProject={selectedProject}
         onSelectProject={handleSelectProject}
       />
@@ -709,8 +759,8 @@ export default function App() {
                 milestones={milestones}
                 resources={resources}
                 approvals={approvals}
-                tasks={tasks}
-                budgets={budgets}
+                tasks={accessibleTasks}
+                budgets={accessibleBudgets}
                 meetings={meetings}
                 onNavigate={(tab) => handleSelectTab(tab)}
                 onOpenNewProject={() => setIsNewProjectOpen(true)}

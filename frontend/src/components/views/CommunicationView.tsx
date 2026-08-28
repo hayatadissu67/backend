@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { DiscussionItem, MeetingItem, NotificationItem, LoggedInPersona, Project } from '../../types';
+import { fetchChannelsApi, createChannelApi, fetchMessagesApi, createMessageApi } from '../../services/api';
 
 export interface DocumentFileItem {
   id: string;
@@ -337,8 +338,31 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
 
   // --- TEAM CHAT MODULE STATE & TELEGRAM FEATURES ---
   const [channels, setChannels] = useState<ChatChannel[]>(INITIAL_CHANNELS);
-  const [activeChannelId, setActiveChannelId] = useState<string>('ch-general');
+  const [activeChannelId, setActiveChannelId] = useState<string>(INITIAL_CHANNELS[0].id);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(INITIAL_CHAT_MESSAGES);
+
+  useEffect(() => {
+    const loadChatData = async () => {
+      const [apiChannels, apiMessages] = await Promise.all([
+        fetchChannelsApi(),
+        fetchMessagesApi()
+      ]);
+      if (apiChannels.length > 0) {
+        setChannels(apiChannels);
+        setActiveChannelId(apiChannels[0].id);
+      } else {
+        setChannels(INITIAL_CHANNELS);
+        setActiveChannelId(INITIAL_CHANNELS[0].id);
+      }
+      if (apiMessages.length > 0) {
+        setChatMessages(apiMessages);
+      } else {
+        setChatMessages(INITIAL_CHAT_MESSAGES);
+      }
+    };
+    loadChatData();
+  }, []);
+
   const [chatInput, setChatInput] = useState('');
   const [chatSearch, setChatSearch] = useState('');
   const [isCodeSnippet, setIsCodeSnippet] = useState(false);
@@ -369,7 +393,7 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
           if (!existingCodes.has(prj.code)) {
             newProjectChannels.push({
               id: `ch-prj-${prj.code.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
-              name: `${prj.code.toLowerCase()}-${prj.lifecycleStage.toLowerCase()}`,
+              name: `${prj.code.toLowerCase()}-${(prj.lifecycleStage || 'planning').toLowerCase()}`,
               type: 'channel',
               unreadCount: 0,
               description: `${prj.name} (${prj.code}) • Managed by ${prj.owner} • ${prj.gate} [${prj.health} Health]`,
@@ -404,6 +428,8 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
     };
 
     setChannels((prev) => [...prev, createdChan]);
+    createChannelApi(createdChan);
+    
     setActiveChannelId(createdChan.id);
     setIsCreateChannelOpen(false);
     setNewChannelNameInput('');
@@ -507,6 +533,7 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
       };
 
       setChatMessages((prev) => [...prev, autoMsg]);
+      createMessageApi(autoMsg);
       showToast(`💬 ${responder.name} replied to ${currentChan ? currentChan.name : 'chat'}`);
     }, 2200);
   };
@@ -539,6 +566,8 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
     };
 
     setChatMessages((prev) => [...prev, newMsg]);
+    createMessageApi(newMsg);
+
     const sentText = chatInput;
     setChatInput('');
     setIsCodeSnippet(false);
@@ -568,6 +597,8 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
     };
 
     setChatMessages((prev) => [...prev, voiceMsg]);
+    createMessageApi(voiceMsg);
+
     showToast('Recorded and sent Telegram voice note (0:18)');
     triggerSimulatedTeamReply('voice note update', activeChannelId);
   };

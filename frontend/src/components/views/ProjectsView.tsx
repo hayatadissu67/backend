@@ -68,7 +68,11 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
   // Selected Project for Detail Page / Modal
   const [selectedProject, setSelectedProject] = useState<Project | null>(propsSelectedProject);
-  const [userRoleMode, setUserRoleMode] = useState<'Executive Admin' | 'Project Member' | 'Stakeholder'>('Executive Admin');
+
+  const userRoleMode = currentPersona?.roleType === 'EXECUTIVE_MANAGER' || currentPersona?.roleType === 'PROJECT_MANAGER'
+    ? 'Executive Admin'
+    : (currentPersona?.roleType === 'TEAM_MEMBER' ? 'Project Member' : 'Stakeholder');
+
   const [projectDetailTab, setProjectDetailTab] = useState<
     'Overview' | 'Lifecycle' | 'Participants' | 'Works Done' | 'Risks' | 'Chat' | 'Requirements'
   >('Overview');
@@ -590,11 +594,10 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
             <button
               key={tab.key}
               onClick={() => setActiveSubTab(tab.key as any)}
-              className={`px-3.5 py-1.5 rounded-xs transition-all flex items-center gap-1.5 ${
-                activeSubTab === tab.key
+              className={`px-3.5 py-1.5 rounded-xs transition-all flex items-center gap-1.5 ${activeSubTab === tab.key
                   ? 'bg-white text-blue-950 font-bold shadow-2xs border border-slate-200/60'
                   : 'hover:text-slate-900 hover:bg-slate-200/50'
-              }`}
+                }`}
             >
               <span className={`material-symbols-outlined text-[16px] ${tab.key === 'AI Charter Generator' ? 'text-amber-500' : ''}`}>
                 {tab.icon}
@@ -608,18 +611,16 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
           <div className="flex items-center gap-1 bg-white border border-slate-200/80 p-0.5 rounded-xs">
             <button
               onClick={() => setLayoutMode('table')}
-              className={`px-2 py-1 rounded-xs flex items-center gap-1 text-[11px] ${
-                layoutMode === 'table' ? 'bg-[#00174b] text-white font-bold' : 'text-slate-600 hover:text-slate-900'
-              }`}
+              className={`px-2 py-1 rounded-xs flex items-center gap-1 text-[11px] ${layoutMode === 'table' ? 'bg-[#00174b] text-white font-bold' : 'text-slate-600 hover:text-slate-900'
+                }`}
             >
               <span className="material-symbols-outlined text-[14px]">table_rows</span>
               Table
             </button>
             <button
               onClick={() => setLayoutMode('grid')}
-              className={`px-2 py-1 rounded-xs flex items-center gap-1 text-[11px] ${
-                layoutMode === 'grid' ? 'bg-[#00174b] text-white font-bold' : 'text-slate-600 hover:text-slate-900'
-              }`}
+              className={`px-2 py-1 rounded-xs flex items-center gap-1 text-[11px] ${layoutMode === 'grid' ? 'bg-[#00174b] text-white font-bold' : 'text-slate-600 hover:text-slate-900'
+                }`}
             >
               <span className="material-symbols-outlined text-[14px]">grid_view</span>
               Grid Cards
@@ -979,20 +980,18 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                     onClick={() =>
                       setSelectedLifecycleStageFilter(isSelected ? 'ALL' : stg.stage)
                     }
-                    className={`text-left p-3 rounded-sm border transition-all relative overflow-hidden ${
-                      isSelected
+                    className={`text-left p-3 rounded-sm border transition-all relative overflow-hidden ${isSelected
                         ? 'bg-[#00174b] text-white border-[#00174b] shadow-md ring-2 ring-indigo-400'
                         : 'bg-slate-50 hover:bg-white border-slate-200/80 text-slate-800'
-                    }`}
+                      }`}
                   >
                     <div className="flex justify-between items-center mb-1">
                       <span className={`text-[10px] font-bold uppercase tracking-wider font-mono ${isSelected ? 'text-indigo-200' : 'text-slate-500'}`}>
                         STAGE {stg.num} • {stg.gate}
                       </span>
                       <span
-                        className={`px-2 py-0.5 rounded-full font-mono font-bold text-[10px] ${
-                          isSelected ? 'bg-amber-400 text-slate-900' : 'bg-slate-200 text-slate-800'
-                        }`}
+                        className={`px-2 py-0.5 rounded-full font-mono font-bold text-[10px] ${isSelected ? 'bg-amber-400 text-slate-900' : 'bg-slate-200 text-slate-800'
+                          }`}
                       >
                         {count} Project{count !== 1 ? 's' : ''}
                       </span>
@@ -1016,11 +1015,10 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
               <span className="text-slate-500 uppercase tracking-wider text-[10px] font-bold mr-1">Filter Stage:</span>
               <button
                 onClick={() => setSelectedLifecycleStageFilter('ALL')}
-                className={`px-3 py-1 rounded-xs transition-colors ${
-                  selectedLifecycleStageFilter === 'ALL'
+                className={`px-3 py-1 rounded-xs transition-colors ${selectedLifecycleStageFilter === 'ALL'
                     ? 'bg-[#00174b] text-white font-bold'
                     : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                }`}
+                  }`}
               >
                 All Stages ({projects.length})
               </button>
@@ -1030,11 +1028,10 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                   <button
                     key={stage}
                     onClick={() => setSelectedLifecycleStageFilter(stage)}
-                    className={`px-3 py-1 rounded-xs transition-colors ${
-                      selectedLifecycleStageFilter === stage
+                    className={`px-3 py-1 rounded-xs transition-colors ${selectedLifecycleStageFilter === stage
                         ? 'bg-[#00174b] text-white font-bold'
                         : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                    }`}
+                      }`}
                   >
                     {stage} ({cnt})
                   </button>
@@ -1103,13 +1100,12 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                           return (
                             <div
                               key={st}
-                              className={`h-2.5 rounded-xs transition-all ${
-                                isPast
+                              className={`h-2.5 rounded-xs transition-all ${isPast
                                   ? 'bg-emerald-500'
                                   : isCurrent
-                                  ? 'bg-[#00174b] ring-2 ring-indigo-300'
-                                  : 'bg-slate-200'
-                              }`}
+                                    ? 'bg-[#00174b] ring-2 ring-indigo-300'
+                                    : 'bg-slate-200'
+                                }`}
                               title={`${st} (${stepNum}/5)`}
                             />
                           );
@@ -1134,18 +1130,16 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                           <div key={c.id} className="flex items-center justify-between text-[11px]">
                             <span className={`flex items-center gap-1.5 ${c.completed ? 'text-slate-800 font-medium' : 'text-slate-500'}`}>
                               <span
-                                className={`material-symbols-outlined text-[14px] ${
-                                  c.completed ? 'text-emerald-600 font-bold' : 'text-slate-300'
-                                }`}
+                                className={`material-symbols-outlined text-[14px] ${c.completed ? 'text-emerald-600 font-bold' : 'text-slate-300'
+                                  }`}
                               >
                                 {c.completed ? 'check_circle' : 'radio_button_unchecked'}
                               </span>
                               {c.label}
                             </span>
                             <span
-                              className={`text-[9px] font-mono uppercase font-bold px-1.5 py-0.5 rounded-xs ${
-                                c.completed ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
-                              }`}
+                              className={`text-[9px] font-mono uppercase font-bold px-1.5 py-0.5 rounded-xs ${c.completed ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
+                                }`}
                             >
                               {c.completed ? 'PASSED' : 'PENDING'}
                             </span>
@@ -1250,13 +1244,12 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                         <div className="flex justify-between items-start">
                           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{req.category}</span>
                           <span
-                            className={`px-1.5 py-0.5 text-[9px] font-bold rounded-xs ${
-                              req.status === 'Compliant'
+                            className={`px-1.5 py-0.5 text-[9px] font-bold rounded-xs ${req.status === 'Compliant'
                                 ? 'bg-emerald-100 text-emerald-800'
                                 : req.status === 'In Progress'
-                                ? 'bg-blue-100 text-blue-800'
-                                : 'bg-amber-100 text-amber-800'
-                            }`}
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}
                           >
                             {req.status}
                           </span>
@@ -1489,7 +1482,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
       {selectedProject && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto">
           <div className="bg-white max-w-6xl w-full max-h-[95vh] overflow-y-auto rounded-sm border border-slate-300 shadow-2xl flex flex-col text-xs animate-fadeIn my-auto">
-            
+
             {/* Top Navigation & Header Banner */}
             <div className="bg-[#00174b] text-white p-5 sm:p-6 rounded-t-sm space-y-4 sticky top-0 z-20 shadow-md">
               <div className="flex flex-wrap justify-between items-center gap-3">
@@ -1502,58 +1495,6 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                     <span>Back to Projects Hub</span>
                   </button>
 
-                  {/* Role Switcher Pill Bar */}
-                  <div className="flex flex-wrap items-center gap-1.5 bg-black/30 p-1 rounded-xs border border-white/15">
-                    <span className="text-[10px] font-mono uppercase font-bold text-indigo-200 px-1.5 hidden sm:inline-flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[13px] text-amber-300">manage_accounts</span>
-                      View As:
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUserRoleMode('Executive Admin');
-                        setProjectDetailTab('Overview');
-                      }}
-                      className={`px-2.5 py-1 rounded-xs text-[10px] font-extrabold transition-all flex items-center gap-1 ${
-                        userRoleMode === 'Executive Admin'
-                          ? 'bg-amber-400 text-slate-950 shadow-xs'
-                          : 'text-slate-300 hover:text-white hover:bg-white/10'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-[13px]">admin_panel_settings</span>
-                      Executive Admin
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUserRoleMode('Project Member');
-                        setProjectDetailTab('Works Done');
-                      }}
-                      className={`px-2.5 py-1 rounded-xs text-[10px] font-extrabold transition-all flex items-center gap-1 ${
-                        userRoleMode === 'Project Member'
-                          ? 'bg-blue-500 text-white shadow-xs'
-                          : 'text-slate-300 hover:text-white hover:bg-white/10'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-[13px]">badge</span>
-                      Team Member
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUserRoleMode('Stakeholder');
-                        setProjectDetailTab('Overview');
-                      }}
-                      className={`px-2.5 py-1 rounded-xs text-[10px] font-extrabold transition-all flex items-center gap-1 ${
-                        userRoleMode === 'Stakeholder'
-                          ? 'bg-slate-200 text-slate-900 shadow-xs'
-                          : 'text-slate-300 hover:text-white hover:bg-white/10'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-[13px]">visibility</span>
-                      Stakeholder
-                    </button>
-                  </div>
                 </div>
 
                 {/* Header Action Controls - Conditional by Role */}
@@ -1702,13 +1643,14 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                 {userRoleMode === 'Executive Admin' && [
                   { key: 'Overview', label: 'Overview & Financials', icon: 'dashboard' },
                   { key: 'Lifecycle', label: 'Lifecycle Governance', icon: 'account_tree' },
-                  { key: 'Participants', label: `Participants & Team (${
-                    (users || []).filter(u => 
+                  {
+                    key: 'Participants', label: `Participants & Team (${(users || []).filter(u =>
                       u.assignedProjectCodes?.some(c => c.toLowerCase() === selectedProject.code.toLowerCase() || selectedProject.code.toLowerCase().includes(c.toLowerCase())) ||
                       u.name.toLowerCase().includes(selectedProject.owner.toLowerCase()) ||
                       u.department.toLowerCase() === selectedProject.department.toLowerCase()
                     ).length || 3
-                  })`, icon: 'groups' },
+                      })`, icon: 'groups'
+                  },
                   { key: 'Works Done', label: 'Progress & Works Done', icon: 'task_alt' },
                   { key: 'Risks', label: 'Risks & Issues', icon: 'warning' },
                   { key: 'Chat', label: 'Project Chat & Telegram', icon: 'chat' },
@@ -1717,11 +1659,10 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                   <button
                     key={tab.key}
                     onClick={() => setProjectDetailTab(tab.key as any)}
-                    className={`px-3.5 py-2 rounded-xs flex items-center gap-1.5 transition-all text-xs ${
-                      projectDetailTab === tab.key
+                    className={`px-3.5 py-2 rounded-xs flex items-center gap-1.5 transition-all text-xs ${projectDetailTab === tab.key
                         ? 'bg-white text-[#00174b] font-extrabold shadow-sm'
                         : 'text-slate-300 hover:text-white hover:bg-white/10'
-                    }`}
+                      }`}
                   >
                     <span className="material-symbols-outlined text-[16px]">{tab.icon}</span>
                     <span>{tab.label}</span>
@@ -1739,11 +1680,10 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                   <button
                     key={tab.key}
                     onClick={() => setProjectDetailTab(tab.key as any)}
-                    className={`px-3.5 py-2 rounded-xs flex items-center gap-1.5 transition-all text-xs ${
-                      projectDetailTab === tab.key
+                    className={`px-3.5 py-2 rounded-xs flex items-center gap-1.5 transition-all text-xs ${projectDetailTab === tab.key
                         ? 'bg-white text-[#00174b] font-extrabold shadow-sm'
                         : 'text-slate-300 hover:text-white hover:bg-white/10'
-                    }`}
+                      }`}
                   >
                     <span className="material-symbols-outlined text-[16px]">{tab.icon}</span>
                     <span>{tab.label}</span>
@@ -1760,11 +1700,10 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                   <button
                     key={tab.key}
                     onClick={() => setProjectDetailTab(tab.key as any)}
-                    className={`px-3.5 py-2 rounded-xs flex items-center gap-1.5 transition-all text-xs ${
-                      projectDetailTab === tab.key
+                    className={`px-3.5 py-2 rounded-xs flex items-center gap-1.5 transition-all text-xs ${projectDetailTab === tab.key
                         ? 'bg-white text-[#00174b] font-extrabold shadow-sm'
                         : 'text-slate-300 hover:text-white hover:bg-white/10'
-                    }`}
+                      }`}
                   >
                     <span className="material-symbols-outlined text-[16px]">{tab.icon}</span>
                     <span>{tab.label}</span>
@@ -1810,15 +1749,17 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                   </div>
 
                   <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <label className="block font-bold text-slate-700 uppercase mb-1">Budget ($)</label>
-                      <input
-                        type="number"
-                        value={editedProject.budget}
-                        onChange={(e) => setEditedProject({ ...editedProject, budget: Number(e.target.value) })}
-                        className="w-full border p-2 rounded-sm font-mono"
-                      />
-                    </div>
+                    {currentPersona?.roleType !== 'PROJECT_MANAGER' && (
+                      <div>
+                        <label className="block font-bold text-slate-700 uppercase mb-1">Budget ($)</label>
+                        <input
+                          type="number"
+                          value={editedProject.budget}
+                          onChange={(e) => setEditedProject({ ...editedProject, budget: Number(e.target.value) })}
+                          className="w-full border p-2 rounded-sm font-mono"
+                        />
+                      </div>
+                    )}
                     <div>
                       <label className="block font-bold text-slate-700 uppercase mb-1">Progress (%)</label>
                       <input
@@ -2089,15 +2030,14 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                                 type="button"
                                 key={stg}
                                 onClick={() => setInspectStage(stg)}
-                                className={`p-3 rounded-xs border text-left transition-all relative cursor-pointer ${
-                                  isInspected
+                                className={`p-3 rounded-xs border text-left transition-all relative cursor-pointer ${isInspected
                                     ? 'bg-[#00174b] text-white border-[#00174b] shadow-md ring-2 ring-indigo-400'
                                     : isCurrent
-                                    ? 'bg-indigo-50 border-indigo-300 text-indigo-950 font-bold'
-                                    : isPast
-                                    ? 'bg-emerald-50/70 border-emerald-200 text-slate-800'
-                                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                                }`}
+                                      ? 'bg-indigo-50 border-indigo-300 text-indigo-950 font-bold'
+                                      : isPast
+                                        ? 'bg-emerald-50/70 border-emerald-200 text-slate-800'
+                                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                                  }`}
                               >
                                 <div className="flex justify-between items-center mb-1">
                                   <span className={`text-[9px] font-bold font-mono uppercase ${isInspected ? 'text-indigo-200' : 'text-slate-400'}`}>
@@ -2390,9 +2330,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                                   </div>
                                   <div className="flex justify-between items-center text-[10px] pt-1">
                                     <span className="text-slate-400 font-mono">Signer: {selectedProject.owner}</span>
-                                    <span className={`px-2 py-0.5 rounded-xs font-mono font-bold uppercase ${
-                                      criterion.completed ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
-                                    }`}>
+                                    <span className={`px-2 py-0.5 rounded-xs font-mono font-bold uppercase ${criterion.completed ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
+                                      }`}>
                                       {criterion.completed ? 'PASSED & SIGNED' : 'PENDING'}
                                     </span>
                                   </div>
@@ -2634,23 +2573,21 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                                     <span className="text-[10px] text-slate-400 font-mono">Participant</span>
                                   </td>
                                   <td className="px-4 py-3 font-mono text-[10px]">
-                                    <span className={`px-2 py-0.5 rounded-xs font-bold ${
-                                      task.priority === 'High' ? 'bg-red-100 text-red-800' : 'bg-slate-100 text-slate-700'
-                                    }`}>
+                                    <span className={`px-2 py-0.5 rounded-xs font-bold ${task.priority === 'High' ? 'bg-red-100 text-red-800' : 'bg-slate-100 text-slate-700'
+                                      }`}>
                                       {task.priority}
                                     </span>
                                   </td>
                                   <td className="px-4 py-3 font-mono text-slate-600">{task.dueDate}</td>
                                   <td className="px-4 py-3">
-                                    <span className={`px-2.5 py-1 rounded-xs font-bold text-[10px] uppercase font-mono ${
-                                      task.status === 'Done'
+                                    <span className={`px-2.5 py-1 rounded-xs font-bold text-[10px] uppercase font-mono ${task.status === 'Done'
                                         ? 'bg-emerald-100 text-emerald-800'
                                         : task.status === 'In Progress'
-                                        ? 'bg-blue-100 text-blue-800'
-                                        : task.status === 'Review'
-                                        ? 'bg-purple-100 text-purple-800'
-                                        : 'bg-slate-200 text-slate-700'
-                                    }`}>
+                                          ? 'bg-blue-100 text-blue-800'
+                                          : task.status === 'Review'
+                                            ? 'bg-purple-100 text-purple-800'
+                                            : 'bg-slate-200 text-slate-700'
+                                      }`}>
                                       {task.status}
                                     </span>
                                   </td>
@@ -2757,22 +2694,20 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                                   <td className="px-4 py-3 font-mono font-bold text-slate-900">{risk.ref}</td>
                                   <td className="px-4 py-3 font-bold text-slate-900">{risk.subject}</td>
                                   <td className="px-4 py-3 font-mono text-[10px]">
-                                    <span className={`px-2 py-0.5 rounded-xs font-bold ${
-                                      risk.severity === 'CRITICAL' || risk.severity === 'HIGH'
+                                    <span className={`px-2 py-0.5 rounded-xs font-bold ${risk.severity === 'CRITICAL' || risk.severity === 'HIGH'
                                         ? 'bg-red-100 text-red-800'
                                         : 'bg-amber-100 text-amber-800'
-                                    }`}>
+                                      }`}>
                                       {risk.severity}
                                     </span>
                                   </td>
                                   <td className="px-4 py-3 font-mono text-slate-700">$25,000</td>
                                   <td className="px-4 py-3 text-slate-700">{risk.owner}</td>
                                   <td className="px-4 py-3">
-                                    <span className={`px-2.5 py-1 rounded-xs font-bold text-[10px] uppercase font-mono ${
-                                      risk.status === 'OPEN'
+                                    <span className={`px-2.5 py-1 rounded-xs font-bold text-[10px] uppercase font-mono ${risk.status === 'OPEN'
                                         ? 'bg-amber-100 text-amber-800'
                                         : 'bg-emerald-100 text-emerald-800'
-                                    }`}>
+                                      }`}>
                                       {risk.status}
                                     </span>
                                   </td>
@@ -2908,11 +2843,10 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                             </div>
                             <button
                               onClick={() => handleToggleRequirement(selectedProject, req.id)}
-                              className={`px-3 py-1.5 font-bold rounded-xs text-[10px] uppercase font-mono tracking-wider ${
-                                req.status === 'Compliant'
+                              className={`px-3 py-1.5 font-bold rounded-xs text-[10px] uppercase font-mono tracking-wider ${req.status === 'Compliant'
                                   ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                                   : 'bg-amber-100 text-amber-800 border border-amber-300'
-                              }`}
+                                }`}
                             >
                               {req.status}
                             </button>

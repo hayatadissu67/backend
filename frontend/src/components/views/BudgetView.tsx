@@ -64,23 +64,13 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
 
 
   // KPI Overall State
-  const [totalBudget, setTotalBudget] = useState<number>(150000);
-  const [totalExpense, setTotalExpense] = useState<number>(117750);
+  const totalBudget = budgets?.reduce((acc, curr) => acc + (curr.allocated || 0), 0) || 0;
+  const totalExpense = budgets?.reduce((acc, curr) => acc + (curr.actualSpent || 0), 0) || 0;
 
   const remainingBudget = totalBudget - totalExpense;
   const budgetUtilization = ((totalExpense / totalBudget) * 100).toFixed(1);
 
-  // Planning State
-  const [budgetPlans, setBudgetPlans] = useState<BudgetPlan[]>([
-    {
-      id: 'bp-1',
-      planName: 'Q1 Cloud Upgrade',
-      projectName: 'PMO Control Tower',
-      category: 'Infrastructure',
-      timeline: '2026-08-01',
-      estimatedCost: 25000,
-    },
-  ]);
+  const [budgetPlans, setBudgetPlans] = useState<BudgetPlan[]>([]);
 
   const [planNameInput, setPlanNameInput] = useState('');
   const [projectNameInput, setProjectNameInput] = useState('');
@@ -89,39 +79,25 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
   const [timelineInput, setTimelineInput] = useState('');
 
   // Allocation State
-  const [allocations, setAllocations] = useState<ProjectAllocation[]>([
-    { id: 'al-1', department: 'Cloud & Infrastructure', projectName: 'PMO Tower', allocatedAmount: 20000 },
-    { id: 'al-2', department: 'Human Resources', projectName: 'Team Stipends', allocatedAmount: 35000 },
-  ]);
+  const [allocations, setAllocations] = useState<ProjectAllocation[]>([]);
 
   const [selectedAllocationProject, setSelectedAllocationProject] = useState<string>('PMO Tower');
   const [newAllocationAmount, setNewAllocationAmount] = useState<string>('');
-  const [allocationHistory, setAllocationHistory] = useState<AllocationHistoryItem[]>([
-    { id: 'ah-1', action: 'Initial Allocation', projectName: 'PMO Tower', amount: 20000, timestamp: '2026-07-10 10:30 AM', modifiedBy: 'Admin' },
-    { id: 'ah-2', action: 'Initial Allocation', projectName: 'Team Stipends', amount: 35000, timestamp: '2026-07-12 02:15 PM', modifiedBy: 'Manager' },
-  ]);
+  const [allocationHistory, setAllocationHistory] = useState<AllocationHistoryItem[]>([]);
 
   // Expenses State
-  const [expenses, setExpenses] = useState<ExpenseItem[]>([
-    { id: 'ex-1', name: 'Cloud Infrastructure (AWS)', amount: 1200, date: '2026-07-28', category: 'Infrastructure' },
-    { id: 'ex-2', name: 'UI/UX Software Licensing', amount: 450, date: '2026-07-25', category: 'Software' },
-  ]);
+  const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
 
   const [expenseName, setExpenseName] = useState('');
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseCategory, setExpenseCategory] = useState('Infrastructure');
 
   // Approvals State
-  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([
-    { id: 'pa-1', requestTitle: 'Cloud Infrastructure Upgrade', department: 'Infrastructure', status: 'Pending', amount: 15000 },
-    { id: 'pa-2', requestTitle: 'Marketing Campaign Q3', department: 'Marketing', status: 'Pending', amount: 8500 },
-  ]);
+  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
 
   const [selectedRequestToReview, setSelectedRequestToReview] = useState<string>('');
   const [reviewComment, setReviewComment] = useState<string>('');
-  const [approvalHistory, setApprovalHistory] = useState<ApprovalHistoryItem[]>([
-    { id: 'aph-1', requestTitle: 'Q2 Office Supplies', amount: 3200, status: 'Approved', comments: 'Looks good.', date: '2026-07-10' },
-  ]);
+  const [approvalHistory, setApprovalHistory] = useState<ApprovalHistoryItem[]>([]);
 
   // Handle Save Budget Plan
   const handleSaveBudgetPlan = (e: React.FormEvent) => {
@@ -184,7 +160,6 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
     };
 
     setExpenses((prev) => [newExp, ...prev]);
-    setTotalExpense((prev) => prev + amt);
     setExpenseName('');
     setExpenseAmount('');
   };
@@ -227,11 +202,10 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === tab
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${activeTab === tab
                   ? 'bg-[#2563eb] text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-              }`}
+                }`}
             >
               {tab}
             </button>
@@ -347,26 +321,28 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
             <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-2xs space-y-4">
               <h2 className="text-sm font-extrabold text-slate-900 tracking-tight">Quick Actions</h2>
 
-              <div className="space-y-2.5">
-                <button
-                  onClick={() => setActiveTab('Planning')}
-                  className="w-full bg-[#2563eb] hover:bg-blue-700 text-white font-bold text-xs py-2.5 px-4 rounded-lg shadow-2xs transition-all cursor-pointer text-center block"
-                >
-                  + New Budget Plan
-                </button>
-                <button
-                  onClick={() => setActiveTab('Expenses')}
-                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs py-2.5 px-4 rounded-lg transition-all cursor-pointer text-center block"
-                >
-                  Record Expense
-                </button>
-                <button
-                  onClick={() => setActiveTab('Forecast')}
-                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs py-2.5 px-4 rounded-lg transition-all cursor-pointer text-center block"
-                >
-                  View Reports
-                </button>
-              </div>
+              {currentPersona?.roleType !== 'EXECUTIVE_MANAGER' && (
+                <div className="space-y-2.5">
+                  <button
+                    onClick={() => setActiveTab('Planning')}
+                    className="w-full bg-[#2563eb] hover:bg-blue-700 text-white font-bold text-xs py-2.5 px-4 rounded-lg shadow-2xs transition-all cursor-pointer text-center block"
+                  >
+                    + New Budget Plan
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('Expenses')}
+                    className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs py-2.5 px-4 rounded-lg transition-all cursor-pointer text-center block"
+                  >
+                    Record Expense
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('Forecast')}
+                    className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs py-2.5 px-4 rounded-lg transition-all cursor-pointer text-center block"
+                  >
+                    View Reports
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -383,78 +359,79 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Form Column */}
-            <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-2xs space-y-4">
-              <h2 className="text-sm font-extrabold text-slate-900">Create Budget Plan</h2>
+            {/* Create Plan Form - Hidden for Project Managers */}
+            {currentPersona?.roleType !== 'PROJECT_MANAGER' && (
+              <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-2xs space-y-4">
+                <h2 className="text-sm font-extrabold text-slate-900">Create New Budget Plan</h2>
+                <form onSubmit={handleSaveBudgetPlan} className="space-y-3.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Plan Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Q1 Expansion"
+                      value={planNameInput}
+                      onChange={(e) => setPlanNameInput(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
+                    />
+                  </div>
 
-              <form onSubmit={handleSaveBudgetPlan} className="space-y-3.5">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Budget Plan Name *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Fkn: Phase 1 Core Dev"
-                    value={planNameInput}
-                    onChange={(e) => setPlanNameInput(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600 focus:bg-white"
-                  />
-                </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Project Budget / Project Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Fkn: PMO Tower"
+                      value={projectNameInput}
+                      onChange={(e) => setProjectNameInput(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600 focus:bg-white"
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Project Budget / Project Name *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Fkn: PMO Tower"
-                    value={projectNameInput}
-                    onChange={(e) => setProjectNameInput(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600 focus:bg-white"
-                  />
-                </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Budget Categories *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Fkn: Software &amp; Tools"
+                      value={categoryInput}
+                      onChange={(e) => setCategoryInput(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600 focus:bg-white"
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Budget Categories *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Fkn: Software &amp; Tools"
-                    value={categoryInput}
-                    onChange={(e) => setCategoryInput(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600 focus:bg-white"
-                  />
-                </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Estimated Costs ($) *</label>
+                    <input
+                      type="number"
+                      required
+                      placeholder="0.00"
+                      value={estimatedCostInput}
+                      onChange={(e) => setEstimatedCostInput(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600 focus:bg-white"
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Estimated Costs ($) *</label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="0.00"
-                    value={estimatedCostInput}
-                    onChange={(e) => setEstimatedCostInput(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600 focus:bg-white"
-                  />
-                </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Budget Timeline *</label>
+                    <input
+                      type="date"
+                      required
+                      value={timelineInput}
+                      onChange={(e) => setTimelineInput(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600 focus:bg-white"
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Budget Timeline *</label>
-                  <input
-                    type="date"
-                    required
-                    value={timelineInput}
-                    onChange={(e) => setTimelineInput(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600 focus:bg-white"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full bg-[#2563eb] hover:bg-blue-700 text-white font-bold text-xs py-2.5 px-4 rounded-lg shadow-2xs transition-all cursor-pointer"
-                >
-                  Save Budget Plan
-                </button>
-              </form>
-            </div>
+                  <button
+                    type="submit"
+                    className="w-full bg-[#2563eb] hover:bg-blue-700 text-white font-bold text-xs py-2.5 px-4 rounded-lg shadow-2xs transition-all cursor-pointer"
+                  >
+                    Save Budget Plan
+                  </button>
+                </form>
+              </div>
+            )}
 
             {/* Table Column */}
             <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200/80 shadow-2xs p-5 space-y-4">
@@ -526,42 +503,44 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
             </div>
           </div>
 
-          {/* Update Allocation Form */}
-          <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-5 space-y-3">
-            <div>
-              <h2 className="text-base font-extrabold text-slate-900 tracking-tight">Update Allocation</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Modify existing budget amounts assigned to specific projects.</p>
+          {/* Update Allocation Form - Hidden for Project Managers */}
+          {currentPersona?.roleType !== 'PROJECT_MANAGER' && (
+            <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-5 space-y-3">
+              <div>
+                <h2 className="text-base font-extrabold text-slate-900 tracking-tight">Update Allocation</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Modify existing budget amounts assigned to specific projects.</p>
+              </div>
+
+              <form onSubmit={handleUpdateAllocation} className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+                <select
+                  value={selectedAllocationProject}
+                  onChange={(e) => setSelectedAllocationProject(e.target.value)}
+                  className="w-full sm:w-72 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 outline-none focus:border-blue-600"
+                >
+                  {allocations.map((al) => (
+                    <option key={al.id} value={al.projectName}>
+                      {al.projectName} ({al.department})
+                    </option>
+                  ))}
+                </select>
+
+                <input
+                  type="number"
+                  placeholder="New Allocated Amount ($)"
+                  value={newAllocationAmount}
+                  onChange={(e) => setNewAllocationAmount(e.target.value)}
+                  className="w-full sm:flex-1 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
+                />
+
+                <button
+                  type="submit"
+                  className="w-full sm:w-auto bg-[#2563eb] hover:bg-blue-700 text-white font-bold text-xs px-6 py-2.5 rounded-lg shadow-2xs transition-all cursor-pointer whitespace-nowrap"
+                >
+                  Update Allocation
+                </button>
+              </form>
             </div>
-
-            <form onSubmit={handleUpdateAllocation} className="flex flex-col sm:flex-row items-center gap-3 pt-2">
-              <select
-                value={selectedAllocationProject}
-                onChange={(e) => setSelectedAllocationProject(e.target.value)}
-                className="w-full sm:w-72 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 outline-none focus:border-blue-600"
-              >
-                {allocations.map((al) => (
-                  <option key={al.id} value={al.projectName}>
-                    {al.projectName} ({al.department})
-                  </option>
-                ))}
-              </select>
-
-              <input
-                type="number"
-                placeholder="New Allocated Amount ($)"
-                value={newAllocationAmount}
-                onChange={(e) => setNewAllocationAmount(e.target.value)}
-                className="w-full sm:flex-1 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
-              />
-
-              <button
-                type="submit"
-                className="w-full sm:w-auto bg-[#2563eb] hover:bg-blue-700 text-white font-bold text-xs px-6 py-2.5 rounded-lg shadow-2xs transition-all cursor-pointer whitespace-nowrap"
-              >
-                Update Allocation
-              </button>
-            </form>
-          </div>
+          )}
 
           {/* Allocation History */}
           <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-5 space-y-4">
@@ -607,56 +586,58 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-2xs space-y-4">
-              <h2 className="text-sm font-extrabold text-slate-900">Record New Expense</h2>
-              <form onSubmit={handleRecordExpense} className="space-y-3.5">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Expense Item Name *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. AWS Cloud Services"
-                    value={expenseName}
-                    onChange={(e) => setExpenseName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
-                  />
-                </div>
+            {currentPersona?.roleType !== 'PROJECT_MANAGER' && (
+              <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-2xs space-y-4">
+                <h2 className="text-sm font-extrabold text-slate-900">Record New Expense</h2>
+                <form onSubmit={handleRecordExpense} className="space-y-3.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Expense Item Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. AWS Cloud Services"
+                      value={expenseName}
+                      onChange={(e) => setExpenseName(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Amount ($) *</label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="0.00"
-                    value={expenseAmount}
-                    onChange={(e) => setExpenseAmount(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
-                  />
-                </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Amount ($) *</label>
+                    <input
+                      type="number"
+                      required
+                      placeholder="0.00"
+                      value={expenseAmount}
+                      onChange={(e) => setExpenseAmount(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Category</label>
-                  <select
-                    value={expenseCategory}
-                    onChange={(e) => setExpenseCategory(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Category</label>
+                    <select
+                      value={expenseCategory}
+                      onChange={(e) => setExpenseCategory(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
+                    >
+                      <option value="Infrastructure">Infrastructure</option>
+                      <option value="Software">Software</option>
+                      <option value="Design">Design</option>
+                      <option value="Consulting">Consulting</option>
+                      <option value="Hardware">Hardware</option>
+                    </select>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full bg-[#2563eb] hover:bg-blue-700 text-white font-bold text-xs py-2.5 px-4 rounded-lg shadow-2xs transition-all cursor-pointer"
                   >
-                    <option value="Infrastructure">Infrastructure</option>
-                    <option value="Software">Software</option>
-                    <option value="Design">Design</option>
-                    <option value="Consulting">Consulting</option>
-                    <option value="Hardware">Hardware</option>
-                  </select>
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full bg-[#2563eb] hover:bg-blue-700 text-white font-bold text-xs py-2.5 px-4 rounded-lg shadow-2xs transition-all cursor-pointer"
-                >
-                  Record Expense
-                </button>
-              </form>
-            </div>
+                    Record Expense
+                  </button>
+                </form>
+              </div>
+            )}
 
             <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200/80 shadow-2xs p-5 space-y-4">
               <h2 className="text-sm font-extrabold text-slate-900">Expense Log History</h2>
@@ -735,54 +716,56 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
           </div>
 
           {/* Review Request Section */}
-          <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-5 space-y-4">
-            <div>
-              <h2 className="text-base font-extrabold text-slate-900 tracking-tight">Review Request</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Select a pending request to approve, reject, and add review comments.</p>
-            </div>
-
-            <div className="space-y-3 pt-1">
-              <div className="flex flex-col sm:flex-row items-center gap-3">
-                <select
-                  value={selectedRequestToReview}
-                  onChange={(e) => setSelectedRequestToReview(e.target.value)}
-                  className="w-full sm:w-72 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 outline-none focus:border-blue-600"
-                >
-                  <option value="">Select Request to Review</option>
-                  {pendingApprovals.map((pa) => (
-                    <option key={pa.id} value={pa.requestTitle}>
-                      {pa.requestTitle} (${pa.amount.toLocaleString()})
-                    </option>
-                  ))}
-                </select>
-
-                <input
-                  type="text"
-                  placeholder="Add comments / reasons..."
-                  value={reviewComment}
-                  onChange={(e) => setReviewComment(e.target.value)}
-                  className="w-full sm:flex-1 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
-                />
+          {currentPersona?.roleType !== 'PROJECT_MANAGER' && (
+            <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-5 space-y-4">
+              <div>
+                <h2 className="text-base font-extrabold text-slate-900 tracking-tight">Review Request</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Select a pending request to approve, reject, and add review comments.</p>
               </div>
 
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => handleDecision('Rejected')}
-                  className="px-5 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold text-xs rounded-lg transition-all cursor-pointer"
-                >
-                  Reject Budget
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDecision('Approved')}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-2xs transition-all cursor-pointer"
-                >
-                  Approve Budget
-                </button>
+              <div className="space-y-3 pt-1">
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                  <select
+                    value={selectedRequestToReview}
+                    onChange={(e) => setSelectedRequestToReview(e.target.value)}
+                    className="w-full sm:w-72 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 outline-none focus:border-blue-600"
+                  >
+                    <option value="">Select Request to Review</option>
+                    {pendingApprovals.map((pa) => (
+                      <option key={pa.id} value={pa.requestTitle}>
+                        {pa.requestTitle} (${pa.amount.toLocaleString()})
+                      </option>
+                    ))}
+                  </select>
+
+                  <input
+                    type="text"
+                    placeholder="Add comments / reasons..."
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    className="w-full sm:flex-1 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleDecision('Rejected')}
+                    className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs px-5 py-2.5 rounded-lg shadow-xs transition-all cursor-pointer"
+                  >
+                    Reject Request
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDecision('Approved')}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-lg shadow-2xs transition-all cursor-pointer"
+                  >
+                    Approve Request
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Approval History */}
           <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-5 space-y-4">
@@ -809,11 +792,10 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
                       <td className="py-3.5 px-3 font-bold text-slate-900">${aph.amount.toLocaleString()}</td>
                       <td className="py-3.5 px-3">
                         <span
-                          className={`px-2.5 py-0.5 rounded-md font-bold text-[11px] ${
-                            aph.status === 'Approved'
+                          className={`px-2.5 py-0.5 rounded-md font-bold text-[11px] ${aph.status === 'Approved'
                               ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                               : 'bg-red-100 text-red-800 border border-red-200'
-                          }`}
+                            }`}
                         >
                           {aph.status}
                         </span>

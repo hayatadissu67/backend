@@ -381,4 +381,125 @@ export const deleteReportApi = async (id: string): Promise<boolean> => {
   }
 };
 
+// --- Communication API ---
+export const fetchChannelsApi = async () => {
+  try {
+    const res = await api.get('/communication/channels');
+    return res.data?.success ? res.data.data : [];
+  } catch (err) {
+    console.warn('Failed to fetch channels:', err);
+    return [];
+  }
+};
+
+export const createChannelApi = async (channelData: any) => {
+  try {
+    const res = await api.post('/communication/channels', channelData);
+    return res.data?.success ? res.data.data : null;
+  } catch (err) {
+    console.error('API Error creating channel:', err);
+    return null;
+  }
+};
+
+export const fetchMessagesApi = async () => {
+  try {
+    const res = await api.get('/communication/messages');
+    return res.data?.success ? res.data.data : [];
+  } catch (err) {
+    console.warn('Failed to fetch messages:', err);
+    return [];
+  }
+};
+
+export const createMessageApi = async (messageData: any) => {
+  try {
+    const res = await api.post('/communication/messages', messageData);
+    return res.data?.success ? res.data.data : null;
+  } catch (err) {
+    console.error('API Error creating message:', err);
+    return null;
+  }
+};
+
+export const fetchDiscussionsApi = async () => {
+  try {
+    const res = await api.get('/communication/discussions');
+    return res.data?.success ? res.data.data : [];
+  } catch (err) {
+    console.warn('Failed to fetch discussions:', err);
+    return [];
+  }
+};
+
+export const createDiscussionApi = async (discussionData: any) => {
+  try {
+    const res = await api.post('/communication/discussions', discussionData);
+    return res.data?.success ? res.data.data : null;
+  } catch (err) {
+    console.error('API Error creating discussion:', err);
+    return null;
+  }
+};
+
+export const fetchMeetingsApi = async () => {
+  try {
+    const res = await api.get('/communication/meetings');
+    return res.data?.success ? res.data.data : [];
+  } catch (err) {
+    console.warn('Failed to fetch meetings:', err);
+    return [];
+  }
+};
+
+export const createMeetingApi = async (meetingData: any) => {
+  try {
+    const res = await api.post('/communication/meetings', meetingData);
+    return res.data?.success ? res.data.data : null;
+  } catch (err) {
+    console.error('API Error creating meeting:', err);
+    return null;
+  }
+};
+
+export const fetchNotificationsApi = async () => {
+  try {
+    const res = await api.get('/communication/notifications');
+    return res.data?.success ? res.data.data : [];
+  } catch (err) {
+    console.warn('Failed to fetch notifications:', err);
+    return [];
+  }
+};
+
+export const createNotificationApi = async (notificationData: any) => {
+  try {
+    const res = await api.post('/communication/notifications', notificationData);
+    return res.data?.success ? res.data.data : null;
+  } catch (err) {
+    console.error('API Error creating notification:', err);
+    return null;
+  }
+};
+
+export const markNotificationsReadApi = async () => {
+  try {
+    const res = await api.put('/communication/notifications/read');
+    return res.data?.success;
+  } catch (err) {
+    console.error('API Error marking notifications read:', err);
+    return false;
+  }
+};
+
+export const clearNotificationsApi = async () => {
+  try {
+    const res = await api.delete('/communication/notifications/clear');
+    return res.data?.success;
+  } catch (err) {
+    console.error('API Error clearing notifications:', err);
+    return false;
+  }
+};
+
 export default api;

@@ -7,6 +7,7 @@ interface TopHeaderProps {
   unreadNotificationsCount?: number;
   onOpenNewProject: () => void;
   onOpenUserProfile?: () => void;
+  onLogout?: () => void;
   currentPersona?: LoggedInPersona;
   notificationsList?: NotificationItem[];
   onMarkNotificationsRead?: () => void;
@@ -21,6 +22,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   unreadNotificationsCount = 0,
   onOpenNewProject,
   onOpenUserProfile,
+  onLogout,
   currentPersona,
   notificationsList = [],
   onMarkNotificationsRead,
@@ -269,8 +271,29 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                   <span className="material-symbols-outlined text-[16px]">add_box</span>
                   Create New Project
                 </button>
+                <button
+                  onClick={() => {
+                    setShowProfileMenu(false);
+                    if (onLogout) onLogout();
+                  }}
+                  className="w-full text-left px-4 py-2 text-rose-700 font-bold hover:bg-rose-50 flex items-center gap-2 border-t border-slate-100 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[16px] text-rose-600">logout</span>
+                  Logout
+                </button>
               </div>
             )}
+            {/* Logout button visible in top header */}
+            <button
+              onClick={() => {
+                setShowProfileMenu(false);
+                if (onLogout) onLogout();
+              }}
+              className="w-10 h-10 flex items-center justify-center text-rose-600 hover:text-rose-800 hover:bg-rose-50/50 rounded-full transition-colors"
+              title="Logout"
+            >
+              <span className="material-symbols-outlined text-[22px]">logout</span>
+            </button>
           </div>
 
         </div>
