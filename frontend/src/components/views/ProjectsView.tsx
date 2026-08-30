@@ -12,6 +12,7 @@ import {
   LifecyclePhaseCriterion,
   ProjectLifecycleInfo
 } from '../../types';
+import { AssignTeamModal } from '../AssignTeamModal';
 
 interface ProjectsViewProps {
   projects: Project[];
@@ -68,6 +69,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
   // Selected Project for Detail Page / Modal
   const [selectedProject, setSelectedProject] = useState<Project | null>(propsSelectedProject);
+  const [isAssignTeamModalOpen, setIsAssignTeamModalOpen] = useState(false);
 
   const userRoleMode = currentPersona?.roleType === 'EXECUTIVE_MANAGER' || currentPersona?.roleType === 'PROJECT_MANAGER'
     ? 'Executive Admin'
@@ -1510,13 +1512,13 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                         Executive Sign-Off
                       </button>
 
-                      {onOpenAssignMemberModal && (
+                      {selectedProject.approvalStatus === 'APPROVED' && (
                         <button
-                          onClick={onOpenAssignMemberModal}
+                          onClick={() => setIsAssignTeamModalOpen(true)}
                           className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-[11px] uppercase tracking-wider rounded-xs flex items-center gap-1 shadow-2xs"
                         >
                           <span className="material-symbols-outlined text-[15px]">person_add</span>
-                          Assign Participant
+                          Assign Team Members
                         </button>
                       )}
 
@@ -2930,7 +2932,17 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
           </div>
         </div>
       )}
+      {/* Render the AssignTeamModal */}
+      <AssignTeamModal
+        isOpen={isAssignTeamModalOpen}
+        onClose={() => setIsAssignTeamModalOpen(false)}
+        project={selectedProject}
+        onSuccess={() => {
+          // Could optionally trigger a reload of team data here if needed.
+          // The API takes care of the backend sync. 
+          setIsAssignTeamModalOpen(false);
+        }}
+      />
     </div>
   );
 };
-

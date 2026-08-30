@@ -193,6 +193,25 @@ export const rejectProjectApi = async (id: string, rejectionReason: string): Pro
   }
 };
 
+export const getProjectTeamApi = async (id: string): Promise<UserItem[] | null> => {
+  try {
+    const res = await api.get(`/projects/${id}/team`);
+    return res.data?.success ? res.data.data : [];
+  } catch (err) {
+    console.warn('Failed to fetch project team:', err);
+    return null;
+  }
+};
+
+export const assignProjectTeamApi = async (id: string, userIds: (string | number)[]): Promise<UserItem[] | null> => {
+  try {
+    const res = await api.post(`/projects/${id}/team`, { userIds });
+    return res.data?.success ? res.data.data : null;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to assign team members.';
+    throw new Error(message);
+  }
+};
 
 // --- Risks API ---
 export const fetchRisksFromApi = async (): Promise<RiskItem[] | null> => {
