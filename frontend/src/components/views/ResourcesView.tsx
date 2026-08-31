@@ -4,8 +4,12 @@ import { ResourceLoading, UserItem } from '../../types';
 interface ResourcesViewProps {
   resources: ResourceLoading[];
   onUpdateResource: (dept: string, newPct: number) => void;
+<<<<<<< Updated upstream
   onSelectUser?: (user: UserItem) => void;
   onOpenAssignMemberModal?: () => void;
+=======
+  onOpenAssignMemberModal?: (project?: any) => void;
+>>>>>>> Stashed changes
 }
 
 interface AllocationRecord {

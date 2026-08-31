@@ -4,9 +4,12 @@ import { ChangeRequestItem, Project } from '../../types';
 interface ChangeRequestsViewProps {
   changeRequests?: ChangeRequestItem[];
   projects?: Project[];
-  onAddChangeRequest?: (request: ChangeRequestItem) => void;
+  onAddChangeRequest?: (request: Partial<ChangeRequestItem>) => void;
   onUpdateChangeRequest?: (updated: ChangeRequestItem) => void;
   onDeleteChangeRequest?: (id: string) => void;
+  onApproveChangeRequest?: (id: string) => void;
+  onRejectChangeRequest?: (id: string, reason: string) => void;
+  currentPersona?: any;
 }
 
 export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
@@ -14,12 +17,15 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
   projects = [],
   onAddChangeRequest,
   onUpdateChangeRequest,
-  onDeleteChangeRequest
+  onDeleteChangeRequest,
+  onApproveChangeRequest,
+  onRejectChangeRequest,
+  currentPersona
 }) => {
   // Local state initialized with props or default mock data
   const [localRequests, setLocalRequests] = useState<ChangeRequestItem[]>(propChangeRequests || []);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState<'All' | 'Pending' | 'Approved' | 'Rejected'>('All');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<'All' | 'PENDING' | 'APPROVED' | 'REJECTED'>('All');
 
   // Modal states
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
@@ -29,7 +35,7 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
 
   // Form State for New Change Request
   const [newTitle, setNewTitle] = useState('');
-  const [newProject, setNewProject] = useState(projects[0]?.name || 'PMO Control Tower');
+  const [newProjectId, setNewProjectId] = useState(projects[0]?.id || '');
   const [newCategory, setNewCategory] = useState('Infrastructure');
   const [newDate, setNewDate] = useState(new Date().toISOString().split('T')[0]);
   const [newType, setNewType] = useState('Budget Increase');
@@ -47,14 +53,14 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
 
   const requestsToDisplay = localRequests.length > 0 ? localRequests : propChangeRequests || [];
 
-  // Filter requests by search term and status
   const filteredRequests = requestsToDisplay.filter((req) => {
+    const projectName = projects?.find(p => p.id?.toString() === req.projectId?.toString() || p.name === req.project)?.name || req.project || 'Unknown Project';
     const matchesSearch =
-      req.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      req.project.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      req.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      req.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      req.type.toLowerCase().includes(searchTerm.toLowerCase());
+      req.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      projectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      req.category?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      req.id?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+      req.type?.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesStatus =
       selectedStatusFilter === 'All' || req.status === selectedStatusFilter;
@@ -67,22 +73,18 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
     e.preventDefault();
     if (!newTitle.trim()) return;
 
-    const nextIdNum = requestsToDisplay.length > 0
-      ? Math.max(...requestsToDisplay.map((r) => parseInt(r.id.replace('#', '') || '100', 10))) + 1
-      : 105;
-
-    const newReq: ChangeRequestItem = {
-      id: `#${nextIdNum}`,
+    // We pass projectId to backend.
+    const newReq: any = {
       title: newTitle.trim(),
-      project: newProject,
+      projectId: newProjectId || undefined,
       category: newCategory,
       date: newDate,
       type: newType,
       amount: newAmount.startsWith('$') ? newAmount : `$${newAmount}`,
       priority: newPriority,
-      status: 'Pending',
       requestedBy: newRequestedBy,
-      description: newDescription || 'Standard PMO change request submitted for executive governance review.'
+      description: newDescription || 'Standard PMO change request submitted for executive governance review.',
+      status: 'PENDING'
     };
 
     if (onAddChangeRequest) {
@@ -98,16 +100,19 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
   };
 
   // Handle Update Status directly
-  const handleStatusUpdate = (req: ChangeRequestItem, newStatus: 'Approved' | 'Rejected') => {
-    const updated = { ...req, status: newStatus };
-    if (onUpdateChangeRequest) {
-      onUpdateChangeRequest(updated);
-    } else {
-      setLocalRequests((prev) => prev.map((r) => (r.id === req.id ? updated : r)));
+  const handleApprove = (req: ChangeRequestItem) => {
+    if (onApproveChangeRequest) {
+      onApproveChangeRequest(req.id);
     }
-    if (viewingRequest && viewingRequest.id === req.id) {
-      setViewingRequest(updated);
+    setViewingRequest(null);
+  };
+
+  const handleReject = (req: ChangeRequestItem) => {
+    const reason = prompt("Enter rejection reason:") || "Not specified";
+    if (onRejectChangeRequest) {
+      onRejectChangeRequest(req.id, reason);
     }
+    setViewingRequest(null);
   };
 
   // Handle Edit Submit
@@ -179,7 +184,7 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
 
         {/* Quick Filter Badges */}
         <div className="flex items-center gap-1.5 self-start sm:self-center overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
-          {(['All', 'Pending', 'Approved', 'Rejected'] as const).map((st) => (
+          {(['All', 'PENDING', 'APPROVED', 'REJECTED'] as const).map((st) => (
             <button
               key={st}
               onClick={() => setSelectedStatusFilter(st)}
@@ -243,8 +248,8 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
                     </td>
 
                     {/* PROJECT */}
-                    <td className="px-5 py-4 text-slate-600 font-medium text-xs">
-                      {req.project}
+                    <td className="px-5 py-4 font-bold text-blue-600 text-[11px] uppercase">
+                      {projects?.find(p => p.id?.toString() === req.projectId?.toString() || p.name === req.project)?.name || req.project || 'Unknown Project'}
                     </td>
 
                     {/* CATEGORY */}
@@ -261,6 +266,8 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
                     <td className="px-5 py-4 text-slate-600 font-medium text-xs">
                       {req.type}
                     </td>
+
+
 
                     {/* AMOUNT */}
                     <td className="px-5 py-4 font-bold text-slate-900 text-xs">
@@ -288,9 +295,9 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
                     <td className="px-5 py-4">
                       <span
                         className={`inline-block px-3 py-0.5 rounded-full text-[11px] font-bold ${
-                          req.status === 'Pending'
+                          req.status === 'PENDING'
                             ? 'bg-amber-100/90 text-amber-800 border border-amber-200'
-                            : req.status === 'Approved'
+                            : req.status === 'APPROVED'
                             ? 'bg-emerald-100/90 text-emerald-800 border border-emerald-200'
                             : 'bg-red-100/90 text-red-800 border border-red-200'
                         }`}
@@ -371,17 +378,12 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Project Name</label>
                   <select
-                    value={newProject}
-                    onChange={(e) => setNewProject(e.target.value)}
+                    value={newProjectId}
+                    onChange={(e) => setNewProjectId(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
                   >
-                    <option value="PMO Control Tower">PMO Control Tower</option>
-                    <option value="Creative Hub">Creative Hub</option>
-                    <option value="FinTech Gateway">FinTech Gateway</option>
-                    <option value="Logistics Core">Logistics Core</option>
-                    <option value="Data Migration Pipeline">Data Migration Pipeline</option>
                     {projects.map((p) => (
-                      <option key={p.id} value={p.name}>
+                      <option key={p.id} value={p.id}>
                         {p.name} ({p.code})
                       </option>
                     ))}
@@ -452,6 +454,7 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
                   <label className="block text-xs font-bold text-slate-700 mb-1">Date</label>
                   <input
                     type="date"
+                    min={new Date().toISOString().split('T')[0]}
                     value={newDate}
                     onChange={(e) => setNewDate(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
@@ -551,9 +554,9 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
                 <div className="flex items-center gap-3">
                   <span
                     className={`px-3 py-1 rounded-full text-xs font-bold ${
-                      viewingRequest.status === 'Pending'
+                      viewingRequest.status === 'PENDING'
                         ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                        : viewingRequest.status === 'Approved'
+                        : viewingRequest.status === 'APPROVED'
                         ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                         : 'bg-red-100 text-red-800 border border-red-300'
                     }`}
@@ -577,22 +580,24 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
 
               {/* Executive Decision Buttons */}
               <div className="pt-3 border-t border-slate-200 flex flex-wrap justify-between items-center gap-2">
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleStatusUpdate(viewingRequest, 'Approved')}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-sm flex items-center gap-1"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                    Approve
-                  </button>
-                  <button
-                    onClick={() => handleStatusUpdate(viewingRequest, 'Rejected')}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-lg shadow-sm flex items-center gap-1"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">cancel</span>
-                    Reject
-                  </button>
-                </div>
+              {viewingRequest.status !== 'APPROVED' && viewingRequest.status !== 'REJECTED' && currentPersona?.roleType === 'EXECUTIVE_MANAGER' && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleApprove(viewingRequest)}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-sm flex items-center gap-1"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => handleReject(viewingRequest)}
+                      className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-lg shadow-sm flex items-center gap-1"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">cancel</span>
+                      Reject
+                    </button>
+                  </div>
+                )}
 
                 <button
                   onClick={() => setViewingRequest(null)}

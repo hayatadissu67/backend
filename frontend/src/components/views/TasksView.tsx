@@ -73,9 +73,15 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const [projectCode, setProjectCode] = useState<string>(projects[0]?.code || 'PRJ-DELTA');
   const [assignee, setAssignee] = useState<string>('M. Thompson');
   const [priority, setPriority] = useState<'High' | 'Medium' | 'Low'>('High');
+<<<<<<< Updated upstream
   const [dueDate, setDueDate] = useState<string>('2026-08-15');
   const [startDate, setStartDate] = useState<string>('2026-07-30');
   const [estimatedHours, setEstimatedHours] = useState<number>(20);
+=======
+  const [dueDate, setDueDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [estimatedHours, setEstimatedHours] = useState<number>(20);
+  const startDate = new Date().toISOString().split('T')[0];
+>>>>>>> Stashed changes
   const [description, setDescription] = useState<string>('');
   const [initialStatus, setInitialStatus] = useState<TaskItem['status']>('Backlog');
 
@@ -319,13 +325,15 @@ export const TasksView: React.FC<TasksViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="px-4 py-2 bg-[#00174b] hover:bg-indigo-950 text-white font-black text-xs uppercase tracking-wider rounded-sm flex items-center gap-1.5 shadow-md transition-all transform active:scale-95"
-          >
-            <span className="material-symbols-outlined text-[18px]">add_circle</span>
-            <span>+ Create New Task</span>
-          </button>
+          {currentPersona?.roleType !== 'TEAM_MEMBER' && (
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="px-4 py-2 bg-[#00174b] hover:bg-indigo-950 text-white font-black text-xs uppercase tracking-wider rounded-sm flex items-center gap-1.5 shadow-md transition-all transform active:scale-95"
+            >
+              <span className="material-symbols-outlined text-[18px]">add_circle</span>
+              <span>+ Create New Task</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -340,7 +348,12 @@ export const TasksView: React.FC<TasksViewProps> = ({
           { key: 'Kanban Board', label: 'Kanban Board', icon: 'view_kanban' },
           { key: 'Calendar & Deadlines', label: 'Calendar & Deadlines', icon: 'event' },
           { key: 'Reports', label: 'Reports', icon: 'assessment' }
-        ].map((tab) => (
+        ].filter(tab => {
+          if (currentPersona?.roleType === 'TEAM_MEMBER') {
+            return tab.key !== 'Create Task' && tab.key !== 'Assign Members';
+          }
+          return true;
+        }).map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key as any)}
@@ -1179,6 +1192,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 <input
                   type="date"
                   required
+                  min={new Date().toISOString().split('T')[0]}
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
                   className="w-full border border-slate-300 p-2.5 rounded-sm text-xs font-mono font-bold"
@@ -1610,6 +1624,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 <label className="block font-bold text-slate-800 uppercase mb-1">Deadline Date</label>
                 <input
                   type="date"
+                  min={new Date().toISOString().split('T')[0]}
                   value={quickUpdateTask.dueDate}
                   onChange={(e) => {
                     const updated = { ...quickUpdateTask, dueDate: e.target.value };
@@ -1790,6 +1805,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   <input
                     type="date"
                     required
+                    min={new Date().toISOString().split('T')[0]}
                     value={dueDate}
                     onChange={(e) => setDueDate(e.target.value)}
                     className="w-full border border-slate-300 p-2 rounded-sm font-mono font-bold"
