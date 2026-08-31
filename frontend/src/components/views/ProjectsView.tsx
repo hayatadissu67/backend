@@ -25,12 +25,8 @@ interface ProjectsViewProps {
   onOpenNewProject: () => void;
   onUpdateProject: (updated: Project) => void;
   onAddProject?: (newProject: Project) => void;
-<<<<<<< Updated upstream
-  onOpenAssignMemberModal?: () => void;
-  onAddRisk?: (newRisk: RiskItem) => void;
-=======
   onOpenAssignMemberModal?: (project?: Project) => void;
->>>>>>> Stashed changes
+  onAddRisk?: (newRisk: RiskItem) => void;
   currentPersona?: any;
   onApproveProject?: (id: string) => void;
   onRejectProject?: (id: string, reason: string) => void;
@@ -389,7 +385,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
   // Handle Approval Status Badge
   const renderApprovalBadge = (p: Project) => {
-    const approval = p.approvalStatus || 'PENDING_APPROVAL';
+    const approval = p.approvalStatus || 'PENDING';
     if (approval === 'APPROVED') {
       return (
         <span className="px-2 py-0.5 bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold text-[9px] rounded-xs uppercase tracking-wider inline-flex items-center gap-1">
@@ -794,7 +790,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                           <div className="pt-0.5">{renderApprovalBadge(p)}</div>
                         </td>
                         <td className="px-4 py-3 text-right space-x-1.5 whitespace-nowrap">
-                          {currentPersona?.roleType === 'EXECUTIVE_MANAGER' && (p.approvalStatus === 'PENDING_APPROVAL' || !p.approvalStatus) && (
+                          {currentPersona?.roleType === 'EXECUTIVE_MANAGER' && (p.approvalStatus === 'PENDING' || !p.approvalStatus) && (
                             <>
                               <button
                                 onClick={() => onApproveProject && onApproveProject(p.id)}
@@ -910,7 +906,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                       </div>
 
                       <div className="flex justify-between items-center pt-1 border-t border-slate-50">
-                        {currentPersona?.roleType === 'EXECUTIVE_MANAGER' && (p.approvalStatus === 'PENDING_APPROVAL' || !p.approvalStatus) ? (
+                        {currentPersona?.roleType === 'EXECUTIVE_MANAGER' && (p.approvalStatus === 'PENDING' || !p.approvalStatus) ? (
                           <div className="flex gap-1">
                             <button
                               onClick={() => onApproveProject && onApproveProject(p.id)}
@@ -1518,15 +1514,9 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                         Executive Sign-Off
                       </button>
 
-<<<<<<< Updated upstream
-                      {selectedProject.approvalStatus === 'APPROVED' && (
+                      {currentPersona?.roleType !== 'TEAM_MEMBER' && selectedProject.approvalStatus === 'APPROVED' && (
                         <button
                           onClick={() => setIsAssignTeamModalOpen(true)}
-=======
-                      {onOpenAssignMemberModal && currentPersona?.roleType !== 'TEAM_MEMBER' && selectedProject.approvalStatus === 'APPROVED' && (
-                        <button
-                          onClick={() => onOpenAssignMemberModal(selectedProject || undefined)}
->>>>>>> Stashed changes
                           className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-[11px] uppercase tracking-wider rounded-xs flex items-center gap-1 shadow-2xs"
                         >
                           <span className="material-symbols-outlined text-[15px]">person_add</span>
@@ -1557,7 +1547,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                     </button>
                   )}
 
-                  {currentPersona?.roleType === 'EXECUTIVE_MANAGER' && (selectedProject.approvalStatus === 'PENDING_APPROVAL' || !selectedProject.approvalStatus) && (
+                  {currentPersona?.roleType === 'EXECUTIVE_MANAGER' && (selectedProject.approvalStatus === 'PENDING' || !selectedProject.approvalStatus) && (
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => {
@@ -2500,7 +2490,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                         </div>
 
                         {/* Add New Deliverable Form or Approval Lock Banner */}
-                        {selectedProject.approvalStatus === 'PENDING_APPROVAL' || (!selectedProject.approvalStatus && currentPersona?.roleType === 'PROJECT_MANAGER') ? (
+                        {selectedProject.approvalStatus === 'PENDING' || (!selectedProject.approvalStatus && currentPersona?.roleType === 'PROJECT_MANAGER') ? (
                           <div className="bg-amber-50 border border-amber-200 p-4 rounded-xs text-amber-900 text-xs flex items-center gap-3">
                             <span className="material-symbols-outlined text-amber-600 text-[24px]">pending_actions</span>
                             <div>

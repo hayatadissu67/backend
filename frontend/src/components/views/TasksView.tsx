@@ -73,15 +73,9 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const [projectCode, setProjectCode] = useState<string>(projects[0]?.code || 'PRJ-DELTA');
   const [assignee, setAssignee] = useState<string>('M. Thompson');
   const [priority, setPriority] = useState<'High' | 'Medium' | 'Low'>('High');
-<<<<<<< Updated upstream
-  const [dueDate, setDueDate] = useState<string>('2026-08-15');
-  const [startDate, setStartDate] = useState<string>('2026-07-30');
-  const [estimatedHours, setEstimatedHours] = useState<number>(20);
-=======
   const [dueDate, setDueDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [estimatedHours, setEstimatedHours] = useState<number>(20);
   const startDate = new Date().toISOString().split('T')[0];
->>>>>>> Stashed changes
   const [description, setDescription] = useState<string>('');
   const [initialStatus, setInitialStatus] = useState<TaskItem['status']>('Backlog');
 
