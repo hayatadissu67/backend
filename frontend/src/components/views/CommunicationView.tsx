@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { DiscussionItem, MeetingItem, NotificationItem, LoggedInPersona, Project } from '../../types';
-import { fetchChannelsApi, createChannelApi, fetchMessagesApi, createMessageApi } from '../../services/api';
+import { DiscussionItem, MeetingItem, NotificationItem, LoggedInPersona, Project, UserItem } from '../../types';
+import { fetchChannelsApi, createChannelApi, fetchMessagesApi, createMessageApi, createDocumentApi, deleteDocumentApi } from '../../services/api';
 
 export interface DocumentFileItem {
   id: string;
@@ -711,10 +711,10 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileUpload = (files: FileList | null) => {
+  const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
-    Array.from(files).forEach((file) => {
+    for (const file of Array.from(files)) {
       const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
       const ext = file.name.split('.').pop()?.toUpperCase() || 'FILE';
 
@@ -724,20 +724,6 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
       else if (['XLS', 'XLSX', 'CSV'].includes(ext)) docType = 'Spreadsheet';
       else if (['PNG', 'JPG', 'SVG'].includes(ext)) docType = 'Architecture Diagram';
 
-<<<<<<< Updated upstream
-      const newDoc: DocumentFileItem = {
-        id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-        title: file.name,
-        type: docType,
-        size: `${sizeMB} MB`,
-        date: new Date().toISOString().split('T')[0],
-        author: currentPersona ? currentPersona.name : 'Sarah Jenkins',
-        projectCode: 'PRJ-DELTA'
-      };
-
-      setDocuments((prev) => [newDoc, ...prev]);
-    });
-=======
       const formData = new FormData();
       formData.append('file', file);
       formData.append('title', file.name);
@@ -751,9 +737,18 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
         setDocuments((prev) => [created, ...prev]);
       }
     }
->>>>>>> Stashed changes
 
     showToast(`Successfully uploaded ${files.length} document(s) to Communication Vault.`);
+  };
+
+  const handleDeleteDocument = async (id: string) => {
+    const success = await deleteDocumentApi(id);
+    if (success) {
+      setDocuments((prev) => prev.filter(d => d.id !== id));
+      showToast('Document deleted successfully.');
+    } else {
+      showToast('Failed to delete document.');
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -2122,8 +2117,6 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
                         <span className="material-symbols-outlined text-[14px]">download</span>
                         <span>Download</span>
                       </button>
-<<<<<<< Updated upstream
-=======
                       {(currentPersona?.roleType === 'EXECUTIVE_MANAGER' || d.author === currentPersona?.name) && (
                         <button
                           onClick={() => handleDeleteDocument(d.id)}
@@ -2133,7 +2126,6 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
                           <span>Delete</span>
                         </button>
                       )}
->>>>>>> Stashed changes
                     </td>
                   </tr>
                 ))}

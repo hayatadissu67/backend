@@ -521,8 +521,6 @@ export const createDiscussionApi = async (discussionData: any) => {
   }
 };
 
-<<<<<<< Updated upstream
-=======
 export const fetchDocumentsApi = async () => {
   try {
     const res = await api.get('/communication/documents');
@@ -554,8 +552,6 @@ export const deleteDocumentApi = async (id: string) => {
     return false;
   }
 };
-
->>>>>>> Stashed changes
 export const fetchMeetingsApi = async () => {
   try {
     const res = await api.get('/communication/meetings');
