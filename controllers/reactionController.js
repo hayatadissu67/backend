@@ -1,10 +1,10 @@
-const reactionService = require('../services/reactionService');
+import { toggleReaction, getReactionsForMessage } from '../services/reactionService.js';
 
 async function toggleReaction(req, res) {
   try {
     const { messageId } = req.params;
     const { emoji } = req.body;
-    const result = await reactionService.toggleReaction(messageId, req.user.id, emoji);
+    const result = await toggleReaction(messageId, req.user.id, emoji);
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -14,14 +14,14 @@ async function toggleReaction(req, res) {
 async function getReactions(req, res) {
   try {
     const { messageId } = req.params;
-    const reactions = await reactionService.getReactionsForMessage(messageId);
+    const reactions = await getReactionsForMessage(messageId);
     res.json(reactions);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 }
 
-module.exports = {
+export {
   toggleReaction,
   getReactions,
 };

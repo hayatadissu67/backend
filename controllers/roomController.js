@@ -1,10 +1,10 @@
-const roomService = require('../services/roomService');
-const messageService = require('../services/messageService');
-const { getSocket } = require('../config/socket');
+import { getRoomsForUser, createRoom as createRoomService, hasAccess } from '../services/roomService.js';
+import { getMessagesForRoom, createMessage } from '../services/messageService.js';
+import { getSocket } from '../config/socket.js';
 
 async function getRooms(req, res) {
   try {
-    const rooms = await roomService.getRoomsForUser(req.user.id);
+    const rooms = await getRoomsForUser(req.user.id);
     res.json(rooms);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -13,7 +13,7 @@ async function getRooms(req, res) {
 
 async function createRoom(req, res) {
   try {
-    const room = await roomService.createRoom({
+    const room = await createRoomService({
       ...req.body,
       createdBy: req.user.id,
     });
@@ -28,11 +28,11 @@ async function getRoomMessages(req, res) {
     const { roomId } = req.params;
     const limit = req.query.limit;
     const offset = req.query.offset;
-    const hasAccess = await roomService.hasAccess(roomId, req.user.id);
-    if (!hasAccess) {
+    const access = await hasAccess(roomId, req.user.id);
+    if (!access) {
       return res.status(403).json({ error: 'Access denied to this room' });
     }
-    const messages = await messageService.getMessagesForRoom(roomId, limit, offset);
+    const messages = await getMessagesForRoom(roomId, limit, offset);
     return res.json(messages);
   } catch (error) {
     return res.status(error.status || 500).json({ error: error.message });
@@ -42,11 +42,11 @@ async function getRoomMessages(req, res) {
 async function postRoomMessage(req, res) {
   try {
     const { roomId } = req.params;
-    const hasAccess = await roomService.hasAccess(roomId, req.user.id);
-    if (!hasAccess) {
+    const access = await hasAccess(roomId, req.user.id);
+    if (!access) {
       return res.status(403).json({ error: 'Access denied to this room' });
     }
-    const message = await messageService.createMessage({
+    const message = await createMessage({
       roomId,
       senderId: req.user.id,
       content: req.body.content,
@@ -62,7 +62,7 @@ async function postRoomMessage(req, res) {
   }
 }
 
-module.exports = {
+export {
   getRooms,
   createRoom,
   getRoomMessages,

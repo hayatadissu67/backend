@@ -1,14 +1,14 @@
-const pool = require('../config/db');
+import { sequelize } from '../config/db.js';
 
 async function markRead(messageId, userId) {
   try {
-    await pool.query(
+    await sequelize.query(
       'INSERT INTO read_receipts (message_id, user_id, read_at) VALUES (?, ?, CURRENT_TIMESTAMP)',
       [messageId, userId]
     );
     return { added: true };
   } catch (err) {
-    await pool.query(
+    await sequelize.query(
       'UPDATE read_receipts SET read_at = CURRENT_TIMESTAMP WHERE message_id = ? AND user_id = ?',
       [messageId, userId]
     );
@@ -29,12 +29,12 @@ async function markReadBatch(messageIds, userId) {
 }
 
 async function getReadReceipts(messageId) {
-  const [rows] = await pool.query('SELECT user_id, read_at FROM read_receipts WHERE message_id = ?', [messageId]);
+  const [rows] = await sequelize.query('SELECT user_id, read_at FROM read_receipts WHERE message_id = ?', [messageId]);
   return rows;
 }
 
 async function getUnreadCountForUserInRoom(roomId, userId) {
-  const [rows] = await pool.query(
+  const [rows] = await sequelize.query(
     `SELECT COUNT(*) AS unread_count
      FROM messages m
      LEFT JOIN read_receipts rr ON rr.message_id = m.id AND rr.user_id = ?
@@ -44,7 +44,7 @@ async function getUnreadCountForUserInRoom(roomId, userId) {
   return rows[0]?.unread_count || 0;
 }
 
-module.exports = {
+export {
   markRead,
   markReadBatch,
   getReadReceipts,

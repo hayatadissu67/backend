@@ -23,7 +23,8 @@ const initDB = async () => {
 
     console.log("✅ All models synced successfully");
   } catch (error) {
-    console.error("❌ Error initializing database:", error);
+    console.error("❌ Error initializing database:", error.message);
+    console.error("💡 Hint: Check your .env DB credentials or start MySQL service.");
   }
 };
 

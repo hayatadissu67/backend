@@ -7,7 +7,7 @@ function getRateLimitKey(req) {
   return req.user?.id ? `user:${req.user.id}` : `ip:${req.ip}`;
 }
 
-function rateLimit(windowMs = 60000, maxRequests = 100) {
+export function rateLimit(windowMs = 60000, maxRequests = 100) {
   return (req, res, next) => {
     const key = getRateLimitKey(req);
     const now = Date.now();
@@ -46,6 +46,5 @@ function rateLimit(windowMs = 60000, maxRequests = 100) {
   };
 }
 
-module.exports = {
-  rateLimit,
-};
+// export default rateLimit;
+

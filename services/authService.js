@@ -1,8 +1,9 @@
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const pool = require('../config/db');
-const { JWT_SECRET, JWT_EXPIRE } = require('../config/env');
-const { validateEmail, validatePassword, sanitizeString } = require('../middleware/validation');
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { sequelize } from '../config/db.js';
+import { JWT_SECRET, JWT_EXPIRE } from '../env.js';
+import { validateEmail, validatePassword, sanitizeString } from '../middleware/validation.js';
+import User from '../models/authModel/userModel.js';
 
 async function registerUser({ email, password, full_name, role }) {
   if (!validateEmail(email)) {
@@ -17,7 +18,7 @@ async function registerUser({ email, password, full_name, role }) {
     throw error;
   }
 
-  const [existing] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
+  const [existing] = await sequelize.query('SELECT * FROM users WHERE email = ?', [email]);
   if (existing.length > 0) {
     const error = new Error('Email already registered');
     error.status = 400;
@@ -28,7 +29,7 @@ async function registerUser({ email, password, full_name, role }) {
   const cleanFullName = sanitizeString(full_name || email.split('@')[0], 100);
   const cleanRole = sanitizeString(role || 'member', 50);
 
-  const [result] = await pool.query(
+  const [result] = await sequelize.query(
     'INSERT INTO users (email, password_hash, full_name, role) VALUES (?, ?, ?, ?)',
     [email, passwordHash, cleanFullName, cleanRole]
   );
@@ -42,7 +43,6 @@ async function registerUser({ email, password, full_name, role }) {
     throw error;
   }
 
-  // For SQLite, construct user object from insert data since SELECT might not see it immediately
   const user = {
     id: userId,
     email,
@@ -55,27 +55,33 @@ async function registerUser({ email, password, full_name, role }) {
 }
 
 async function loginUser({ email, password }) {
-  if (!email || !password) {
+  try{
+
+    if (!email || !password) {
     const error = new Error('Email and password are required');
     error.status = 400;
     throw error;
   }
+  
+  const user = await User.findOne({
+    where: { email },
+    attributes: ['id', 'email', 'name', 'roleId', 'password'],
+  });
 
-  const [rows] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
-  if (rows.length === 0) {
+  console.log('User found: 👍👍', user);
+  if (!user) {
     const error = new Error('Invalid credentials');
     error.status = 401;
     throw error;
   }
-
-  const user = rows[0];
-  const valid = await bcrypt.compare(password, user.password_hash);
+  
+  const valid = await bcrypt.compare(password, user.password);
   if (!valid) {
-    const error = new Error('Invalid credentials');
+    const error = new Error('Invalid credentials kkk');
     error.status = 401;
     throw error;
   }
-
+  
   const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: JWT_EXPIRE });
   return {
     user: {
@@ -87,8 +93,13 @@ async function loginUser({ email, password }) {
     token,
   };
 }
+catch (error) {
+  console.error('Login error: 🤣🤣🤣', error);
+  throw error;
+}
+}
 
-module.exports = {
+export {
   registerUser,
   loginUser,
 };

@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
-import User from "../models/authModel/userModel.js";
-import Role from "../models/authModel/roleModel.js";
+import User from "../../models/authModel/userModel.js";
+import Role from "../../models/authModel/roleModel.js";
 
 // Add user (admin action)
 export const addUser = async (req, res) => {

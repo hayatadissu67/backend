@@ -1,10 +1,10 @@
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
-const multer = require('multer');
-const attachmentController = require('../controllers/attachmentController');
-const { authenticate } = require('../middleware/authMiddleware');
-const { UPLOAD_DIR, MAX_UPLOAD_SIZE_MB } = require('../config/env');
+import express from 'express';
+import fs from 'fs';
+import path from 'path';
+import multer from 'multer';
+import { postAttachment, uploadAttachment, listAttachments } from '../controllers/attachmentController.js';
+import { authenticate } from '../middleware/authMiddleware.js';
+import { UPLOAD_DIR, MAX_UPLOAD_SIZE_MB } from '../env.js';
 
 const router = express.Router();
 
@@ -44,8 +44,8 @@ const upload = multer({
   },
 });
 
-router.post('/:messageId/attachments', authenticate, attachmentController.postAttachment);
-router.post('/:messageId/attachments/upload', authenticate, upload.single('file'), attachmentController.uploadAttachment);
-router.get('/:messageId/attachments', authenticate, attachmentController.listAttachments);
+router.post('/:messageId/attachments', authenticate, postAttachment);
+router.post('/:messageId/attachments/upload', authenticate, upload.single('file'), uploadAttachment);
+router.get('/:messageId/attachments', authenticate, listAttachments);
 
-module.exports = router;
+export default router;

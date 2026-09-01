@@ -1,10 +1,10 @@
-const express = require('express');
-const reactionController = require('../controllers/reactionController');
-const { authenticate } = require('../middleware/authMiddleware');
+import express from 'express';
+import { toggleReaction, getReactions } from '../controllers/reactionController.js';
+import { authenticate } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-router.post('/:messageId/reactions', authenticate, reactionController.toggleReaction);
-router.get('/:messageId/reactions', reactionController.getReactions);
+router.post('/:messageId/reactions', authenticate, toggleReaction);
+router.get('/:messageId/reactions', getReactions);
 
-module.exports = router;
+export default router;

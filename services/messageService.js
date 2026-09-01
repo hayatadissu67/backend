@@ -1,5 +1,5 @@
-const pool = require('../config/db');
-const { validateRoomId, validateUserId, validateMessageContent, sanitizeString } = require('../middleware/validation');
+import { sequelize } from '../config/db.js';
+import { validateRoomId, validateUserId, validateMessageContent, sanitizeString } from '../middleware/validation.js';
 
 function normalizeLimit(value, fallback = 50) {
   const limit = Number.parseInt(value, 10);
@@ -23,7 +23,7 @@ async function getMessagesForRoom(roomId, limit, offset) {
   const safeLimit = normalizeLimit(limit, 50);
   const safeOffset = normalizeOffset(offset);
 
-  const [rows] = await pool.query(
+  const [rows] = await sequelize.query(
     `SELECT m.*, u.full_name as sender_name, u.avatar
      FROM messages m
      JOIN users u ON m.sender_id = u.id
@@ -63,13 +63,13 @@ async function createMessage({ roomId, senderId, content, replyTo }) {
 
   const cleanedContent = sanitizeString(content, 5000);
 
-  const [result] = await pool.query(
+  const [result] = await sequelize.query(
     'INSERT INTO messages (room_id, sender_id, content, reply_to) VALUES (?, ?, ?, ?)',
     [roomId, senderId, cleanedContent, replyTo || null]
   );
 
   const messageId = result.insertId || result.lastID;
-  const [rows] = await pool.query(
+  const [rows] = await sequelize.query(
     `SELECT m.*, u.full_name as sender_name, u.avatar
      FROM messages m
      JOIN users u ON m.sender_id = u.id
@@ -80,7 +80,7 @@ async function createMessage({ roomId, senderId, content, replyTo }) {
   return rows[0];
 }
 
-module.exports = {
+export {
   getMessagesForRoom,
   createMessage,
 };

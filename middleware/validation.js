@@ -42,7 +42,7 @@ function validateEmoji(emoji) {
   return typeof emoji === 'string' && emoji.length > 0 && emoji.length <= 2;
 }
 
-module.exports = {
+export {
   validateEmail,
   validatePassword,
   sanitizeString,

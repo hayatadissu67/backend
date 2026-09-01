@@ -1,5 +1,5 @@
-const pool = require('../config/db');
-const { validateRoomName, validateUserId, validateRoomId } = require('../middleware/validation');
+import { sequelize } from '../config/db.js';
+import { validateRoomName, validateUserId, validateRoomId } from '../middleware/validation.js';
 
 async function getRoomsForUser(userId) {
   if (!validateUserId(userId)) {
@@ -8,7 +8,7 @@ async function getRoomsForUser(userId) {
     throw error;
   }
 
-  const [rows] = await pool.query(
+  const [rows] = await sequelize.query(
     `SELECT DISTINCT r.*
      FROM rooms r
      LEFT JOIN room_members rm ON r.id = rm.room_id AND rm.user_id = ?
@@ -32,7 +32,7 @@ async function createRoom({ name, type, project_id, createdBy }) {
     throw error;
   }
 
-  const [result] = await pool.query(
+  const [result] = await sequelize.query(
     'INSERT INTO rooms (name, type, project_id, created_by) VALUES (?, ?, ?, ?)',
     [name, type || 'public', project_id || null, createdBy]
   );
@@ -46,17 +46,17 @@ async function createRoom({ name, type, project_id, createdBy }) {
     throw error;
   }
 
-  await pool.query(
+  await sequelize.query(
     'INSERT INTO room_members (room_id, user_id) VALUES (?, ?)',
     [roomId, createdBy]
   );
 
-  const [rows] = await pool.query('SELECT * FROM rooms WHERE id = ?', [roomId]);
+  const [rows] = await sequelize.query('SELECT * FROM rooms WHERE id = ?', [roomId]);
   return rows[0];
 }
 
 async function addMember(roomId, userId) {
-  await pool.query(
+  await sequelize.query(
     'INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES (?, ?)',
     [roomId, userId]
   );
@@ -64,7 +64,7 @@ async function addMember(roomId, userId) {
 }
 
 async function removeMember(roomId, userId) {
-  await pool.query(
+  await sequelize.query(
     'DELETE FROM room_members WHERE room_id = ? AND user_id = ?',
     [roomId, userId]
   );
@@ -72,7 +72,7 @@ async function removeMember(roomId, userId) {
 }
 
 async function hasAccess(roomId, userId) {
-  const [rows] = await pool.query(
+  const [rows] = await sequelize.query(
     `SELECT r.id
      FROM rooms r
      LEFT JOIN room_members rm ON r.id = rm.room_id AND rm.user_id = ?
@@ -82,7 +82,7 @@ async function hasAccess(roomId, userId) {
   return rows.length > 0;
 }
 
-module.exports = {
+export {
   getRoomsForUser,
   createRoom,
   addMember,
