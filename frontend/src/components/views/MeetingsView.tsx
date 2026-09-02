@@ -9,7 +9,12 @@ interface MeetingsViewProps {
 export const MeetingsView: React.FC<MeetingsViewProps> = ({ meetings, onAddMeeting }) => {
   const [showModal, setShowModal] = useState(false);
   const [title, setTitle] = useState('');
-  const [date, setDate] = useState('2026-08-10');
+  const getLocalToday = () => {
+    const d = new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+  };
+
+  const [date, setDate] = useState(getLocalToday());
   const [time, setTime] = useState('10:00 AM - 11:00 AM');
   const [location, setLocation] = useState('Executive Boardroom A');
   const [agenda, setAgenda] = useState('');
@@ -17,6 +22,11 @@ export const MeetingsView: React.FC<MeetingsViewProps> = ({ meetings, onAddMeeti
   const handleCreateMeeting = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title) return;
+
+    if (date < getLocalToday()) {
+      alert('Cannot schedule a meeting in the past.');
+      return;
+    }
 
     const newM: MeetingItem = {
       id: `m-${Date.now()}`,
@@ -131,6 +141,7 @@ export const MeetingsView: React.FC<MeetingsViewProps> = ({ meetings, onAddMeeti
                   <label className="block font-bold text-slate-700 uppercase mb-1">Date</label>
                   <input
                     type="date"
+                    min={getLocalToday()}
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
                     className="w-full border border-slate-300 p-2 rounded-sm"

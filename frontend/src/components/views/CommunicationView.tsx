@@ -667,7 +667,11 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
   // --- CALENDAR MODULE STATE ---
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [meetingTitle, setMeetingTitle] = useState('');
-  const [meetingDate, setMeetingDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const getLocalToday = () => {
+    const d = new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+  };
+  const [meetingDate, setMeetingDate] = useState(() => getLocalToday());
   const [meetingTime, setMeetingTime] = useState('10:00 AM - 11:00 AM');
   const [meetingLocation, setMeetingLocation] = useState('Executive Boardroom A');
   const [meetingAgenda, setMeetingAgenda] = useState('');
@@ -675,6 +679,11 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
   const handleScheduleMeetingSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!meetingTitle.trim()) return;
+
+    if (meetingDate < getLocalToday()) {
+      showToast('Cannot schedule a meeting in the past.');
+      return;
+    }
 
     const newM: MeetingItem = {
       id: `m-${Date.now()}`,
@@ -1835,7 +1844,7 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
                       <label className="block font-bold text-slate-700 mb-1">Date</label>
                       <input
                         type="date"
-                        min={new Date().toISOString().split('T')[0]}
+                        min={getLocalToday()}
                         value={meetingDate}
                         onChange={(e) => setMeetingDate(e.target.value)}
                         className="w-full border border-slate-300 rounded-sm p-2 outline-none focus:border-blue-600"
