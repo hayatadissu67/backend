@@ -52,7 +52,7 @@ import {
   ReportItem,
   ReportTemplate
 } from './types';
-import { RestrictedAccessView } from './components/RestrictedAccessView';
+import { RestrictedAccessView } from "./views/RestrictedAccessView";
 
 import { SidebarNav } from './components/SidebarNav';
 import { TopHeader } from './components/TopHeader';
@@ -63,22 +63,22 @@ import { UserProfileModal } from './components/UserProfileModal';
 import { AssignMemberModal } from './components/AssignMemberModal';
 import { FirstLoginChangePasswordModal } from './components/FirstLoginChangePasswordModal';
 
-import { ExecutiveDashboardView } from './components/ExecutiveDashboardView';
-import { ProjectsView } from './components/views/ProjectsView';
-import { PortfolioView } from './components/views/PortfolioView';
-import { UsersView } from './components/views/UsersView';
-import { TasksView } from './components/views/TasksView';
-import { RisksView } from './components/views/RisksView';
-import { ResourcesView } from './components/views/ResourcesView';
-import { BudgetView } from './components/views/BudgetView';
-import { CommunicationView } from './components/views/CommunicationView';
-import { AdminView } from './components/views/AdminView';
-import { ApprovalsView } from './components/views/ApprovalsView';
-import { ChangeRequestsView } from './components/views/ChangeRequestsView';
-import { ReportsView } from './components/views/ReportsView';
-import { TemplatesView } from './components/views/TemplatesView';
-import { SettingsView } from './components/views/SettingsView';
-import { LoginView } from './components/views/LoginView';
+import { ExecutiveDashboardView } from "./views/ExecutiveDashboardView";
+import { ProjectsView } from "./views/ProjectsView";
+import { PortfolioView } from "./views/PortfolioView";
+import { UsersView } from "./views/UsersView";
+import { TasksView } from "./views/TasksView";
+import { RisksView } from "./views/RisksView";
+import { ResourcesView } from "./views/ResourcesView";
+import { BudgetView } from "./views/BudgetView";
+import { CommunicationView } from "./views/CommunicationView";
+import { AdminView } from "./views/AdminView";
+import { ApprovalsView } from "./views/ApprovalsView";
+import { ChangeRequestsView } from "./views/ChangeRequestsView";
+import { ReportsView } from "./views/ReportsView";
+import { TemplatesView } from "./views/TemplatesView";
+import { SettingsView } from "./views/SettingsView";
+import { LoginView } from "./views/LoginView";
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<NavigationTab>('dashboard');
