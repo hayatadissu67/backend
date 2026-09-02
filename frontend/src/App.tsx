@@ -12,7 +12,11 @@ import {
   createTaskApi,
   updateTaskApi,
   fetchBudgetsFromApi,
+  assignProjectTeamMembersApi,
   fetchChangeRequestsFromApi,
+  createChangeRequestApi,
+  approveChangeRequestApi,
+  rejectChangeRequestApi,
   fetchReportsApi,
   fetchTemplatesApi,
   fetchDiscussionsApi,
@@ -218,6 +222,19 @@ export default function App() {
     }
   };
 
+  const handleAssignTeamMember = async (projectId: string, userIds: string[]) => {
+    try {
+      const assignedMembers = await assignProjectTeamMembersApi(projectId, userIds);
+      if (assignedMembers) {
+        // Optimistically, we could just alert success, 
+        // but let's re-fetch the users to ensure the UI updates if necessary.
+        const apiUsers = await fetchUsersFromApi();
+        if (apiUsers) setUsers(apiUsers);
+      }
+    } catch (err: any) {
+      throw err;
+    }
+  };
 
   const currentPersona: LoggedInPersona | null = currentUser ? {
     id: String(currentUser.id),
@@ -294,12 +311,9 @@ export default function App() {
   ]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
 
-  // Compute projects accessible to the current user based on role and assigned project codes
   const accessibleProjects = useMemo(() => {
-    if (!currentUser) return [];
-    if (currentUser.role === 'EXECUTIVE_MANAGER') return projects;
-    return projects.filter((p) => currentUser.assignedProjectCodes?.includes(p.code));
-  }, [projects, currentUser]);
+    return projects;
+  }, [projects]);
 
   // Collections
   const [users, setUsers] = useState<UserItem[]>([]);
@@ -326,17 +340,20 @@ export default function App() {
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [templates, setTemplates] = useState<ReportTemplate[]>([]);
 
-  const handleAddChangeRequest = (request: ChangeRequestItem) => {
-    setChangeRequests((prev) => [request, ...prev]);
-    const newNotif: NotificationItem = {
-      id: `notif-${Date.now()}`,
-      title: `New Change Request: ${request.id}`,
-      message: `${request.title} (${request.amount}) submitted for ${request.project}.`,
-      type: 'info',
-      timestamp: 'Just now',
-      isRead: false
-    };
-    setNotifications((prev) => [newNotif, ...prev]);
+  const handleAddChangeRequest = async (request: Partial<ChangeRequestItem>) => {
+    const created = await createChangeRequestApi(request);
+    if (created) {
+      setChangeRequests((prev) => [created, ...prev]);
+      const newNotif: NotificationItem = {
+        id: `notif-${Date.now()}`,
+        title: `New Change Request: ${created.id}`,
+        message: `${created.title} (${created.amount}) submitted for ${created.project || 'Project'}.`,
+        type: 'info',
+        timestamp: 'Just now',
+        isRead: false
+      };
+      setNotifications((prev) => [newNotif, ...prev]);
+    }
   };
 
   const handleUpdateChangeRequest = (updated: ChangeRequestItem) => {
@@ -345,7 +362,7 @@ export default function App() {
       id: `notif-${Date.now()}`,
       title: `Change Request ${updated.id} Updated`,
       message: `Status set to ${updated.status} for ${updated.title}.`,
-      type: updated.status === 'Approved' ? 'success' : updated.status === 'Rejected' ? 'alert' : 'info',
+      type: updated.status === 'APPROVED' ? 'success' : updated.status === 'REJECTED' ? 'alert' : 'info',
       timestamp: 'Just now',
       isRead: false
     };
@@ -354,6 +371,24 @@ export default function App() {
 
   const handleDeleteChangeRequest = (id: string) => {
     setChangeRequests((prev) => prev.filter((cr) => cr.id !== id));
+  };
+
+  const handleApproveChangeRequest = async (id: string) => {
+    try {
+      const updated = await approveChangeRequestApi(id);
+      handleUpdateChangeRequest(updated);
+    } catch (err: any) {
+      alert(err.message || 'Failed to approve change request');
+    }
+  };
+
+  const handleRejectChangeRequest = async (id: string, reason: string) => {
+    try {
+      const updated = await rejectChangeRequestApi(id, reason);
+      handleUpdateChangeRequest(updated);
+    } catch (err: any) {
+      alert(err.message || 'Failed to reject change request');
+    }
   };
 
   // Modals State
@@ -415,6 +450,20 @@ export default function App() {
     };
 
     syncWithBackendApi();
+
+    // Polling interval for messages and notifications
+    const interval = setInterval(async () => {
+      try {
+        const [apiNotifications] = await Promise.all([
+          fetchNotificationsApi()
+        ]);
+        if (apiNotifications) setNotifications(apiNotifications);
+      } catch (e) {
+        // silent fail on poll
+      }
+    }, 10000);
+
+    return () => clearInterval(interval);
   }, [currentUser?.id]);
 
   // Handlers
@@ -832,6 +881,9 @@ export default function App() {
                 onAddChangeRequest={handleAddChangeRequest}
                 onUpdateChangeRequest={handleUpdateChangeRequest}
                 onDeleteChangeRequest={handleDeleteChangeRequest}
+                onApproveChangeRequest={handleApproveChangeRequest}
+                onRejectChangeRequest={handleRejectChangeRequest}
+                currentPersona={currentPersona}
               />
             )}
 
@@ -862,6 +914,7 @@ export default function App() {
               currentTab === 'notifications' ||
               currentTab === 'documents') && (
               <CommunicationView
+                users={users}
                 discussions={discussions}
                 onAddDiscussion={handleAddDiscussion}
                 meetings={meetings}
@@ -969,7 +1022,9 @@ export default function App() {
         isOpen={isAssignMemberModalOpen}
         onClose={() => setIsAssignMemberModalOpen(false)}
         projects={projects}
-        onRequestAssignment={handleRequestMemberAssignment}
+        selectedProject={selectedProject}
+        users={users}
+        onAssign={handleAssignTeamMember}
       />
     </div>
   );

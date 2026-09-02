@@ -1,60 +1,57 @@
 import React, { useState } from 'react';
-import { Project, ApprovalRequest } from '../types';
+import { Project, UserItem } from '../types';
 
 interface AssignMemberModalProps {
   isOpen: boolean;
   onClose: () => void;
   projects: Project[];
-  onRequestAssignment: (request: Partial<ApprovalRequest>) => void;
+  selectedProject?: Project | null;
+  users: UserItem[];
+  onAssign: (projectId: string, userIds: string[]) => Promise<void>;
 }
 
 export const AssignMemberModal: React.FC<AssignMemberModalProps> = ({
   isOpen,
   onClose,
   projects,
-  onRequestAssignment
+  selectedProject: passedSelectedProject,
+  users,
+  onAssign
 }) => {
   if (!isOpen) return null;
 
-  const [memberName, setMemberName] = useState('');
-  const [memberEmail, setMemberEmail] = useState('');
-  const [memberRole, setMemberRole] = useState('Senior Software Engineer');
-  const [memberDepartment, setMemberDepartment] = useState('Engineering');
-  const [selectedProject, setSelectedProject] = useState(projects[0]?.name || 'Project Delta');
-  const [requestedBy, setRequestedBy] = useState('Sarah Jenkins (Project Manager)');
-  const [justification, setJustification] = useState('');
+  const approvedProjects = projects.filter((p) => p.approvalStatus === 'APPROVED');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(
+    passedSelectedProject?.id || (approvedProjects.length > 0 ? approvedProjects[0].id : '')
+  );
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [submittedToast, setSubmittedToast] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  React.useEffect(() => {
+    if (isOpen) {
+      setSelectedProjectId(passedSelectedProject?.id || (approvedProjects.length > 0 ? approvedProjects[0].id : ''));
+      setSelectedUserId('');
+    }
+  }, [isOpen, passedSelectedProject, projects]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!memberName.trim() || !memberEmail.trim()) return;
+    if (!selectedProjectId || !selectedUserId) return;
 
-    const newRequest: Partial<ApprovalRequest> = {
-      id: `app-member-${Date.now()}`,
-      project: selectedProject,
-      requestType: 'New Team Member Assignment & Access Provisioning',
-      requestedBy: requestedBy.trim() || 'Project Manager',
-      memberName: memberName.trim(),
-      memberEmail: memberEmail.trim(),
-      memberRole: memberRole.trim(),
-      memberDepartment,
-      justification: justification.trim() || 'Resource requested for sprint capacity and delivery milestones.',
-      amount: 'Access Credentials Required',
-      date: new Date().toISOString().split('T')[0],
-      status: 'Pending'
-    };
-
-    onRequestAssignment(newRequest);
-    setSubmittedToast(true);
-
-    setTimeout(() => {
-      setSubmittedToast(false);
-      onClose();
-      // Reset
-      setMemberName('');
-      setMemberEmail('');
-      setJustification('');
-    }, 1500);
+    setIsSubmitting(true);
+    try {
+      await onAssign(selectedProjectId, [selectedUserId]);
+      setSubmittedToast(true);
+      setTimeout(() => {
+        setSubmittedToast(false);
+        onClose();
+      }, 1500);
+    } catch (err: any) {
+      alert(err.message || 'Failed to assign member');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -65,10 +62,10 @@ export const AssignMemberModal: React.FC<AssignMemberModalProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-amber-400 text-[20px]">person_add</span>
-              <h3 className="font-extrabold text-base tracking-tight">Request Member Assignment</h3>
+              <h3 className="font-extrabold text-base tracking-tight">Assign Team Member</h3>
             </div>
             <p className="text-xs text-indigo-200 mt-0.5">
-              Submit new team member access request for Executive Steering Committee approval &amp; login credential issuance.
+              Assign an existing user to the selected project.
             </p>
           </div>
           <button
@@ -82,134 +79,66 @@ export const AssignMemberModal: React.FC<AssignMemberModalProps> = ({
         {submittedToast ? (
           <div className="p-8 text-center space-y-3 animate-fadeIn">
             <span className="material-symbols-outlined text-emerald-600 text-[48px]">check_circle</span>
-            <h4 className="font-extrabold text-slate-900 text-lg">Assignment Request Submitted!</h4>
+            <h4 className="font-extrabold text-slate-900 text-lg">Member Assigned!</h4>
             <p className="text-xs text-slate-600 max-w-md mx-auto">
-              Your member onboarding request for <strong className="text-indigo-950">{memberName}</strong> has been sent to Executive Steering Committee approvals. Upon review, the Executive will approve and generate official login credentials.
+              The team member has been successfully assigned to the project.
             </p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
-            {/* PM Requester & Project */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">PM Requester Name *</label>
-                <input
-                  type="text"
-                  value={requestedBy}
-                  onChange={(e) => setRequestedBy(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 p-2 rounded-xs font-semibold text-slate-800 outline-none focus:border-indigo-900"
-                  required
-                />
-              </div>
-
+            <div className="space-y-4">
               <div>
                 <label className="font-bold text-slate-700 block mb-1">Target Project *</label>
                 <select
-                  value={selectedProject}
-                  onChange={(e) => setSelectedProject(e.target.value)}
+              value={selectedProjectId}
+              onChange={(e) => setSelectedProjectId(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-sm px-3 py-2 text-sm text-slate-800 font-medium focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-inner"
+              required
+            >
+              <option value="" disabled>Select a Project</option>
+              {approvedProjects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.code} - {p.name}
+                </option>
+              ))}
+            </select>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Team Member *</label>
+                <select
+                  value={selectedUserId}
+                  onChange={(e) => setSelectedUserId(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 p-2 rounded-xs font-bold text-slate-800 outline-none focus:border-indigo-900"
+                  required
                 >
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.name}>
-                      {p.name} ({p.code})
+                  <option value="" disabled>Select a member</option>
+                  {users.filter(u => u.role === 'TEAM_MEMBER').map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.email})
                     </option>
                   ))}
                 </select>
               </div>
             </div>
 
-            {/* Member Details */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">New Member Full Name *</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Marcus Vance"
-                  value={memberName}
-                  onChange={(e) => setMemberName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 p-2 rounded-xs font-bold text-slate-900 outline-none focus:border-indigo-900"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Requested Work Email *</label>
-                <input
-                  type="email"
-                  placeholder="e.g. marcus.vance@enterprise-pmo.com"
-                  value={memberEmail}
-                  onChange={(e) => setMemberEmail(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 p-2 rounded-xs font-mono font-semibold text-slate-900 outline-none focus:border-indigo-900"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Department & Role */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Department</label>
-                <select
-                  value={memberDepartment}
-                  onChange={(e) => setMemberDepartment(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 p-2 rounded-xs font-semibold text-slate-800 outline-none focus:border-indigo-900"
-                >
-                  <option value="Engineering">Engineering</option>
-                  <option value="Infrastructure">Infrastructure</option>
-                  <option value="Data Eng">Data Engineering</option>
-                  <option value="Cybersecurity">Cybersecurity</option>
-                  <option value="Product Mgmt">Product Management</option>
-                  <option value="Design">UX &amp; Design</option>
-                  <option value="Enterprise IT">Enterprise IT</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Project Role Title</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Lead Backend Specialist"
-                  value={memberRole}
-                  onChange={(e) => setMemberRole(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 p-2 rounded-xs font-semibold text-slate-800 outline-none focus:border-indigo-900"
-                />
-              </div>
-            </div>
-
-            {/* Business Justification */}
-            <div>
-              <label className="font-bold text-slate-700 block mb-1">Business Justification / Milestone Need</label>
-              <textarea
-                rows={2}
-                placeholder="Explain why this team member is needed and what project deliverables they will own..."
-                value={justification}
-                onChange={(e) => setJustification(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 p-2 rounded-xs text-slate-800 outline-none focus:border-indigo-900 font-medium"
-              />
-            </div>
-
-            <div className="bg-amber-50 border border-amber-200 p-3 rounded-xs flex items-start gap-2 text-[11px] text-amber-900">
-              <span className="material-symbols-outlined text-[16px] text-amber-700 shrink-0 mt-0.5">info</span>
-              <div>
-                <strong>Executive Workflow Notice:</strong> Upon submission, Executive Steering Committee will review this assignment request. Once approved, the Executive will provision and issue official login credentials (email &amp; temporary password).
-              </div>
-            </div>
-
             {/* Action Buttons */}
-            <div className="pt-2 flex justify-end gap-2 border-t border-slate-200">
+            <div className="pt-4 flex justify-end gap-2 border-t border-slate-200">
               <button
                 type="button"
                 onClick={onClose}
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xs transition-colors"
+                disabled={isSubmitting}
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 bg-[#00174b] hover:bg-indigo-950 text-white font-bold rounded-xs uppercase tracking-wider flex items-center gap-1.5 shadow-2xs"
+                disabled={isSubmitting}
+                className="px-5 py-2 bg-[#00174b] hover:bg-indigo-950 text-white font-bold rounded-xs uppercase tracking-wider flex items-center gap-1.5 shadow-2xs disabled:opacity-50"
               >
                 <span className="material-symbols-outlined text-[16px]">send</span>
-                Submit for Approval
+                {isSubmitting ? 'Assigning...' : 'Assign Member'}
               </button>
             </div>
           </form>

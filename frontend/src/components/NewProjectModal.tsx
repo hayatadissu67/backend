@@ -56,7 +56,7 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
       progress: 0,
       gate,
       lifecycleStage: stage,
-      approvalStatus: 'PENDING_APPROVAL',
+      approvalStatus: 'PENDING',
       lifecycle: {
         stage,
         stageNumber: 1,
@@ -185,6 +185,7 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
               <input
                 type="date"
                 required
+                min={new Date().toISOString().split('T')[0]}
                 value={targetDate}
                 onChange={(e) => setTargetDate(e.target.value)}
                 className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none font-mono"

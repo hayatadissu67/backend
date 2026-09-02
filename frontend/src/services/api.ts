@@ -173,6 +173,16 @@ export const updateProjectApi = async (id: string, projectData: Partial<Project>
   }
 };
 
+export const assignProjectTeamMembersApi = async (id: string, userIds: string[]) => {
+  try {
+    const res = await api.post(`/projects/${id}/team`, { userIds });
+    return res.data?.success ? res.data.data : null;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to assign team members.';
+    throw new Error(message);
+  }
+};
+
 export const approveProjectApi = async (id: string): Promise<Project | null> => {
   try {
     const res = await api.patch(`/projects/${id}/approve`);
@@ -193,6 +203,25 @@ export const rejectProjectApi = async (id: string, rejectionReason: string): Pro
   }
 };
 
+export const getProjectTeamApi = async (id: string): Promise<UserItem[] | null> => {
+  try {
+    const res = await api.get(`/projects/${id}/team`);
+    return res.data?.success ? res.data.data : [];
+  } catch (err) {
+    console.warn('Failed to fetch project team:', err);
+    return null;
+  }
+};
+
+export const assignProjectTeamApi = async (id: string, userIds: (string | number)[]): Promise<UserItem[] | null> => {
+  try {
+    const res = await api.post(`/projects/${id}/team`, { userIds });
+    return res.data?.success ? res.data.data : null;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to assign team members.';
+    throw new Error(message);
+  }
+};
 
 // --- Risks API ---
 export const fetchRisksFromApi = async (): Promise<RiskItem[] | null> => {
@@ -275,6 +304,56 @@ export const fetchChangeRequestsFromApi = async (): Promise<ChangeRequestItem[] 
   } catch (err) {
     console.warn('Failed to fetch change requests from API:', err);
     return null;
+  }
+};
+
+export const createChangeRequestApi = async (data: Partial<ChangeRequestItem>): Promise<ChangeRequestItem | null> => {
+  try {
+    const res = await api.post('/change-requests', data);
+    return res.data?.success ? res.data.data : null;
+  } catch (err) {
+    console.warn('Failed to create change request via API:', err);
+    return null;
+  }
+};
+
+export const updateChangeRequestApi = async (id: string, data: Partial<ChangeRequestItem>): Promise<ChangeRequestItem | null> => {
+  try {
+    const res = await api.put(`/change-requests/${id}`, data);
+    return res.data?.success ? res.data.data : null;
+  } catch (err) {
+    console.warn('Failed to update change request via API:', err);
+    return null;
+  }
+};
+
+export const approveChangeRequestApi = async (id: string): Promise<ChangeRequestItem | null> => {
+  try {
+    const res = await api.patch(`/change-requests/${id}/approve`);
+    return res.data?.success ? res.data.data : null;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to approve change request.';
+    throw new Error(message);
+  }
+};
+
+export const rejectChangeRequestApi = async (id: string, rejectionReason: string): Promise<ChangeRequestItem | null> => {
+  try {
+    const res = await api.patch(`/change-requests/${id}/reject`, { rejectionReason });
+    return res.data?.success ? res.data.data : null;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to reject change request.';
+    throw new Error(message);
+  }
+};
+
+export const deleteChangeRequestApi = async (id: string): Promise<boolean> => {
+  try {
+    const res = await api.delete(`/change-requests/${id}`);
+    return !!res.data?.success;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to delete change request.';
+    throw new Error(message);
   }
 };
 
@@ -452,9 +531,11 @@ export const fetchDocumentsApi = async () => {
   }
 };
 
-export const createDocumentApi = async (documentData: any) => {
+export const createDocumentApi = async (formData: FormData) => {
   try {
-    const res = await api.post('/communication/documents', documentData);
+    const res = await api.post('/communication/documents', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return res.data?.success ? res.data.data : null;
   } catch (err) {
     console.error('API Error creating document:', err);

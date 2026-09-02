@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { ResourceLoading } from '../../types';
+import { ResourceLoading, UserItem } from '../../types';
 
 interface ResourcesViewProps {
   resources: ResourceLoading[];
   onUpdateResource: (dept: string, newPct: number) => void;
-  onOpenAssignMemberModal?: () => void;
+  onSelectUser?: (user: UserItem) => void;
+  onOpenAssignMemberModal?: (project?: any) => void;
 }
 
 interface AllocationRecord {

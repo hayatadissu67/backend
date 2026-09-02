@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { DiscussionItem, MeetingItem, NotificationItem, LoggedInPersona, Project } from '../../types';
+import { DiscussionItem, MeetingItem, NotificationItem, LoggedInPersona, Project, UserItem } from '../../types';
 import { fetchChannelsApi, createChannelApi, fetchMessagesApi, createMessageApi, fetchDocumentsApi, createDocumentApi, deleteDocumentApi } from '../../services/api';
 
 export interface DocumentFileItem {
@@ -290,6 +290,7 @@ const INITIAL_DOCUMENTS: DocumentFileItem[] = [
 ];
 
 interface CommunicationViewProps {
+  users?: UserItem[];
   discussions: DiscussionItem[];
   onAddDiscussion: (discussion: DiscussionItem) => void;
   meetings: MeetingItem[];
@@ -304,6 +305,7 @@ interface CommunicationViewProps {
 }
 
 export const CommunicationView: React.FC<CommunicationViewProps> = ({
+  users = [],
   discussions,
   onAddDiscussion,
   meetings,
@@ -335,9 +337,9 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
   };
 
   // --- TEAM CHAT MODULE STATE & TELEGRAM FEATURES ---
-  const [channels, setChannels] = useState<ChatChannel[]>(INITIAL_CHANNELS);
-  const [activeChannelId, setActiveChannelId] = useState<string>(INITIAL_CHANNELS[0].id);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(INITIAL_CHAT_MESSAGES);
+  const [channels, setChannels] = useState<ChatChannel[]>([]);
+  const [activeChannelId, setActiveChannelId] = useState<string>('');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   useEffect(() => {
     const loadChatData = async () => {
@@ -345,21 +347,46 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
         fetchChannelsApi(),
         fetchMessagesApi()
       ]);
-      if (apiChannels.length > 0) {
-        setChannels(apiChannels);
-        setActiveChannelId(apiChannels[0].id);
+      
+      const baseChannels = apiChannels.length > 0 ? apiChannels : INITIAL_CHANNELS.filter(c => c.type === 'channel');
+      
+      const dynamicDMs: ChatChannel[] = (users || [])
+        .filter(u => u.id !== currentPersona?.id && u.name !== currentPersona?.name)
+        .map(u => {
+          const myId = currentPersona?.id || 'temp';
+          const otherId = u.id || 'temp2';
+          const dmId = `dm-${[myId, otherId].sort().join('-')}`;
+          
+          return {
+            id: dmId,
+            name: u.name,
+            type: 'dm',
+            unreadCount: 0,
+            description: `Chat with ${u.role}`,
+            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=random`,
+            roleTitle: u.role,
+            status: 'online'
+          };
+        });
+        
+      const allChannels = [...baseChannels, ...dynamicDMs];
+      
+      if (allChannels.length > 0) {
+        setChannels(allChannels);
+        setActiveChannelId(allChannels[0].id);
       } else {
-        setChannels(INITIAL_CHANNELS);
-        setActiveChannelId(INITIAL_CHANNELS[0].id);
+        setChannels([]);
+        setActiveChannelId('');
       }
-      if (apiMessages.length > 0) {
-        setChatMessages(apiMessages);
-      } else {
-        setChatMessages(INITIAL_CHAT_MESSAGES);
-      }
+      setChatMessages(apiMessages || []);
     };
+    
     loadChatData();
-  }, []);
+    
+    // Polling interval for messages
+    const interval = setInterval(loadChatData, 10000);
+    return () => clearInterval(interval);
+  }, [users, currentPersona]);
 
   const [chatInput, setChatInput] = useState('');
   const [chatSearch, setChatSearch] = useState('');
@@ -436,105 +463,7 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
     showToast(`Created channel #${createdChan.name}`);
   };
 
-  // Helper for automated Telegram team/manager responses (Functional for EVERY project)
-  const triggerSimulatedTeamReply = (userMsgText: string, channelId: string) => {
-    if (!autoReplyEnabled) return;
-
-    const currentChan = channels.find((c) => c.id === channelId);
-    let matchedProject = projects?.find((p) => p.code === currentChan?.projectCode);
-
-    if (!matchedProject && selectedProjectCode !== 'ALL') {
-      matchedProject = projects?.find((p) => p.code === selectedProjectCode);
-    }
-
-    if (!matchedProject && projects && projects.length > 0) {
-      matchedProject = projects.find((p) => p.code === 'PRJ-DELTA') || projects[0];
-    }
-
-    // Determine responder based on matched project manager or specific channel
-    let responderName = matchedProject ? matchedProject.owner : 'Sarah Jenkins';
-    let responderRole = matchedProject ? `Project Owner (${matchedProject.code})` : 'PMO Executive Director';
-    let responderAvatar = 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150';
-
-    if (responderName.includes('Thompson')) {
-      responderAvatar = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150';
-      responderRole = 'Infrastructure & AI Lead';
-    } else if (responderName.includes('Chen')) {
-      responderAvatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150';
-      responderRole = 'Sr. Lead Systems Architect';
-    } else if (responderName.includes('Gupta')) {
-      responderAvatar = 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150';
-      responderRole = 'Data Engineering Lead';
-    } else if (responderName.includes('Baker')) {
-      responderAvatar = 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150';
-      responderRole = 'Security Compliance Director';
-    } else if (responderName.includes('Kim')) {
-      responderAvatar = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150';
-      responderRole = 'DevOps & Mobile Lead';
-    } else if (channelId === 'dm-[#1]') {
-      responderName = 'Alex Rivers';
-      responderRole = 'Sr. Full-Stack Lead';
-      responderAvatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150';
-    } else if (channelId === 'dm-[#2]') {
-      responderName = 'David Kim';
-      responderRole = 'Frontend Specialist';
-      responderAvatar = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150';
-    } else if (channelId === 'dm-[#4]') {
-      responderName = 'Elena Rostova';
-      responderRole = 'Quality Assurance Lead';
-      responderAvatar = 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150';
-    }
-
-    const responder = {
-      name: responderName,
-      role: responderRole,
-      avatar: responderAvatar
-    };
-
-    // Phase 1: Show Telegram "is typing..."
-    setTimeout(() => {
-      setIsTypingStatus(`${responder.name} (${matchedProject ? matchedProject.code : 'PMO'}) is typing...`);
-    }, 500);
-
-    // Phase 2: Deliver message
-    setTimeout(() => {
-      setIsTypingStatus(null);
-      const lower = userMsgText.toLowerCase();
-      let responseText = `Received your update for ${matchedProject ? matchedProject.name : 'the team'}! Reviewing context now 👍`;
-
-      if (matchedProject) {
-        if (lower.includes('gate') || lower.includes('status') || lower.includes('update') || lower.includes('stage')) {
-          responseText = `Thanks for checking in! ${matchedProject.name} (${matchedProject.code}) is at ${matchedProject.gate} [${matchedProject.lifecycleStage} stage] with ${matchedProject.progress}% completed. Status: ${matchedProject.status} (${matchedProject.health} health). Target Date: ${matchedProject.targetDate}.`;
-        } else if (lower.includes('budget') || lower.includes('cost') || lower.includes('spent') || lower.includes('money')) {
-          responseText = `Budget update for ${matchedProject.code}: Total Allocated is $${matchedProject.budget.toLocaleString()}, Spent to date is $${matchedProject.spent.toLocaleString()} (${Math.round((matchedProject.spent / matchedProject.budget) * 100)}% utilized). Health: ${matchedProject.health}.`;
-        } else if (lower.includes('code') || lower.includes('bug') || lower.includes('fix') || lower.includes('pr') || lower.includes('test')) {
-          responseText = `Got it! Running automated CI/CD checks for ${matchedProject.code}. ${matchedProject.owner} has verified the build pipeline is passing.`;
-        } else if (lower.includes('risk') || lower.includes('delay') || lower.includes('issue')) {
-          responseText = `Understood. Open risks/issues for ${matchedProject.code} are logged in the PMO Risk Register. Current health indicator: ${matchedProject.health}. Mitigations are active under ${matchedProject.owner}.`;
-        } else if (lower.includes('voice note') || lower.includes('recorded')) {
-          responseText = `Voice message acknowledged by ${responder.name}! Logged under project ${matchedProject.code}.`;
-        } else if (lower.includes('hello') || lower.includes('hi') || lower.includes('hey')) {
-          responseText = `Hello! ${responder.name} here, manager for ${matchedProject.name} (${matchedProject.code}). How can I assist with our ${matchedProject.gate} milestones today?`;
-        }
-      }
-
-      const autoMsg: ChatMessage = {
-        id: `m-reply-${Date.now()}`,
-        channelId: channelId,
-        sender: responder.name,
-        senderRole: responder.role,
-        avatar: responder.avatar,
-        content: responseText,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'read',
-        reactions: [{ emoji: '👍', count: 1, users: [responder.name] }]
-      };
-
-      setChatMessages((prev) => [...prev, autoMsg]);
-      createMessageApi(autoMsg);
-      showToast(`💬 ${responder.name} replied to ${currentChan ? currentChan.name : 'chat'}`);
-    }, 2200);
-  };
+  // Removed automated Telegram team/manager responses
 
   const handleSendChatMessage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -571,9 +500,6 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
     setIsCodeSnippet(false);
     setReplyingToMessage(null);
     showToast(`Sent message to ${activeChannel.name}`);
-
-    // Trigger simulated Telegram live team response
-    triggerSimulatedTeamReply(sentText, activeChannelId);
   };
 
   const handleSendVoiceNote = () => {
@@ -598,7 +524,6 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
     createMessageApi(voiceMsg);
 
     showToast('Recorded and sent Telegram voice note (0:18)');
-    triggerSimulatedTeamReply('voice note update', activeChannelId);
   };
 
   const handleAddReaction = (msgId: string, emoji: string) => {
@@ -740,7 +665,11 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
   // --- CALENDAR MODULE STATE ---
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [meetingTitle, setMeetingTitle] = useState('');
-  const [meetingDate, setMeetingDate] = useState('2026-08-10');
+  const getLocalToday = () => {
+    const d = new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+  };
+  const [meetingDate, setMeetingDate] = useState(() => getLocalToday());
   const [meetingTime, setMeetingTime] = useState('10:00 AM - 11:00 AM');
   const [meetingLocation, setMeetingLocation] = useState('Executive Boardroom A');
   const [meetingAgenda, setMeetingAgenda] = useState('');
@@ -748,6 +677,11 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
   const handleScheduleMeetingSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!meetingTitle.trim()) return;
+
+    if (meetingDate < getLocalToday()) {
+      showToast('Cannot schedule a meeting in the past.');
+      return;
+    }
 
     const newM: MeetingItem = {
       id: `m-${Date.now()}`,
@@ -799,8 +733,7 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+    for (const file of Array.from(files)) {
       const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
       const ext = file.name.split('.').pop()?.toUpperCase() || 'FILE';
 
@@ -810,15 +743,15 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
       else if (['XLS', 'XLSX', 'CSV'].includes(ext)) docType = 'Spreadsheet';
       else if (['PNG', 'JPG', 'SVG'].includes(ext)) docType = 'Architecture Diagram';
 
-      const newDocData = {
-        title: file.name,
-        type: docType,
-        size: `${sizeMB} MB`,
-        date: new Date().toISOString().split('T')[0],
-        projectCode: 'PRJ-DELTA' // Placeholder until project selector is added
-      };
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('title', file.name);
+      formData.append('type', docType);
+      formData.append('size', `${sizeMB} MB`);
+      formData.append('date', new Date().toISOString().split('T')[0]);
+      formData.append('projectCode', 'PRJ-DELTA'); // Placeholder until project selector is added
 
-      const created = await createDocumentApi(newDocData);
+      const created = await createDocumentApi(formData);
       if (created) {
         setDocuments((prev) => [created, ...prev]);
       }
@@ -1923,6 +1856,7 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
                       <label className="block font-bold text-slate-700 mb-1">Date</label>
                       <input
                         type="date"
+                        min={getLocalToday()}
                         value={meetingDate}
                         onChange={(e) => setMeetingDate(e.target.value)}
                         className="w-full border border-slate-300 rounded-sm p-2 outline-none focus:border-blue-600"
@@ -2204,7 +2138,7 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
                         <span className="material-symbols-outlined text-[14px]">download</span>
                         <span>Download</span>
                       </button>
-                      {(currentPersona?.role === 'EXECUTIVE_MANAGER' || d.author === currentPersona?.name) && (
+                      {(currentPersona?.roleType === 'EXECUTIVE_MANAGER' || d.author === currentPersona?.name) && (
                         <button
                           onClick={() => handleDeleteDocument(d.id)}
                           className="px-3 py-1 bg-red-50 hover:bg-red-100 text-red-600 font-bold text-[10px] rounded-xs uppercase tracking-wider inline-flex items-center gap-1 transition-colors"

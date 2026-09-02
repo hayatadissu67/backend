@@ -50,7 +50,7 @@ export interface Project {
   teamMembers?: string[];
   lifecycleStage?: LifecycleStage;
   lifecycle?: ProjectLifecycleInfo;
-  approvalStatus?: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+  approvalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
   approvedBy?: string;
   approvedAt?: string;
   rejectionReason?: string;
@@ -79,6 +79,8 @@ export interface RiskItem {
   escalatedAt?: string;
   resolutionNotes?: string;
   resolvedBy?: string;
+  resolvedById?: number;
+  resolvedByRole?: string;
   resolvedAt?: string;
 }
 
@@ -134,12 +136,13 @@ export interface ChangeRequestItem {
   id: string;
   title: string;
   project: string;
+  projectId?: string;
   category: string;
   date: string;
   type: string;
   amount: string;
   priority: 'High' | 'Medium' | 'Critical' | 'Low';
-  status: 'Pending' | 'Approved' | 'Rejected';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
   requestedBy?: string;
   description?: string;
   impactAnalysis?: string;

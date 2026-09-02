@@ -417,6 +417,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
                     <input
                       type="date"
                       required
+                      min={new Date().toISOString().split('T')[0]}
                       value={timelineInput}
                       onChange={(e) => setTimelineInput(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600 focus:bg-white"

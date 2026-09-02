@@ -425,7 +425,7 @@ export const RisksView: React.FC<RisksViewProps> = ({
                         {/* Resolution Notes Badge */}
                         {r.resolutionNotes && (
                           <div className="mt-1.5 text-[10px] text-emerald-900 bg-emerald-50 p-1.5 rounded-md border border-emerald-200 font-mono">
-                            <span className="font-bold block">✓ Solved By {r.resolvedBy || 'PM'}:</span> {r.resolutionNotes}
+                            <span className="font-bold block">✓ Solved by {r.resolvedByRole || 'Admin'}:</span> {r.resolutionNotes}
                           </div>
                         )}
                       </td>
@@ -463,7 +463,7 @@ export const RisksView: React.FC<RisksViewProps> = ({
                         {r.status === 'RESOLVED' || r.status === 'MITIGATED' ? (
                           <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded-md uppercase font-mono flex items-center gap-1 w-max">
                             <span className="material-symbols-outlined text-[13px]">check_circle</span>
-                            {r.status === 'RESOLVED' ? 'Solved by PM' : 'Mitigated by RM'}
+                            Solved by {r.resolvedByRole || 'Admin'}
                           </span>
                         ) : r.status === 'ESCALATED' ? (
                           <span className="px-2.5 py-1 bg-purple-100 text-purple-900 font-bold text-[10px] rounded-md uppercase font-mono flex items-center gap-1 w-max">
@@ -869,7 +869,7 @@ export const RisksView: React.FC<RisksViewProps> = ({
 
               <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200 text-emerald-950 space-y-1.5">
                 <div className="flex justify-between items-center text-[10px] font-bold uppercase text-emerald-800 border-b border-emerald-200 pb-1">
-                  <span>Solved By: {viewingResolutionRisk.resolvedBy || 'PMO Leadership'}</span>
+                  <span>Solved by {viewingResolutionRisk.resolvedByRole || 'Admin'}</span>
                   <span>{viewingResolutionRisk.resolvedAt ? new Date(viewingResolutionRisk.resolvedAt).toLocaleDateString() : 'Resolved'}</span>
                 </div>
                 <div>
