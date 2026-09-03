@@ -83,14 +83,14 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const [showReportRiskModal, setShowReportRiskModal] = useState<boolean>(false);
   const [riskSubject, setRiskSubject] = useState<string>('');
   const [riskDescription, setRiskDescription] = useState<string>('');
-  const [riskProject, setRiskProject] = useState<string>(projects[0]?.code || 'PMO-101');
+  const [riskProject, setRiskProject] = useState<string>(projects[0]?.code || '');
   const [riskSeverity, setRiskSeverity] = useState<Severity>('HIGH');
   const [riskCategory, setRiskCategory] = useState<'Risk' | 'Issue'>('Issue');
   const [viewingResolutionRisk, setViewingResolutionRisk] = useState<RiskItem | null>(null);
 
   // Fix project initialization when projects load asynchronously
   useEffect(() => {
-    if (projects && projects.length > 0 && (!riskProject || riskProject === 'PMO-101')) {
+    if (projects && projects.length > 0 && !riskProject) {
       setRiskProject(projects[0].code);
     }
   }, [projects, riskProject]);
@@ -864,7 +864,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                               <p className="font-bold text-slate-900">{r.subject}</p>
                               <p className="text-[11px] text-slate-500 line-clamp-1">{r.description}</p>
                             </td>
-                            <td className="p-3 font-mono text-slate-700">{r.projectRef || 'PMO-101'}</td>
+                            <td className="p-3 font-mono text-slate-700">{r.projectRef || 'None'}</td>
                             <td className="p-3">
                               <span
                                 className={`px-2 py-0.5 font-bold rounded-xs text-[10px] uppercase ${
@@ -1906,7 +1906,6 @@ export const TasksView: React.FC<TasksViewProps> = ({
                       {p.code} - {p.name}
                     </option>
                   ))}
-                  <option value="PMO-101">PMO-101 - Phoenix Cloud Platform</option>
                 </select>
               </div>
 

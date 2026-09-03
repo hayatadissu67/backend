@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { UserItem, UserRoleType, LoggedInPersona } from '../../types';
+import { UserItem, UserRoleType, LoggedInPersona, Project } from '../../types';
 import { createUserApi, deleteUserApi, updateUserStatusApi, updateUserApi } from '../../services/api';
 
 interface UsersViewProps {
   users: UserItem[];
+  projects?: Project[];
   onAddUser: (user: UserItem) => void;
   onDeleteUser?: (userId: string | number) => void;
   onToggleUserStatus?: (userId: string | number, newStatus: UserItem['status']) => void;
@@ -15,6 +16,7 @@ interface UsersViewProps {
 
 export const UsersView: React.FC<UsersViewProps> = ({
   users,
+  projects = [],
   onAddUser,
   onDeleteUser,
   onToggleUserStatus,
@@ -42,7 +44,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRoleType>(isPM ? 'TEAM_MEMBER' : 'PROJECT_MANAGER');
   const [department, setDepartment] = useState('Engineering');
-  const [assignedProject, setAssignedProject] = useState('Project Delta');
+  const [assignedProject, setAssignedProject] = useState('');
   const [status, setStatus] = useState<'Active' | 'Pending'>('Active');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
@@ -751,13 +753,10 @@ export const UsersView: React.FC<UsersViewProps> = ({
                   onChange={(e) => setAssignedProject(e.target.value)}
                   className="w-full border border-slate-300 rounded-sm p-2 outline-none focus:border-blue-600"
                 >
-                  <option value="Project Delta">Project Delta (PRJ-DELTA)</option>
-                  <option value="Alpha Module">Alpha Module (PRJ-ALPHA)</option>
-                  <option value="Project Sigma">Project Sigma (PRJ-SIGMA)</option>
-                  <option value="Data Migration Pipeline">Data Migration Pipeline (PRJ-MIGR8)</option>
-                  <option value="ERP System Upgrade">ERP System Upgrade (PRJ-ERP)</option>
-                  <option value="Cloud Compliance Automation">Cloud Compliance Automation (PRJ-COMP)</option>
-                  <option value="AI Analytics Platform">AI Analytics Platform (PRJ-AI)</option>
+                  <option value="">None (Unassigned)</option>
+                  {projects.map(p => (
+                    <option key={p.code} value={p.code}>{p.name} ({p.code})</option>
+                  ))}
                 </select>
               </div>
 

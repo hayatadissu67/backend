@@ -824,6 +824,7 @@ export default function App() {
             {(currentTab === 'users' || currentTab === 'users_add') && (
               <UsersView
                 users={users}
+                projects={projects}
                 onAddUser={handleAddUser}
                 onDeleteUser={handleDeleteUser}
                 onToggleUserStatus={handleToggleUserStatus}

@@ -31,7 +31,7 @@ export const RisksView: React.FC<RisksViewProps> = ({
   const [flaggedBy, setFlaggedBy] = useState<'Project Manager' | 'Team Member' | 'Executive Director'>(
     currentPersona?.roleType === 'TEAM_MEMBER' ? 'Team Member' : 'Project Manager'
   );
-  const [projectRef, setProjectRef] = useState(projects[0]?.code || 'PMO-101');
+  const [projectRef, setProjectRef] = useState(projects[0]?.code || '');
   const [milestoneRef, setMilestoneRef] = useState('Gate 2 Security Audit');
   const [delegationNotes, setDelegationNotes] = useState('');
   const [severity, setSeverity] = useState<Severity>('HIGH');
@@ -119,7 +119,7 @@ export const RisksView: React.FC<RisksViewProps> = ({
     setEditDescription(risk.description || '');
     setEditOwner(risk.owner);
     setEditAssignedRiskManager(risk.assignedRiskManager || risk.owner);
-    setEditProjectRef(risk.projectRef || 'PMO-101');
+    setEditProjectRef(risk.projectRef || '');
     setEditMilestoneRef(risk.milestoneRef || '');
     setEditDelegationNotes(risk.delegationNotes || '');
     setEditSeverity(risk.severity);
@@ -455,7 +455,7 @@ export const RisksView: React.FC<RisksViewProps> = ({
 
                       <td className="px-5 py-4 font-mono text-[11px]">
                         <span className="font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md block w-max">
-                          {r.projectRef || 'PMO-101'}
+                          {r.projectRef || 'None'}
                         </span>
                       </td>
 
@@ -644,7 +644,6 @@ export const RisksView: React.FC<RisksViewProps> = ({
                       {p.code} - {p.name}
                     </option>
                   ))}
-                  <option value="PMO-101">PMO-101 - Phoenix Cloud Modernization</option>
                 </select>
               </div>
 
