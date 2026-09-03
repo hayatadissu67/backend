@@ -2,6 +2,7 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/userModel.js";
+import Role from "../models/roleModel.js";
 
 export const login = async (req, res) => {
     try {
@@ -108,12 +109,20 @@ export const register = async (req, res) => {
       });
     }
 
+    let roleId = null;
+    if (role) {
+      const roleRecord = await Role.findOne({ where: { code: role } });
+      if (roleRecord) {
+        roleId = roleRecord.id;
+      }
+    }
+
     // Create user (await is required)
     const user = await User.create({
       name,
       email,
       password, 
-      role,
+      roleId,
       department,
     });
 

@@ -189,14 +189,6 @@ export default function App() {
       const updated = await approveProjectApi(projectId);
       if (updated) {
         setProjects((prev) => prev.map((p) => (p.id === projectId ? updated : p)));
-      } else {
-        setProjects((prev) =>
-          prev.map((p) =>
-            p.id === projectId
-              ? { ...p, approvalStatus: 'APPROVED', status: 'ACTIVE', approvedBy: currentUser?.name }
-              : p
-          )
-        );
       }
     } catch (err: any) {
       alert(err.message || 'Failed to approve project.');
@@ -208,14 +200,6 @@ export default function App() {
       const updated = await rejectProjectApi(projectId, reason);
       if (updated) {
         setProjects((prev) => prev.map((p) => (p.id === projectId ? updated : p)));
-      } else {
-        setProjects((prev) =>
-          prev.map((p) =>
-            p.id === projectId
-              ? { ...p, approvalStatus: 'REJECTED', status: 'DELAYED', rejectionReason: reason }
-              : p
-          )
-        );
       }
     } catch (err: any) {
       alert(err.message || 'Failed to reject project.');
@@ -467,23 +451,35 @@ export default function App() {
   }, [currentUser?.id]);
 
   // Handlers
-  const handleAddProject = (newProject: Project) => {
-    setProjects([newProject, ...projects]);
-    createProjectApi(newProject);
-    const act: ActivityItem = {
-      id: `a-${Date.now()}`,
-      type: 'gate',
-      title: `Project Added: ${newProject.name}`,
-      subtitle: `Charter registered by ${currentUser?.name || 'PMO User'} • Just now`,
-      timestamp: 'Just now',
-      badgeType: 'check'
-    };
-    setActivities([act, ...activities]);
+  const handleAddProject = async (newProject: Project) => {
+    try {
+      const created = await createProjectApi(newProject);
+      if (created) {
+        setProjects([created, ...projects]);
+        const act: ActivityItem = {
+          id: `a-${Date.now()}`,
+          type: 'gate',
+          title: `Project Added: ${created.name}`,
+          subtitle: `Charter registered by ${currentUser?.name || 'PMO User'} • Just now`,
+          timestamp: 'Just now',
+          badgeType: 'check'
+        };
+        setActivities([act, ...activities]);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to create project.');
+    }
   };
 
-  const handleUpdateProject = (updated: Project) => {
-    setProjects(projects.map((p) => (p.id === updated.id ? updated : p)));
-    updateProjectApi(updated.id, updated);
+  const handleUpdateProject = async (updated: Project) => {
+    try {
+      const result = await updateProjectApi(updated.id, updated);
+      if (result) {
+        setProjects(projects.map((p) => (p.id === result.id ? result : p)));
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to update project.');
+    }
   };
 
   const handleAddUser = (newUser: UserItem) => {
@@ -526,46 +522,56 @@ export default function App() {
     setTasks(tasks.filter((t) => t.id !== taskId));
   };
 
-  const handleAddRisk = (newRisk: RiskItem) => {
-    setRisks([newRisk, ...risks]);
-    createRiskApi(newRisk);
+  const handleAddRisk = async (newRisk: RiskItem) => {
+    try {
+      const created = await createRiskApi(newRisk);
+      if (created) {
+        setRisks([created, ...risks]);
+        const assignee = created.assignedRiskManager || created.owner || 'Risk Manager';
+        const notif: NotificationItem = {
+          id: `notif-risk-${Date.now()}`,
+          title: `Risk Delegated: ${created.ref}`,
+          message: `Risk "${created.subject}" linked to ${created.projectRef || 'PMO Project'} delegated to ${assignee}.`,
+          type: created.severity === 'CRITICAL' || created.severity === 'HIGH' ? 'alert' : 'warning',
+          timestamp: 'Just now',
+          isRead: false
+        };
+        setNotifications((prev) => [notif, ...prev]);
 
-    const assignee = newRisk.assignedRiskManager || newRisk.owner || 'Risk Manager';
-    const notif: NotificationItem = {
-      id: `notif-risk-${Date.now()}`,
-      title: `Risk Delegated: ${newRisk.ref}`,
-      message: `Risk "${newRisk.subject}" linked to ${newRisk.projectRef || 'PMO Project'} delegated to ${assignee}.`,
-      type: newRisk.severity === 'CRITICAL' || newRisk.severity === 'HIGH' ? 'alert' : 'warning',
-      timestamp: 'Just now',
-      isRead: false
-    };
-    setNotifications((prev) => [notif, ...prev]);
-
-    const act: ActivityItem = {
-      id: `act-risk-${Date.now()}`,
-      type: 'risk',
-      title: `Risk Registered & Delegated (${newRisk.ref})`,
-      subtitle: `"${newRisk.subject}" assigned to ${assignee} • Flagged by ${newRisk.flaggedBy || 'PMO Team'}`,
-      timestamp: 'Just now',
-      badgeType: 'warning'
-    };
-    setActivities((prev) => [act, ...prev]);
+        const act: ActivityItem = {
+          id: `act-risk-${Date.now()}`,
+          type: 'risk',
+          title: `Risk Registered & Delegated (${created.ref})`,
+          subtitle: `"${created.subject}" assigned to ${assignee} • Flagged by ${created.flaggedBy || 'PMO Team'}`,
+          timestamp: 'Just now',
+          badgeType: 'warning'
+        };
+        setActivities((prev) => [act, ...prev]);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to create risk.');
+    }
   };
 
-  const handleUpdateRisk = (updated: RiskItem) => {
-    setRisks(risks.map((r) => (r.id === updated.id ? updated : r)));
-    updateRiskApi(updated.id, updated);
-
-    const assignee = updated.assignedRiskManager || updated.owner || 'Risk Manager';
-    const notif: NotificationItem = {
-      id: `notif-risk-up-${Date.now()}`,
-      title: `Risk ${updated.ref} Updated`,
-      message: `Risk "${updated.subject}" status set to ${updated.status}. Delegated Manager: ${assignee}.`,
-      type: updated.status === 'MITIGATED' ? 'success' : 'info',
-      timestamp: 'Just now',
-      isRead: false
-    };
-    setNotifications((prev) => [notif, ...prev]);
+  const handleUpdateRisk = async (updated: RiskItem) => {
+    try {
+      const result = await updateRiskApi(updated.id, updated);
+      if (result) {
+        setRisks(risks.map((r) => (r.id === result.id ? result : r)));
+        const assignee = result.assignedRiskManager || result.owner || 'Risk Manager';
+        const notif: NotificationItem = {
+          id: `notif-risk-up-${Date.now()}`,
+          title: `Risk ${result.ref} Updated`,
+          message: `Risk "${result.subject}" status set to ${result.status}. Delegated Manager: ${assignee}.`,
+          type: result.status === 'MITIGATED' ? 'success' : 'info',
+          timestamp: 'Just now',
+          isRead: false
+        };
+        setNotifications((prev) => [notif, ...prev]);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to update risk.');
+    }
   };
 
   const handleUpdateResource = (dept: string, newPct: number) => {

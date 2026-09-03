@@ -47,7 +47,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
   // Navigation sub-tabs inside Projects View
   const [activeSubTab, setActiveSubTab] = useState<
-    'Directory' | 'Project Lifecycle' | 'Web Requirements' | 'Gate Roadmap' | 'Kanban Pipeline' | 'AI Charter Generator'
+    'Directory' | 'Project Lifecycle' | 'Web Requirements' | 'Gate Roadmap' | 'Kanban Pipeline'
   >('Directory');
 
   // Directory layout toggle: Grid or Table
@@ -105,10 +105,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   const [newDeliverableTitle, setNewDeliverableTitle] = useState('');
   const [newDeliverableAssignee, setNewDeliverableAssignee] = useState('');
 
-  // AI Charter Generator state
-  const [aiPrompt, setAiPrompt] = useState('');
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiResult, setAiResult] = useState<string | null>(null);
+
 
   // PROJECT LIFECYCLE HELPER FUNCTIONS
   const STAGES_ORDER: LifecycleStage[] = ['Initiation', 'Planning', 'Execution', 'Monitoring', 'Closure'];
@@ -256,15 +253,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     }
   };
 
-  // Default web requirements checklist template for web projects
-  const defaultWebReqs: WebRequirement[] = [
-    { id: 'wr-1', category: 'Frontend', title: 'Responsive Mobile & Desktop UI (Tailwind CSS)', status: 'Compliant', owner: 'UI/UX Design' },
-    { id: 'wr-2', category: 'Backend', title: 'RESTful API Routes & Node.js Middleware', status: 'Compliant', owner: 'Engineering' },
-    { id: 'wr-3', category: 'Database', title: 'PostgreSQL Relational Schema & ORM', status: 'Compliant', owner: 'Data Eng' },
-    { id: 'wr-4', category: 'Security & Auth', title: 'OAuth 2.0 / JWT Auth & HTTPS Encryption', status: 'In Progress', owner: 'Security' },
-    { id: 'wr-5', category: 'DevOps & Cloud', title: 'Automated CI/CD Pipeline & Docker Containerization', status: 'Compliant', owner: 'DevOps' },
-    { id: 'wr-6', category: 'UX & Accessibility', title: 'WCAG 2.1 AA Accessibility & Lighthouse > 90', status: 'Pending Review', owner: 'Product Mgmt' }
-  ];
+
 
   // Helper function to get default tech stack for a project if none provided
   const getTechStack = (p: Project): string[] => {
@@ -279,7 +268,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
   // Helper function to get project requirements
   const getRequirements = (p: Project): WebRequirement[] => {
-    return p.requirements && p.requirements.length > 0 ? p.requirements : defaultWebReqs;
+    return p.requirements && p.requirements.length > 0 ? p.requirements : [];
   };
 
   const handleAddDeliverable = (e: React.FormEvent) => {
@@ -423,70 +412,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     }
   };
 
-  // AI Charter Synthesis
-  const handleGenerateAICharter = () => {
-    if (!aiPrompt.trim()) return;
-    setAiLoading(true);
-    setAiResult(null);
 
-    setTimeout(() => {
-      setAiLoading(false);
-      setAiResult(`### AI WEB PROJECT SPECIFICATION & CHARTER BLUEPRINT
-**Initiative Name:** ${aiPrompt}
-**Target Web Architecture:** Full-Stack Web Application (React 18 + Vite + Node.js + Express + PostgreSQL)
-**Estimated Development Cycle:** 16 Weeks
-**Recommended Initial Capital:** $650,000
-
----
-#### 1. Core Web Requirements Checklist
-- **Frontend Layer:** React SPA with Tailwind CSS, Lucide Icons, and Motion transitions.
-- **Backend Service Layer:** Express.js REST API with CORS headers, JWT session validation, and rate limiting.
-- **Database Architecture:** Relational PostgreSQL schema with indexed primary keys and migration scripts.
-- **DevOps & Hosting:** Cloud Run containerized deployment behind Nginx reverse proxy on port 3000.
-- **Security Compliance:** OAuth 2.0 / SSO single sign-on, HTTPS TLS 1.3, CSP policies.
-
-#### 2. Key Web Milestones & Gate Criteria
-- **Gate 1 (Charter & Spec):** Stakeholder sign-off on Figma prototypes and Web Architecture blueprint.
-- **Gate 2 (Backend & Database):** REST API endpoints integrated with PostgreSQL database and unit tested (>80% coverage).
-- **Gate 3 (Frontend Integration):** Full end-to-end web workflows functional with responsive layout across desktop and mobile.
-- **Gate 4 (Security & Performance):** Vulnerability scan cleared, WCAG 2.1 AA accessibility audit passed, Lighthouse performance score > 90.
-- **Gate 5 (Production Launch):** CI/CD deployment pipeline active with automated rollbacks.
-      `);
-    }, 1200);
-  };
-
-  // Create project directly from AI
-  const handleCreateProjectFromAI = () => {
-    if (!aiPrompt.trim()) return;
-    const newPrj: Project = {
-      id: `p-${Date.now()}`,
-      name: aiPrompt,
-      code: `PRJ-${aiPrompt.substring(0, 4).toUpperCase().replace(/[^A-Z]/g, 'X')}`,
-      department: 'Engineering',
-      owner: 'PMO Admin',
-      status: 'ACTIVE',
-      health: 'GREEN',
-      budget: 650000,
-      spent: 50000,
-      progress: 10,
-      gate: 'Gate 1',
-      targetDate: '2027-03-31',
-      description: `AI-generated web project specification for ${aiPrompt}.`,
-      techStack: ['React', 'TypeScript', 'Node.js', 'PostgreSQL', 'Tailwind CSS'],
-      liveUrl: 'https://demo.app.studio/preview',
-      repoUrl: 'https://github.com/organization/web-project',
-      requirements: defaultWebReqs
-    };
-
-    if (onAddProject) {
-      onAddProject(newPrj);
-    } else {
-      onUpdateProject(newPrj);
-    }
-    setAiPrompt('');
-    setAiResult(null);
-    setActiveSubTab('Directory');
-  };
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -1378,100 +1304,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
         </div>
       )}
 
-      {/* SUB-TAB 5: AI CHARTER GENERATOR */}
-      {activeSubTab === 'AI Charter Generator' && (
-        <div className="space-y-6 animate-fadeIn max-w-4xl">
-          <div className="bg-white border border-slate-200/80 p-6 rounded-sm shadow-2xs space-y-4 text-xs">
-            <div className="border-b border-slate-100 pb-3">
-              <nav className="flex items-center gap-1 text-[#45464d] font-bold text-[11px] tracking-wider uppercase mb-1">
-                <span>INTELLIGENCE</span>
-                <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-                <span className="text-[#00174b]">AI PROJECT CHARTER SYNTHESIZER</span>
-              </nav>
-              <h3 className="text-[22px] font-bold tracking-tight text-[#191c1e] flex items-center gap-2">
-                <span className="material-symbols-outlined text-amber-500 text-[28px]">auto_awesome</span>
-                Synthesize Strategic Project Blueprint
-              </h3>
-              <p className="text-slate-600 mt-1">
-                Enter an enterprise project initiative, and Gemini AI will construct a complete project charter, technical stack recommendations, and governance gate criteria.
-              </p>
-            </div>
 
-            <div className="space-y-3">
-              <input
-                type="text"
-                value={aiPrompt}
-                onChange={(e) => setAiPrompt(e.target.value)}
-                placeholder="e.g., Enterprise E-Commerce Gateway with Real-time Inventory Analytics..."
-                className="w-full border border-slate-300 rounded-sm p-3 outline-none focus:border-blue-600 text-xs font-sans"
-              />
-
-              <div className="flex flex-wrap justify-between items-center gap-2 pt-1">
-                <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                  <span className="font-bold text-slate-700">Quick Templates:</span>
-                  <button
-                    onClick={() => setAiPrompt('Cloud Data Lake Analytics Web Portal')}
-                    className="bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-xs text-slate-700 font-medium"
-                  >
-                    Data Lake Portal
-                  </button>
-                  <button
-                    onClick={() => setAiPrompt('Zero-Trust IAM Access Control Hub')}
-                    className="bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-xs text-slate-700 font-medium"
-                  >
-                    Zero-Trust Hub
-                  </button>
-                  <button
-                    onClick={() => setAiPrompt('Supplier Procurement & Invoice Portal')}
-                    className="bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-xs text-slate-700 font-medium"
-                  >
-                    Procurement Portal
-                  </button>
-                </div>
-
-                <button
-                  onClick={handleGenerateAICharter}
-                  disabled={aiLoading || !aiPrompt.trim()}
-                  className="px-5 py-2 bg-[#00174b] disabled:bg-slate-300 text-white font-bold rounded-xs uppercase tracking-wider hover:bg-indigo-950 flex items-center gap-2 shadow-2xs"
-                >
-                  <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
-                  {aiLoading ? 'Synthesizing Spec...' : 'Generate AI Charter'}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Generated AI Charter Output */}
-          {aiResult && (
-            <div className="bg-slate-900 text-slate-100 p-6 rounded-sm border border-slate-800 shadow-xl space-y-4 text-xs font-mono leading-relaxed animate-fadeIn">
-              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                <span className="text-amber-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-[16px]">verified</span>
-                  Generated Web Project Specification
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleCreateProjectFromAI}
-                    className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xs text-[11px] flex items-center gap-1"
-                  >
-                    <span className="material-symbols-outlined text-[14px]">add_circle</span>
-                    Create This Web Project
-                  </button>
-                  <button
-                    onClick={() => navigator.clipboard.writeText(aiResult)}
-                    className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xs text-[11px] flex items-center gap-1"
-                  >
-                    <span className="material-symbols-outlined text-[14px]">content_copy</span>
-                    Copy Spec
-                  </button>
-                </div>
-              </div>
-
-              <div className="whitespace-pre-wrap text-slate-200">{aiResult}</div>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* COMPREHENSIVE PROJECT DETAILS PAGE / MODAL */}
       {selectedProject && (
