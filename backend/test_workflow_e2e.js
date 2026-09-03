@@ -30,26 +30,25 @@ async function runE2E() {
     const tmLogin = await fetchApi('/auth/login', 'POST', { email: 'elena@pmo.com', password: 'password123' });
     const rmLogin = await fetchApi('/auth/login', 'POST', { email: 'marcus@pmo.com', password: 'password123' });
 
-    console.log("2. PM Creates Project...");
+    console.log("2. Get Elena's ID for assignment...");
+    const [tm] = await sequelize.query(`SELECT id FROM users WHERE email='elena@pmo.com'`);
+    const elenaId = tm[0].id;
+
+    console.log("3. PM Creates Project and Assigns Elena concurrently...");
     const projectCode = 'PRJ-E2E-' + Date.now();
     const newProject = await fetchApi('/projects', 'POST', {
       name: 'E2E Test Project',
       code: projectCode,
       department: 'IT',
-      description: 'End to end testing project'
+      description: 'End to end testing project',
+      assignedTeamMembers: [elenaId]
     }, pmLogin.token);
     
     console.log("Project created:", newProject);
     const projectId = newProject.data.id;
     
-    console.log("3. Exec Approves Project...");
+    console.log("4. Exec Approves Project...");
     await fetchApi(`/projects/${projectId}/approve`, 'PATCH', {}, execLogin.token);
-    
-    console.log("4. PM Assigns Team Member...");
-    // Get elena's ID
-    const [tm] = await sequelize.query(`SELECT id FROM users WHERE email='elena@pmo.com'`);
-    const elenaId = tm[0].id;
-    await fetchApi(`/projects/${projectId}/team`, 'POST', { userIds: [elenaId] }, pmLogin.token);
 
     console.log("5. TM Fetches Projects...");
     const tmProjects = await fetchApi('/projects', 'GET', null, tmLogin.token);
