@@ -238,9 +238,9 @@ export const createRiskApi = async (riskData: Partial<RiskItem>): Promise<RiskIt
   try {
     const res = await api.post('/risks', riskData);
     return res.data?.success ? res.data.data : null;
-  } catch (err) {
+  } catch (err: any) {
     console.warn('Failed to create risk via API:', err);
-    return null;
+    throw new Error(err.response?.data?.message || 'Failed to create risk.');
   }
 };
 

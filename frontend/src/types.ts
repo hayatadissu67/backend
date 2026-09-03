@@ -78,9 +78,10 @@ export interface RiskItem {
   escalationNotes?: string;
   escalatedAt?: string;
   resolutionNotes?: string;
-  resolvedBy?: string;
+  resolvedBy?: string | number;
   resolvedById?: number;
   resolvedByRole?: string;
+  Resolver?: { name: string };
   resolvedAt?: string;
 }
 

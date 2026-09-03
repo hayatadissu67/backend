@@ -88,6 +88,13 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const [riskCategory, setRiskCategory] = useState<'Risk' | 'Issue'>('Issue');
   const [viewingResolutionRisk, setViewingResolutionRisk] = useState<RiskItem | null>(null);
 
+  // Fix project initialization when projects load asynchronously
+  useEffect(() => {
+    if (projects && projects.length > 0 && (!riskProject || riskProject === 'PMO-101')) {
+      setRiskProject(projects[0].code);
+    }
+  }, [projects, riskProject]);
+
   // Success Toast state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -109,18 +116,26 @@ export const TasksView: React.FC<TasksViewProps> = ({
         severity: riskSeverity,
         category: riskCategory,
         projectRef: riskProject,
-        owner: 'Alex Rivers (Project Manager)',
-        assignedProjectManager: 'Alex Rivers (Project Manager)',
+        owner: 'Project Manager',
+        assignedProjectManager: 'Project Manager',
         flaggedBy: `${currentPersona?.name || selectedDeveloper} (Team Member)`,
         submittedBy: currentPersona?.email || 'team@pmo.com',
         status: 'REPORTED',
         createdDate: new Date().toISOString().split('T')[0]
       };
-      onAddRisk(newRisk);
-      setShowReportRiskModal(false);
-      setRiskSubject('');
-      setRiskDescription('');
-      showToast(`✓ ${riskCategory} submitted to Project Manager successfully`);
+      const result = onAddRisk(newRisk);
+      
+      // If onAddRisk is async and returns a boolean (or void in current types)
+      Promise.resolve(result).then((success: any) => {
+        if (success !== false) { // Assuming false means failure
+          setShowReportRiskModal(false);
+          setRiskSubject('');
+          setRiskDescription('');
+          showToast(`✓ ${riskCategory} submitted to Project Manager successfully`);
+        } else {
+          showToast(`❌ Failed to submit ${riskCategory}. Please check if you're assigned to this project.`);
+        }
+      });
     }
   };
 

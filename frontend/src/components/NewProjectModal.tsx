@@ -6,13 +6,15 @@ interface NewProjectModalProps {
   onClose: () => void;
   onAddProject: (newProject: Project) => void;
   currentUserName?: string;
+  users?: any[];
 }
 
 export const NewProjectModal: React.FC<NewProjectModalProps> = ({
   isOpen,
   onClose,
   onAddProject,
-  currentUserName
+  currentUserName,
+  users = []
 }) => {
   const [name, setName] = useState('');
   const [department, setDepartment] = useState('Engineering');
@@ -22,6 +24,10 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
   const [health, setHealth] = useState<HealthStatus>('GREEN');
   const [gate, setGate] = useState('Gate 1');
   const [targetDate, setTargetDate] = useState('2026-12-31');
+  
+  // Get available team members from users
+  const availableTeamMembers = users.filter(u => u.role === 'TEAM_MEMBER');
+  const [selectedTeamMembers, setSelectedTeamMembers] = useState<string[]>([]);
 
   if (!isOpen) return null;
 
@@ -71,7 +77,8 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
           { id: 'c3', label: 'Security & Compliance Clearances', completed: false }
         ]
       },
-      targetDate
+      targetDate,
+      assignedTeamMembers: selectedTeamMembers.map(id => Number(id))
     };
 
     onAddProject(newPrj);
@@ -142,6 +149,36 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
                 onChange={(e) => setOwner(e.target.value)}
                 className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none"
               />
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+              Assign Initial Team Members
+            </label>
+            <div className="border border-slate-300 rounded-sm p-2 max-h-32 overflow-y-auto bg-slate-50 space-y-1">
+              {availableTeamMembers.length === 0 ? (
+                <p className="text-slate-500 italic text-xs">No team members available in the database.</p>
+              ) : (
+                availableTeamMembers.map(tm => (
+                  <label key={tm.id} className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer hover:bg-slate-100 p-1 rounded-sm">
+                    <input 
+                      type="checkbox"
+                      value={tm.id}
+                      checked={selectedTeamMembers.includes(String(tm.id))}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedTeamMembers([...selectedTeamMembers, String(tm.id)]);
+                        } else {
+                          setSelectedTeamMembers(selectedTeamMembers.filter(id => id !== String(tm.id)));
+                        }
+                      }}
+                      className="accent-blue-600"
+                    />
+                    {tm.name} <span className="text-slate-400">({tm.email})</span>
+                  </label>
+                ))
+              )}
             </div>
           </div>
 

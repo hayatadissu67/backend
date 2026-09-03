@@ -156,9 +156,7 @@ export const RisksView: React.FC<RisksViewProps> = ({
     const updated: RiskItem = {
       ...resolvingRisk,
       status: 'RESOLVED',
-      resolvedBy: currentPersona?.name || 'Alex Rivers (Project Manager)',
-      resolvedAt: new Date().toISOString(),
-      resolutionNotes: resolutionNotesInput || 'Issue resolved and verified by Project Manager.'
+      resolutionNotes: resolutionNotesInput || 'Issue resolved.'
     };
     onUpdateRisk(updated);
     setResolvingRisk(null);
@@ -172,8 +170,6 @@ export const RisksView: React.FC<RisksViewProps> = ({
     const updated: RiskItem = {
       ...escalatingRisk,
       status: 'ESCALATED',
-      assignedRiskManager: 'Marcus Vance (Risk Manager)',
-      escalatedAt: new Date().toISOString(),
       escalationNotes: escalationNotesInput || 'Escalated by Project Manager to Risk Manager for enterprise governance review.'
     };
     onUpdateRisk(updated);
@@ -188,9 +184,7 @@ export const RisksView: React.FC<RisksViewProps> = ({
     const updated: RiskItem = {
       ...mitigatingRisk,
       status: 'MITIGATED',
-      resolvedBy: currentPersona?.name || 'Marcus Vance (Risk Manager)',
-      resolvedAt: new Date().toISOString(),
-      resolutionNotes: mitigationNotesInput || 'Mitigation controls applied and approved by Risk Manager.'
+      resolutionNotes: mitigationNotesInput || 'Mitigation controls applied.'
     };
     onUpdateRisk(updated);
     setMitigatingRisk(null);
@@ -216,22 +210,26 @@ export const RisksView: React.FC<RisksViewProps> = ({
   };
 
   const filteredRisks = risks.filter((r) => {
+    const isTeamMember = currentPersona?.roleType === 'TEAM_MEMBER';
+    const isPM = currentPersona?.roleType === 'PROJECT_MANAGER';
+    const isRM = currentPersona?.roleType === 'RISK_MANAGER';
+    const userEmail = currentPersona?.email || '';
+
     if (activeTab === 'Team Escalations') {
-      return (
-        r.status === 'REPORTED' ||
-        r.status === 'ESCALATED' ||
-        r.status === 'RESOLVED' ||
-        r.flaggedBy?.toLowerCase().includes('team') ||
-        !!r.submittedBy
-      );
+      if (isRM) {
+        // RM only sees ESCALATED risks or risks they resolved
+        return r.status === 'ESCALATED' || r.status === 'MITIGATED' || r.assignedRiskManager === userEmail;
+      }
+      if (isPM) {
+        // PM sees REPORTED risks sent to them, or ESCALATED risks they own
+        return (r.status === 'REPORTED' || r.status === 'ESCALATED' || r.status === 'RESOLVED') && (r.owner === userEmail || r.submittedBy === userEmail);
+      }
+      return r.status === 'REPORTED' || r.status === 'ESCALATED' || r.status === 'RESOLVED';
     }
+
     if (activeTab === 'My Risks') {
-      if (
-        !r.owner.toLowerCase().includes('m. thompson') &&
-        !r.owner.toLowerCase().includes('thompson') &&
-        !r.owner.toLowerCase().includes('vance') &&
-        !r.owner.toLowerCase().includes('rivers')
-      ) {
+      // Show risks owned by or submitted by the current user
+      if (r.owner !== userEmail && r.submittedBy !== userEmail && r.assignedRiskManager !== userEmail) {
         return false;
       }
     }
@@ -450,7 +448,7 @@ export const RisksView: React.FC<RisksViewProps> = ({
                         {/* Resolution Notes Badge */}
                         {r.resolutionNotes && (
                           <div className="mt-1.5 text-[10px] text-emerald-900 bg-emerald-50 p-1.5 rounded-md border border-emerald-200 font-mono">
-                            <span className="font-bold block">✓ Solved by {r.resolvedByRole || 'Admin'}:</span> {r.resolutionNotes}
+                            <span className="font-bold block">✓ Solved by {r.Resolver?.name ? `${r.Resolver.name} (${r.resolvedByRole})` : r.resolvedByRole || 'Admin'}:</span> {r.resolutionNotes}
                           </div>
                         )}
                       </td>
@@ -488,7 +486,7 @@ export const RisksView: React.FC<RisksViewProps> = ({
                         {r.status === 'RESOLVED' || r.status === 'MITIGATED' ? (
                           <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded-md uppercase font-mono flex items-center gap-1 w-max">
                             <span className="material-symbols-outlined text-[13px]">check_circle</span>
-                            Solved by {r.resolvedByRole || 'Admin'}
+                            Solved by {r.Resolver?.name ? `${r.Resolver.name} (${r.resolvedByRole})` : r.resolvedByRole || 'Admin'}
                           </span>
                         ) : r.status === 'ESCALATED' ? (
                           <span className="px-2.5 py-1 bg-purple-100 text-purple-900 font-bold text-[10px] rounded-md uppercase font-mono flex items-center gap-1 w-max">
@@ -894,7 +892,7 @@ export const RisksView: React.FC<RisksViewProps> = ({
 
               <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200 text-emerald-950 space-y-1.5">
                 <div className="flex justify-between items-center text-[10px] font-bold uppercase text-emerald-800 border-b border-emerald-200 pb-1">
-                  <span>Solved by {viewingResolutionRisk.resolvedByRole || 'Admin'}</span>
+                  <span>Solved by {viewingResolutionRisk.Resolver?.name ? `${viewingResolutionRisk.Resolver.name} (${viewingResolutionRisk.resolvedByRole})` : viewingResolutionRisk.resolvedByRole || 'Admin'}</span>
                   <span>{viewingResolutionRisk.resolvedAt ? new Date(viewingResolutionRisk.resolvedAt).toLocaleDateString() : 'Resolved'}</span>
                 </div>
                 <div>
