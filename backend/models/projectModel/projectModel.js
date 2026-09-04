@@ -18,6 +18,7 @@ const Project = sequelize.define('Project', {
   progress: { type: DataTypes.INTEGER, defaultValue: 0, validate: { min: 0, max: 100 } },
   gate: { type: DataTypes.STRING },
   targetDate: { type: DataTypes.DATEONLY },
+  startDate: { type: DataTypes.DATEONLY },
   description: { type: DataTypes.TEXT },
   priority: { type: DataTypes.ENUM('CRITICAL', 'HIGH', 'MEDIUM', 'LOW'), defaultValue: 'MEDIUM' },
   lifecycleStage: { type: DataTypes.STRING },

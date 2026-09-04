@@ -41,6 +41,7 @@ export interface Project {
   progress: number;
   gate: string;
   targetDate: string;
+  startDate?: string;
   description?: string;
   techStack?: string[];
   liveUrl?: string;
@@ -48,9 +49,10 @@ export interface Project {
   priority?: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
   requirements?: WebRequirement[];
   teamMembers?: string[];
+  assignedTeamMembers?: { userId: number; responsibility: string }[];
   lifecycleStage?: LifecycleStage;
   lifecycle?: ProjectLifecycleInfo;
-  approvalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
+  approvalStatus?: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'ARCHIVED';
   approvedBy?: string;
   approvedAt?: string;
   rejectionReason?: string;
@@ -242,6 +244,7 @@ export interface UserItem {
   department: string;
   status: 'Active' | 'Inactive' | 'Pending';
   avatar: string;
+  responsibility?: string;
   projectsAssigned: number;
   title?: string;
   phone?: string;

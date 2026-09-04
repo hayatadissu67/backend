@@ -23,11 +23,15 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
   const [status, setStatus] = useState<ProjectStatus>('PLANNING');
   const [health, setHealth] = useState<HealthStatus>('GREEN');
   const [gate, setGate] = useState('Gate 1');
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [targetDate, setTargetDate] = useState('2026-12-31');
+  const [description, setDescription] = useState('');
   
   // Get available team members from users
   const availableTeamMembers = users.filter(u => u.role === 'TEAM_MEMBER');
-  const [selectedTeamMembers, setSelectedTeamMembers] = useState<string[]>([]);
+  const [selectedTeamMembers, setSelectedTeamMembers] = useState<{userId: string, responsibility: string}[]>([]);
+  const [tempUserId, setTempUserId] = useState('');
+  const [tempResp, setTempResp] = useState('');
 
   if (!isOpen) return null;
 
@@ -77,8 +81,10 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
           { id: 'c3', label: 'Security & Compliance Clearances', completed: false }
         ]
       },
+      startDate,
       targetDate,
-      assignedTeamMembers: selectedTeamMembers.map(id => Number(id))
+      description,
+      assignedTeamMembers: selectedTeamMembers.map(m => ({ userId: Number(m.userId), responsibility: m.responsibility }))
     };
 
     onAddProject(newPrj);
@@ -154,30 +160,97 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
 
           <div>
             <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+              Project Description
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe the project..."
+              className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none h-16 resize-none"
+            />
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
               Assign Initial Team Members
             </label>
-            <div className="border border-slate-300 rounded-sm p-2 max-h-32 overflow-y-auto bg-slate-50 space-y-1">
-              {availableTeamMembers.length === 0 ? (
-                <p className="text-slate-500 italic text-xs">No team members available in the database.</p>
-              ) : (
-                availableTeamMembers.map(tm => (
-                  <label key={tm.id} className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer hover:bg-slate-100 p-1 rounded-sm">
-                    <input 
-                      type="checkbox"
-                      value={tm.id}
-                      checked={selectedTeamMembers.includes(String(tm.id))}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedTeamMembers([...selectedTeamMembers, String(tm.id)]);
-                        } else {
-                          setSelectedTeamMembers(selectedTeamMembers.filter(id => id !== String(tm.id)));
-                        }
-                      }}
-                      className="accent-blue-600"
-                    />
-                    {tm.name} <span className="text-slate-400">({tm.email})</span>
-                  </label>
-                ))
+            <div className="border border-slate-300 rounded-sm p-3 bg-slate-50 space-y-3">
+              <div className="flex items-center gap-2">
+                <select
+                  value={tempUserId}
+                  onChange={(e) => setTempUserId(e.target.value)}
+                  className="flex-1 border border-slate-300 rounded-sm p-1.5 text-xs focus:border-blue-600 outline-none"
+                >
+                  <option value="">Select Member...</option>
+                  {availableTeamMembers.filter(tm => !selectedTeamMembers.find(s => s.userId === String(tm.id))).map(tm => (
+                    <option key={tm.id} value={tm.id}>{tm.name} ({tm.email})</option>
+                  ))}
+                </select>
+                <select
+                  value={tempResp}
+                  onChange={(e) => setTempResp(e.target.value)}
+                  className="flex-1 border border-slate-300 rounded-sm p-1.5 text-xs focus:border-blue-600 outline-none"
+                >
+                  <option value="">Select Responsibility...</option>
+                  <option value="Frontend Developer">Frontend Developer</option>
+                  <option value="Backend Developer">Backend Developer</option>
+                  <option value="Full Stack Developer">Full Stack Developer</option>
+                  <option value="Database Developer">Database Developer</option>
+                  <option value="UI/UX Designer">UI/UX Designer</option>
+                  <option value="QA/Tester">QA/Tester</option>
+                  <option value="DevOps">DevOps</option>
+                  <option value="Business Analyst">Business Analyst</option>
+                  <option value="General Member">General Member</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (tempUserId && tempResp) {
+                      setSelectedTeamMembers([...selectedTeamMembers, { userId: tempUserId, responsibility: tempResp }]);
+                      setTempUserId('');
+                      setTempResp('');
+                    } else {
+                      alert('Please select both a Team Member and a Responsibility.');
+                    }
+                  }}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xs shrink-0"
+                >
+                  + Add
+                </button>
+              </div>
+
+              {selectedTeamMembers.length > 0 && (
+                <div className="border border-slate-200 rounded-xs overflow-hidden">
+                  <table className="w-full text-left text-xs bg-white">
+                    <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold">
+                      <tr>
+                        <th className="p-2 border-b">Member Name</th>
+                        <th className="p-2 border-b">Responsibility</th>
+                        <th className="p-2 border-b w-12 text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {selectedTeamMembers.map((m, idx) => {
+                        const usr = users.find(u => String(u.id) === m.userId);
+                        return (
+                          <tr key={idx}>
+                            <td className="p-2 font-bold text-slate-800">{usr?.name || 'Unknown'}</td>
+                            <td className="p-2 font-mono text-indigo-700">{m.responsibility}</td>
+                            <td className="p-2 text-center">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedTeamMembers(selectedTeamMembers.filter(sm => sm.userId !== m.userId))}
+                                className="text-rose-600 hover:text-rose-800 font-bold"
+                              >
+                                ✕
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           </div>
@@ -218,12 +291,25 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
 
             <div>
               <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Target Launch
+                Start Date
               </label>
               <input
                 type="date"
                 required
-                min={new Date().toISOString().split('T')[0]}
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Target Launch (End)
+              </label>
+              <input
+                type="date"
+                required
+                min={startDate || new Date().toISOString().split('T')[0]}
                 value={targetDate}
                 onChange={(e) => setTargetDate(e.target.value)}
                 className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none font-mono"

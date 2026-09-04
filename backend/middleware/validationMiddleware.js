@@ -32,11 +32,15 @@ export const createProjectSchema = z.object({
   progress: z.number().min(0).max(100).optional(),
   gate: z.string().optional(),
   targetDate: z.string().optional(),
+  startDate: z.string().optional(),
   description: z.string().optional(),
   priority: z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW"]).optional(),
   lifecycleStage: z.string().optional(),
   approvalStatus: z.string().optional(),
-  assignedTeamMembers: z.array(z.union([z.string(), z.number()])).optional()
+  assignedTeamMembers: z.array(z.object({
+    userId: z.union([z.string(), z.number()]),
+    responsibility: z.string().optional()
+  })).optional()
 });
 
 export const updateProjectSchema = createProjectSchema.partial();

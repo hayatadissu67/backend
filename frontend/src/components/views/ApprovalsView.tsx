@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ApprovalRequest, NavigationTab, Project } from '../../types';
+import { ExecutiveProjectDetailsModal } from '../ExecutiveProjectDetailsModal';
 
 interface ApprovalsViewProps {
   approvals: ApprovalRequest[];
@@ -24,6 +25,9 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
 }) => {
   const [rejectingProjectId, setRejectingProjectId] = useState<string | null>(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
+  
+  // Project Details Modal State
+  const [detailsProject, setDetailsProject] = useState<Project | null>(null);
 
   // Provision Modal State for Executive
   const [provisioningRequest, setProvisioningRequest] = useState<ApprovalRequest | null>(null);
@@ -166,6 +170,14 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                     <td className="px-5 py-4 font-mono text-indigo-900 font-bold">{p.gate || 'Gate 1'}</td>
                     <td className="px-5 py-4 font-mono text-slate-600">{p.targetDate}</td>
                     <td className="px-5 py-4 text-right space-x-1.5 whitespace-nowrap">
+                      <button
+                        onClick={() => setDetailsProject(p)}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] uppercase rounded-xs shadow-2xs cursor-pointer inline-flex items-center gap-1 transition-colors"
+                        title="View Project Details"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">info</span>
+                        Details
+                      </button>
                       <button
                         onClick={() => onApproveProject && onApproveProject(p.id)}
                         className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] uppercase rounded-xs shadow-2xs cursor-pointer inline-flex items-center gap-1 transition-colors"
@@ -506,6 +518,13 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* EXECUTIVE PROJECT DETAILS MODAL */}
+      <ExecutiveProjectDetailsModal 
+        isOpen={!!detailsProject}
+        onClose={() => setDetailsProject(null)}
+        project={detailsProject}
+      />
     </div>
   );
 };

@@ -17,6 +17,7 @@ export const AssignTeamModal: React.FC<AssignTeamModalProps> = ({
 }) => {
   const [users, setUsers] = useState<UserItem[]>([]);
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string | number>>(new Set());
+  const [responsibilities, setResponsibilities] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -34,6 +35,14 @@ export const AssignTeamModal: React.FC<AssignTeamModalProps> = ({
           if (teamMembers) {
             const initialIds = new Set(teamMembers.map(u => u.id));
             setSelectedUserIds(initialIds);
+            
+            const initialResp: Record<string, string> = {};
+            teamMembers.forEach(u => {
+              if (u.responsibility) {
+                initialResp[u.id] = u.responsibility;
+              }
+            });
+            setResponsibilities(initialResp);
           }
         } catch (err) {
           console.error("Failed to load users", err);
@@ -62,7 +71,11 @@ export const AssignTeamModal: React.FC<AssignTeamModalProps> = ({
     setLoading(true);
     setError('');
     try {
-      await assignProjectTeamApi(project.id, Array.from(selectedUserIds));
+      const assignments = Array.from(selectedUserIds).map(id => ({
+        userId: id,
+        responsibility: responsibilities[id] || ''
+      }));
+      await assignProjectTeamApi(project.id, assignments);
       if (onSuccess) onSuccess();
       onClose();
     } catch (err: any) {
@@ -99,17 +112,30 @@ export const AssignTeamModal: React.FC<AssignTeamModalProps> = ({
             ) : (
               <div className="space-y-2">
                 {users.map(user => (
-                  <div key={user.id} className="flex items-center gap-3 p-3 border border-slate-200 rounded-sm hover:bg-slate-50 cursor-pointer" onClick={() => toggleUserSelection(user.id)}>
-                    <input 
-                      type="checkbox" 
-                      checked={selectedUserIds.has(user.id)}
-                      onChange={() => {}} // handled by parent div click
-                      className="w-4 h-4 text-[#00174b] bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-                    />
-                    <div>
-                      <div className="font-bold text-sm text-slate-900">{user.name}</div>
-                      <div className="text-xs text-slate-500">{user.role.replace(/_/g, ' ')} • {user.department}</div>
+                  <div key={user.id} className="flex flex-col gap-2 p-3 border border-slate-200 rounded-sm hover:bg-slate-50 cursor-pointer" onClick={() => toggleUserSelection(user.id)}>
+                    <div className="flex items-center gap-3">
+                      <input 
+                        type="checkbox" 
+                        checked={selectedUserIds.has(user.id)}
+                        onChange={() => {}} // handled by parent div click
+                        className="w-4 h-4 text-[#00174b] bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <div>
+                        <div className="font-bold text-sm text-slate-900">{user.name}</div>
+                        <div className="text-xs text-slate-500">{user.role.replace(/_/g, ' ')} • {user.department}</div>
+                      </div>
                     </div>
+                    {selectedUserIds.has(user.id) && (
+                      <div className="ml-7" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="text"
+                          placeholder="Project Responsibility (e.g. Frontend Developer)"
+                          value={responsibilities[user.id] || ''}
+                          onChange={(e) => setResponsibilities({ ...responsibilities, [user.id]: e.target.value })}
+                          className="w-full text-xs p-1.5 border border-slate-300 rounded-xs outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

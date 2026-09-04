@@ -213,10 +213,11 @@ export default function App() {
 
   const handleAssignTeamMember = async (projectId: string, userIds: string[]) => {
     try {
-      const assignedMembers = await assignProjectTeamMembersApi(projectId, userIds);
+      const assignedMembers = await assignProjectTeamMembersApi(projectId, userIds.map(id => ({ userId: id })));
       if (assignedMembers || true) {
         // Refresh projects to get updated relationships/team members if the backend attaches them
-        fetchProjects();
+        const apiProjects = await fetchProjectsFromApi();
+        if (apiProjects) setProjects(apiProjects);
         alert('Team members successfully assigned.');
       }
     } catch (err: any) {

@@ -4,6 +4,7 @@ import "../models/ChangeRequestModel/changeRequestModel.js";
 import "../models/projectModel/projectModel.js";
 import "../models/riskModel/riskModel.js";
 import "../models/taskModel/taskModel.js";
+import "../models/notificationModel.js";
 import Risk from "../models/riskModel/riskModel.js";
 import User from "../models/authModel/userModel.js";
 import ProjectTeam from "../models/projectModel/ProjectTeam.js";

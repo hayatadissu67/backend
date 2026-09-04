@@ -173,9 +173,9 @@ export const updateProjectApi = async (id: string, projectData: Partial<Project>
   }
 };
 
-export const assignProjectTeamMembersApi = async (id: string, userIds: string[]) => {
+export const assignProjectTeamMembersApi = async (id: string, assignments: {userId: string | number, responsibility?: string}[]) => {
   try {
-    const res = await api.post(`/projects/${id}/team`, { userIds });
+    const res = await api.post(`/projects/${id}/team`, { assignments });
     return res.data?.success ? res.data.data : null;
   } catch (err: any) {
     const message = err.response?.data?.message || err.message || 'Failed to assign team members.';
@@ -203,6 +203,16 @@ export const rejectProjectApi = async (id: string, rejectionReason: string): Pro
   }
 };
 
+export const deleteProjectApi = async (id: string): Promise<boolean> => {
+  try {
+    const res = await api.delete(`/projects/${id}`);
+    return !!res.data?.success;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to delete project.';
+    throw new Error(message);
+  }
+};
+
 export const getProjectTeamApi = async (id: string): Promise<UserItem[] | null> => {
   try {
     const res = await api.get(`/projects/${id}/team`);
@@ -213,9 +223,9 @@ export const getProjectTeamApi = async (id: string): Promise<UserItem[] | null> 
   }
 };
 
-export const assignProjectTeamApi = async (id: string, userIds: (string | number)[]): Promise<UserItem[] | null> => {
+export const assignProjectTeamApi = async (id: string, assignments: {userId: string | number, responsibility?: string}[]): Promise<UserItem[] | null> => {
   try {
-    const res = await api.post(`/projects/${id}/team`, { userIds });
+    const res = await api.post(`/projects/${id}/team`, { assignments });
     return res.data?.success ? res.data.data : null;
   } catch (err: any) {
     const message = err.response?.data?.message || err.message || 'Failed to assign team members.';

@@ -1,4 +1,4 @@
-const taskService = require('../services/taskService');
+import { taskService } from '../../services/taskService/taskService.js';
 
 class TaskController {
   async createTask(req, res, next) {
@@ -54,4 +54,5 @@ async updateTask(req, res, next) {
   }
 }
 
-module.exports = new TaskController();
+const taskController = new TaskController();
+export const { createTask, getTasks, updateStatus, updateTask, deleteTask } = taskController;
