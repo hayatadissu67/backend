@@ -42,7 +42,6 @@ export const UsersView: React.FC<UsersViewProps> = ({
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRoleType>(isPM ? 'TEAM_MEMBER' : 'PROJECT_MANAGER');
   const [department, setDepartment] = useState('Engineering');
-  const [assignedProject, setAssignedProject] = useState('Project Delta');
   const [status, setStatus] = useState<'Active' | 'Pending'>('Active');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
@@ -74,8 +73,6 @@ export const UsersView: React.FC<UsersViewProps> = ({
         department,
         status,
         avatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150`,
-        assignedProjectCodes: assignedProject ? [assignedProject] : [],
-        projectsAssigned: assignedProject ? 1 : 0,
       });
 
       if (res && res.success && res.data) {
@@ -99,13 +96,21 @@ export const UsersView: React.FC<UsersViewProps> = ({
   };
 
   // Filter users
-  const filteredUsers = users.filter((u) => {
+  // If current persona is a Project Manager, only show Team Members in this view
+  const visibleUsers = isPM ? users.filter((u) => {
+    if (!u) return false;
+    if (typeof u.role === 'string') return u.role === 'TEAM_MEMBER';
+    return u.role && (u.role.code === 'TEAM_MEMBER' || u.role.name === 'TEAM_MEMBER');
+  }) : users;
+
+  const filteredUsers = visibleUsers.filter((u) => {
     const matchesSearch =
       u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       u.department.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
+    const userRoleCode = typeof u.role === 'string' ? u.role : (u.role?.code || u.role?.name || '');
+    const matchesRole = roleFilter === 'ALL' || userRoleCode === roleFilter;
     const matchesStatus = statusFilter === 'ALL' || u.status === statusFilter;
 
     return matchesSearch && matchesRole && matchesStatus;
@@ -191,10 +196,10 @@ export const UsersView: React.FC<UsersViewProps> = ({
   };
 
   // Metrics
-  const totalCount = users.length;
-  const activeCount = users.filter((u) => u.status === 'Active').length;
-  const inactiveCount = users.filter((u) => u.status === 'Inactive').length;
-  const pendingCount = users.filter((u) => u.status === 'Pending').length;
+  const totalCount = visibleUsers.length;
+  const activeCount = visibleUsers.filter((u) => u.status === 'Active').length;
+  const inactiveCount = visibleUsers.filter((u) => u.status === 'Inactive').length;
+  const pendingCount = visibleUsers.filter((u) => u.status === 'Pending').length;
 
   const handleCopyPassword = () => {
     if (createdPasswordInfo) {
@@ -316,7 +321,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
               }`}
             >
               <span className="material-symbols-outlined text-[16px]">format_list_bulleted</span>
-              Directory ({users.length})
+              Directory ({visibleUsers.length})
             </button>
             <button
               onClick={() => setActiveSubTab('add')}
@@ -742,25 +747,6 @@ export const UsersView: React.FC<UsersViewProps> = ({
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Assigned Project
-                </label>
-                <select
-                  value={assignedProject}
-                  onChange={(e) => setAssignedProject(e.target.value)}
-                  className="w-full border border-slate-300 rounded-sm p-2 outline-none focus:border-blue-600"
-                >
-                  <option value="Project Delta">Project Delta (PRJ-DELTA)</option>
-                  <option value="Alpha Module">Alpha Module (PRJ-ALPHA)</option>
-                  <option value="Project Sigma">Project Sigma (PRJ-SIGMA)</option>
-                  <option value="Data Migration Pipeline">Data Migration Pipeline (PRJ-MIGR8)</option>
-                  <option value="ERP System Upgrade">ERP System Upgrade (PRJ-ERP)</option>
-                  <option value="Cloud Compliance Automation">Cloud Compliance Automation (PRJ-COMP)</option>
-                  <option value="AI Analytics Platform">AI Analytics Platform (PRJ-AI)</option>
-                </select>
-              </div>
-
               <div>
                 <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Account Access Status

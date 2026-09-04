@@ -29,7 +29,12 @@ const User = sequelize.define(
     roleId: {
       type: DataTypes.UUID,
       allowNull: true,
-      // ❌ remove references to Role here
+      references: {
+        model: "roles",
+        key: "id",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
     },
 
     department: {

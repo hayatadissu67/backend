@@ -24,11 +24,16 @@ export const createRisk = async (req, res) => {
 
 export const getAllRisks = async (req, res) => {
   try {
-    const risks = await getAllRisksService();
-    res.status(200).json({
-      success: true,
-      data: risks,
-    });
+    let risks = await getAllRisksService();
+
+    // Team Members only see risks for their assigned projects
+    const roleCode = req.user && (req.user.role?.code || req.user.role || req.user.role?.name);
+    if (String(roleCode).toUpperCase() === 'TEAM_MEMBER') {
+      const assigned = req.user.assignedProjectCodes || [];
+      risks = risks.filter(r => assigned.includes(r.projectRef || r.projectCode || ''));
+    }
+
+    res.status(200).json({ success: true, data: risks });
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -46,6 +51,16 @@ export const getRiskById = async (req, res) => {
         message: "Risk not found",
       });
     }
+    // If Team Member, ensure the risk belongs to one of their assigned projects
+    const roleCode = req.user && (req.user.role?.code || req.user.role || req.user.role?.name);
+    if (String(roleCode).toUpperCase() === 'TEAM_MEMBER') {
+      const assigned = req.user.assignedProjectCodes || [];
+      const projectRef = risk.projectRef || risk.projectCode || '';
+      if (!projectRef || !assigned.includes(projectRef)) {
+        return res.status(403).json({ success: false, message: 'Forbidden' });
+      }
+    }
+
     res.status(200).json({
       success: true,
       data: risk,

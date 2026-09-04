@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Project, UserItem } from '../types';
+import { fetchUsersFromApi } from '../services/api';
 
 interface AssignMemberModalProps {
   isOpen: boolean;
@@ -27,6 +28,8 @@ export const AssignMemberModal: React.FC<AssignMemberModalProps> = ({
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [submittedToast, setSubmittedToast] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [availableUsers, setAvailableUsers] = useState<UserItem[]>(users || []);
+  const [loadingUsers, setLoadingUsers] = useState(false);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -34,6 +37,26 @@ export const AssignMemberModal: React.FC<AssignMemberModalProps> = ({
       setSelectedUserId('');
     }
   }, [isOpen, passedSelectedProject, projects]);
+
+  // Load latest users from backend when modal opens so dropdown reflects executive-created users
+  React.useEffect(() => {
+    const loadUsers = async () => {
+      if (!isOpen) return;
+      setLoadingUsers(true);
+      try {
+        const fetched = await fetchUsersFromApi();
+        if (Array.isArray(fetched)) {
+          setAvailableUsers(fetched as UserItem[]);
+        }
+      } catch (err) {
+        // keep existing `users` prop as fallback
+      } finally {
+        setLoadingUsers(false);
+      }
+    };
+
+    loadUsers();
+  }, [isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,11 +136,20 @@ export const AssignMemberModal: React.FC<AssignMemberModalProps> = ({
                   required
                 >
                   <option value="" disabled>Select a member</option>
-                  {users.filter(u => u.role === 'TEAM_MEMBER').map((u) => (
+                  {(!loadingUsers ? (availableUsers.length ? availableUsers : users) : [])
+                    .filter(u => {
+                      if (!u) return false;
+                      if (typeof u.role === 'string') return u.role === 'TEAM_MEMBER';
+                      return u.role && (u.role.code === 'TEAM_MEMBER' || u.role.name === 'TEAM_MEMBER');
+                    })
+                    .map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name} ({u.email})
                     </option>
                   ))}
+                  {loadingUsers && (
+                    <option value="" disabled>Loading members...</option>
+                  )}
                 </select>
               </div>
             </div>

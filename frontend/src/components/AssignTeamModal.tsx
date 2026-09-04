@@ -98,7 +98,14 @@ export const AssignTeamModal: React.FC<AssignTeamModalProps> = ({
               <div className="text-center py-8 text-slate-500 text-sm">Loading users...</div>
             ) : (
               <div className="space-y-2">
-                {users.map(user => (
+                {users
+                  .filter(u => {
+                    // support backend returning role as string or as object { code }
+                    if (!u) return false;
+                    if (typeof u.role === 'string') return u.role === 'TEAM_MEMBER';
+                    return u.role && (u.role.code === 'TEAM_MEMBER' || u.role.name === 'TEAM_MEMBER');
+                  })
+                  .map(user => (
                   <div key={user.id} className="flex items-center gap-3 p-3 border border-slate-200 rounded-sm hover:bg-slate-50 cursor-pointer" onClick={() => toggleUserSelection(user.id)}>
                     <input 
                       type="checkbox" 
@@ -108,7 +115,7 @@ export const AssignTeamModal: React.FC<AssignTeamModalProps> = ({
                     />
                     <div>
                       <div className="font-bold text-sm text-slate-900">{user.name}</div>
-                      <div className="text-xs text-slate-500">{user.role.replace(/_/g, ' ')} • {user.department}</div>
+                      <div className="text-xs text-slate-500">{(typeof user.role === 'string' ? user.role : (user.role?.code || user.role?.name || '')).replace(/_/g, ' ')} • {user.department}</div>
                     </div>
                   </div>
                 ))}

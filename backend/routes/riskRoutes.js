@@ -1,4 +1,5 @@
 import express from "express";
+import { authorizePermission } from "../middleware/permissions.js";
 import {
   createRisk,
   getAllRisks,
@@ -9,10 +10,10 @@ import {
 
 const router = express.Router();
 
-router.post("/", createRisk);
-router.get("/", getAllRisks);
-router.get("/:id", getRiskById);
-router.put("/:id", updateRisk);
-router.delete("/:id", deleteRisk);
+router.post("/", authorizePermission('risks.create'), createRisk);
+router.get("/", authorizePermission('risks.view'), getAllRisks);
+router.get("/:id", authorizePermission('risks.view'), getRiskById);
+router.put("/:id", authorizePermission('risks.update'), updateRisk);
+router.delete("/:id", authorizePermission('risks.delete'), deleteRisk);
 
 export default router;

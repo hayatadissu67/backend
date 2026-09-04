@@ -30,6 +30,9 @@ import {
   deleteUserApi,
   updateUserStatusApi,
   updateUserApi,
+  getCurrentUserApi,
+  fetchDepartmentLoadingApi,
+  fetchResourcesFromApi,
 } from './services/api';
 
 
@@ -64,6 +67,8 @@ import { AssignMemberModal } from './components/AssignMemberModal';
 import { FirstLoginChangePasswordModal } from './components/FirstLoginChangePasswordModal';
 
 import { ExecutiveDashboardView } from "./views/ExecutiveDashboardView";
+import PMDashboardView from './views/PMDashboardView';
+import TeamMemberDashboardView from './views/TeamMemberDashboardView';
 import { ProjectsView } from "./views/ProjectsView";
 import { PortfolioView } from "./views/PortfolioView";
 import { UsersView } from "./views/UsersView";
@@ -88,6 +93,47 @@ export default function App() {
 
   // Authentication State: Always start on Login page
   const [currentUser, setCurrentUser] = useState<UserItem | null>(null);
+
+  // Restore session on page load if token exists
+  useEffect(() => {
+    const tryRestoreSession = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      try {
+        const user = await getCurrentUserApi();
+        if (user) {
+          setCurrentUser(user);
+          // restore navigation based on role
+          if (window.location.hash) {
+            const hash = window.location.hash.replace('#', '') as NavigationTab;
+            if (isTabAllowedForRole(user.role, hash)) {
+              setCurrentTab(hash);
+            } else {
+              // pick default tab for role
+              if (user.role === 'RISK_MANAGER') setCurrentTab('risks');
+              else if (user.role === 'TEAM_MEMBER') setCurrentTab('tasks');
+              else setCurrentTab('dashboard');
+            }
+          } else {
+            if (user.role === 'RISK_MANAGER') setCurrentTab('risks');
+            else if (user.role === 'TEAM_MEMBER') setCurrentTab('tasks');
+            else if (user.role === 'PROJECT_MANAGER') setCurrentTab('dashboard');
+            else setCurrentTab('dashboard');
+          }
+        } else {
+          // token invalid or expired
+          localStorage.removeItem('token');
+        }
+      } catch (err) {
+        console.error('Failed to restore session:', err);
+        localStorage.removeItem('token');
+      }
+    };
+
+    tryRestoreSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Sync navigation with browser back/forward buttons via hash
   useEffect(() => {
@@ -124,6 +170,8 @@ export default function App() {
       targetTab = 'risks';
     } else if (user.role === 'TEAM_MEMBER') {
       targetTab = 'tasks';
+    } else if (user.role === 'PROJECT_MANAGER') {
+      targetTab = 'dashboard';
     } else {
       targetTab = 'dashboard';
     }
@@ -167,8 +215,13 @@ export default function App() {
 
     if (role === 'TEAM_MEMBER') {
       const allowedForTeam: NavigationTab[] = [
+        'dashboard',
         'tasks',
+        'change_requests',
+        'reports',
+        'templates',
         'projects',
+        'risks',
         'collaboration',
         'communication',
         'chat',
@@ -303,12 +356,7 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [risks, setRisks] = useState<RiskItem[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
-  const [resources, setResources] = useState<ResourceLoading[]>([
-    { department: 'Frontend Eng', percentage: 85, headcount: 12, colorClass: 'bg-blue-600' },
-    { department: 'Backend Eng', percentage: 92, headcount: 14, colorClass: 'bg-indigo-600' },
-    { department: 'DevOps & Cloud', percentage: 78, headcount: 8, colorClass: 'bg-emerald-600' },
-    { department: 'QA & Compliance', percentage: 64, headcount: 6, colorClass: 'bg-purple-600' },
-  ]);
+  const [resources, setResources] = useState<ResourceLoading[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
 
   const accessibleProjects = useMemo(() => {
@@ -418,7 +466,7 @@ export default function App() {
       try {
         const [
           apiUsers, apiProjects, apiRisks, apiTasks, apiBudgets, apiCRs, apiReports, apiTemplates,
-          apiDiscussions, apiMeetings, apiNotifications
+          apiDiscussions, apiMeetings, apiNotifications, apiDepartmentLoading, apiResources
         ] = await Promise.all([
           fetchUsersFromApi(),
           fetchProjectsFromApi(),
@@ -430,9 +478,11 @@ export default function App() {
           fetchTemplatesApi(),
           fetchDiscussionsApi(),
           fetchMeetingsApi(),
-          fetchNotificationsApi()
+          fetchNotificationsApi(),
+          fetchDepartmentLoadingApi(),
+          fetchResourcesFromApi(),
         ]);
-        
+
         if (apiUsers) setUsers(apiUsers);
         if (apiProjects) setProjects(apiProjects);
         if (apiRisks) setRisks(apiRisks);
@@ -444,6 +494,10 @@ export default function App() {
         if (apiDiscussions) setDiscussions(apiDiscussions);
         if (apiMeetings) setMeetings(apiMeetings);
         if (apiNotifications) setNotifications(apiNotifications);
+        if (apiDepartmentLoading && apiDepartmentLoading.length > 0) setResources(apiDepartmentLoading);
+        if (apiResources) {
+          // Raw resource records are available via fetchResourcesFromApi() on demand.
+        }
       } catch (err) {
         console.error('Failed to sync data with backend API:', err);
       }
@@ -785,22 +839,58 @@ export default function App() {
           <>
             {/* Render Tab Views */}
             {currentTab === 'dashboard' && (
-              <ExecutiveDashboardView
-                projects={searchedProjects}
-                risks={searchedRisks}
-                activities={activities}
-                resources={resources}
-                approvals={approvals}
-                tasks={accessibleTasks}
-                budgets={accessibleBudgets}
-                meetings={meetings}
-                onNavigate={(tab) => handleSelectTab(tab)}
-                onOpenNewProject={() => setIsNewProjectOpen(true)}
-                onOpenExportPDF={() => setIsExportPDFOpen(true)}
-                onApprovalAction={handleApprovalAction}
-                onUpdateRiskStatus={handleUpdateRisk}
-                onSelectProject={handleSelectProject}
-              />
+              currentUser.role === 'EXECUTIVE_MANAGER' ? (
+                <ExecutiveDashboardView
+                  projects={searchedProjects}
+                  risks={searchedRisks}
+                  activities={activities}
+                  resources={resources}
+                  approvals={approvals}
+                  tasks={accessibleTasks}
+                  budgets={accessibleBudgets}
+                  meetings={meetings}
+                  onNavigate={(tab) => handleSelectTab(tab)}
+                  onOpenNewProject={() => setIsNewProjectOpen(true)}
+                  onOpenExportPDF={() => setIsExportPDFOpen(true)}
+                  onApprovalAction={handleApprovalAction}
+                  onUpdateRiskStatus={handleUpdateRisk}
+                  onSelectProject={handleSelectProject}
+                />
+              ) : currentUser.role === 'PROJECT_MANAGER' ? (
+                <PMDashboardView
+                  projects={searchedProjects}
+                  tasks={tasks}
+                  users={users}
+                  resources={resources}
+                  currentPersona={currentPersona}
+                  onNavigate={(tab) => handleSelectTab(tab)}
+                  onOpenAssignMemberModal={() => setIsAssignMemberModalOpen(true)}
+                />
+              ) : currentUser.role === 'TEAM_MEMBER' ? (
+                <TeamMemberDashboardView
+                  projects={searchedProjects}
+                  tasks={tasks}
+                  risks={risks}
+                  currentPersona={currentPersona}
+                  onNavigate={(tab) => handleSelectTab(tab)}
+                />
+              ) : (
+                <ProjectsView
+                  projects={searchedProjects}
+                  risks={searchedRisks}
+                  tasks={tasks}
+                  users={users}
+                  selectedProject={selectedProject}
+                  onSelectProject={handleSelectProject}
+                  onOpenNewProject={() => setIsNewProjectOpen(true)}
+                  onUpdateProject={handleUpdateProject}
+                  onAddProject={handleAddProject}
+                  onOpenAssignMemberModal={() => setIsAssignMemberModalOpen(true)}
+                  currentPersona={currentPersona}
+                  onApproveProject={handleApproveProject}
+                  onRejectProject={handleRejectProject}
+                />
+              )
             )}
 
             {/* Users Views */}
@@ -870,6 +960,10 @@ export default function App() {
               resources={resources}
               onUpdateResource={handleUpdateResource}
               onOpenAssignMemberModal={() => setIsAssignMemberModalOpen(true)}
+              onRefresh={async () => {
+                const loading = await fetchDepartmentLoadingApi();
+                if (loading && loading.length > 0) setResources(loading);
+              }}
             />
             )}
 

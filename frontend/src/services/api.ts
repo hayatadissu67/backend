@@ -47,11 +47,10 @@ export const checkApiHealth = async () => {
 };
 
 // --- Authentication API ---
-export const loginApi = async (email: string, password: string, role?: UserRoleType) => {
+export const loginApi = async (email: string, password: string) => {
   const res = await api.post('/auth/login', {
     email: email.trim().toLowerCase(),
     password,
-    role,
   });
   return res.data;
 };
@@ -662,6 +661,67 @@ export const updateApprovalApi = async (id: string, approvalData: Partial<Approv
   } catch (err) {
     console.warn('Failed to update approval via API:', err);
     return null;
+  }
+};
+
+// --- Resources API ---
+export const fetchResourcesFromApi = async () => {
+  try {
+    const res = await api.get('/resources');
+    return res.data?.success && Array.isArray(res.data.data) ? res.data.data : [];
+  } catch (err) {
+    console.warn('Failed to fetch resources from API:', err);
+    return null;
+  }
+};
+
+export const fetchDepartmentLoadingApi = async (): Promise<ResourceLoading[] | null> => {
+  try {
+    const res = await api.get('/resources/loading');
+    return res.data?.success && Array.isArray(res.data.data) ? res.data.data : [];
+  } catch (err) {
+    console.warn('Failed to fetch department loading from API:', err);
+    return null;
+  }
+};
+
+export const createResourceApi = async (data: Record<string, any>) => {
+  try {
+    const res = await api.post('/resources', data);
+    return res.data?.success ? res.data.data : null;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to create resource.';
+    throw new Error(message);
+  }
+};
+
+export const createAssignmentRequestApi = async (data: Record<string, any>) => {
+  try {
+    const res = await api.post('/resources/request', data);
+    return res.data?.success ? res.data.data : null;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to create assignment request.';
+    throw new Error(message);
+  }
+};
+
+export const updateResourceStatusApi = async (id: string | number, status: string) => {
+  try {
+    const res = await api.patch(`/resources/${id}/status`, { status });
+    return res.data?.success ? res.data.data : null;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to update resource status.';
+    throw new Error(message);
+  }
+};
+
+export const deleteResourceApi = async (id: string | number) => {
+  try {
+    const res = await api.delete(`/resources/${id}`);
+    return !!res.data?.success;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to delete resource.';
+    throw new Error(message);
   }
 };
 

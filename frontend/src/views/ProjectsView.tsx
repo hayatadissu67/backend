@@ -87,6 +87,24 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     }
   }, [propsSelectedProject]);
 
+  // Ensure detail tab resets when a project is selected so content always shows
+  useEffect(() => {
+    if (selectedProject) {
+      setProjectDetailTab('Overview');
+      setIsEditing(false);
+      setEditedProject(null);
+    }
+  }, [selectedProject?.id]);
+
+  // Lock body scroll while the detail modal is open
+  useEffect(() => {
+    if (selectedProject) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [selectedProject?.id]);
+
   const handleCloseProjectDetail = () => {
     setSelectedProject(null);
     if (onSelectProject) {
@@ -507,7 +525,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {onOpenAssignMemberModal && currentPersona?.roleType !== 'TEAM_MEMBER' && (!selectedProject || selectedProject.approvalStatus === 'APPROVED') && (
+          {onOpenAssignMemberModal && currentPersona?.roleType !== 'TEAM_MEMBER' && currentPersona?.roleType !== 'EXECUTIVE_MANAGER' && (!selectedProject || selectedProject.approvalStatus === 'APPROVED') && (
             <button
               onClick={() => onOpenAssignMemberModal(selectedProject || undefined)}
               className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold flex items-center gap-1.5 text-xs uppercase tracking-wider rounded-xs transition-colors shadow-2xs"
@@ -516,7 +534,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
               Assign New Member
             </button>
           )}
-          {currentPersona?.roleType !== 'TEAM_MEMBER' && (
+          {currentPersona?.roleType !== 'TEAM_MEMBER' && currentPersona?.roleType !== 'EXECUTIVE_MANAGER' && (
             <button
               onClick={onOpenNewProject}
               className="px-4 py-2 bg-[#00174b] text-white flex items-center gap-2 text-xs font-bold uppercase tracking-wider rounded-xs hover:bg-indigo-950 transition-colors shadow-2xs"
@@ -1475,8 +1493,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
       {/* COMPREHENSIVE PROJECT DETAILS PAGE / MODAL */}
       {selectedProject && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto">
-          <div className="bg-white max-w-6xl w-full max-h-[95vh] overflow-y-auto rounded-sm border border-slate-300 shadow-2xl flex flex-col text-xs animate-fadeIn my-auto">
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[100] flex items-start sm:items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto">
+          <div className="bg-white max-w-6xl w-full max-h-[95vh] overflow-y-auto rounded-sm border border-slate-300 shadow-2xl flex flex-col text-xs animate-fadeIn my-auto min-h-[500px]">
 
             {/* Top Navigation & Header Banner */}
             <div className="bg-[#00174b] text-white p-5 sm:p-6 rounded-t-sm space-y-4 sticky top-0 z-20 shadow-md">
@@ -1708,7 +1726,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
             </div>
 
             {/* Modal / Page Body Content */}
-            <div className="p-6 space-y-6 flex-1 bg-slate-50/50">
+            <div className="p-6 space-y-6 flex-1 bg-white min-h-[400px]">
 
               {/* Editing Form Toggle */}
               {isEditing && editedProject ? (

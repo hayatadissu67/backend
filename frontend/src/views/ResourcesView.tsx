@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { ResourceLoading, UserItem } from '../types';
+import { createResourceApi, createAssignmentRequestApi } from '../services/api';
 
 interface ResourcesViewProps {
   resources: ResourceLoading[];
   onUpdateResource: (dept: string, newPct: number) => void;
   onSelectUser?: (user: UserItem) => void;
   onOpenAssignMemberModal?: (project?: any) => void;
+  onRefresh?: () => Promise<void> | void;
 }
 
 interface AllocationRecord {
@@ -30,16 +32,20 @@ interface EmployeeSkill {
   status: 'Fully Allocated' | 'Partially Available' | 'Available' | 'On Leave';
 }
 
-export const ResourcesView: React.FC<ResourcesViewProps> = ({ resources, onUpdateResource, onOpenAssignMemberModal }) => {
+export const ResourcesView: React.FC<ResourcesViewProps> = ({ resources, onUpdateResource, onOpenAssignMemberModal, onRefresh }) => {
   const [activeTab, setActiveTab] = useState<
     'Overview' | 'Resource Directory' | 'Resource Allocation' | 'Availability' | 'Workload' | 'Skills & Roles' | 'Reports'
   >('Overview');
 
   const [showAllocModal, setShowAllocModal] = useState(false);
   const [newEmployee, setNewEmployee] = useState('');
+  const [newDepartment, setNewDepartment] = useState('Engineering');
+  const [newRole, setNewRole] = useState('Resource Specialist');
   const [newProject, setNewProject] = useState('Cloud Data Lake Migration');
   const [newTask, setNewTask] = useState('Architecture Review');
   const [newHours, setNewHours] = useState(35);
+  const [allocationError, setAllocationError] = useState<string | null>(null);
+  const [allocationSaving, setAllocationSaving] = useState(false);
 
   const [availabilityFilter, setAvailabilityFilter] = useState<string>('All Statuses');
 
@@ -142,24 +148,50 @@ export const ResourcesView: React.FC<ResourcesViewProps> = ({ resources, onUpdat
   // Total Available Bench Hours
   const totalBenchHours = employees.reduce((acc, e) => acc + e.freeCapacity, 0);
 
-  const handleAddAllocation = (e: React.FormEvent) => {
+  const handleAddAllocation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEmployee.trim()) return;
+
+    setAllocationError(null);
+    setAllocationSaving(true);
 
     const newRecord: AllocationRecord = {
       id: `al-${Date.now()}`,
       employee: newEmployee,
-      role: 'Resource Specialist',
+      role: newRole,
       project: newProject,
       task: newTask,
       hoursAllocated: Number(newHours),
       status: newHours >= 35 ? 'Fully Allocated' : 'Partially Available',
-      department: 'Engineering'
+      department: newDepartment,
     };
 
-    setAllocations([newRecord, ...allocations]);
-    setNewEmployee('');
-    setShowAllocModal(false);
+    try {
+      const created = await createResourceApi({
+        type: 'ALLOCATION',
+        employeeName: newEmployee,
+        projectTarget: newProject,
+        assignedTask: newTask,
+        department: newDepartment,
+        projectRoleTitle: newRole,
+        hoursPerWeek: Number(newHours),
+        status: 'ACTIVE',
+      });
+
+      if (created) {
+        newRecord.id = String(created.id ?? newRecord.id);
+      }
+
+      setAllocations([newRecord, ...allocations]);
+      setNewEmployee('');
+      setShowAllocModal(false);
+
+      if (onRefresh) await onRefresh();
+    } catch (err: any) {
+      setAllocationError(err?.message || 'Failed to save allocation to the database.');
+    } finally {
+      setAllocationSaving(false);
+    }
   };
 
   const filteredAvailabilityEmployees = employees.filter((e) => {
@@ -689,6 +721,34 @@ export const ResourcesView: React.FC<ResourcesViewProps> = ({ resources, onUpdat
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase mb-1">Department</label>
+                  <select
+                    value={newDepartment}
+                    onChange={(e) => setNewDepartment(e.target.value)}
+                    className="w-full border border-slate-300 p-2 rounded-sm outline-none focus:border-blue-700 bg-white"
+                  >
+                    <option>Engineering</option>
+                    <option>Design</option>
+                    <option>Infrastructure</option>
+                    <option>Data Eng</option>
+                    <option>Security</option>
+                    <option>QA &amp; Compliance</option>
+                    <option>Enterprise IT</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase mb-1">Role</label>
+                  <input
+                    type="text"
+                    value={newRole}
+                    onChange={(e) => setNewRole(e.target.value)}
+                    className="w-full border border-slate-300 p-2 rounded-sm outline-none focus:border-blue-700"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block font-bold text-slate-700 uppercase mb-1">Project Target</label>
                 <input
@@ -713,11 +773,19 @@ export const ResourcesView: React.FC<ResourcesViewProps> = ({ resources, onUpdat
                 <label className="block font-bold text-slate-700 uppercase mb-1">Hours / Week</label>
                 <input
                   type="number"
+                  min={0}
+                  max={80}
                   value={newHours}
                   onChange={(e) => setNewHours(Number(e.target.value))}
                   className="w-full border border-slate-300 p-2 rounded-sm outline-none focus:border-blue-700 font-mono"
                 />
               </div>
+
+              {allocationError && (
+                <div className="bg-rose-50 border border-rose-200 text-rose-800 text-[11px] p-2 rounded-xs">
+                  {allocationError}
+                </div>
+              )}
 
               <div className="pt-3 border-t flex justify-end gap-2">
                 <button
@@ -729,9 +797,10 @@ export const ResourcesView: React.FC<ResourcesViewProps> = ({ resources, onUpdat
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-[#00174b] text-white font-bold rounded-sm uppercase tracking-wider hover:bg-indigo-950"
+                  disabled={allocationSaving}
+                  className="px-4 py-1.5 bg-[#00174b] text-white font-bold rounded-sm uppercase tracking-wider hover:bg-indigo-950 disabled:bg-slate-400"
                 >
-                  Save Allocation
+                  {allocationSaving ? 'Saving…' : 'Save Allocation'}
                 </button>
               </div>
             </form>

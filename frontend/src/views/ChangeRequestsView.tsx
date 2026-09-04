@@ -53,7 +53,16 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
 
   const requestsToDisplay = localRequests.length > 0 ? localRequests : propChangeRequests || [];
 
-  const filteredRequests = requestsToDisplay.filter((req) => {
+  // If team member, only show requests related to their assigned projects or those they requested
+  const visibleRequests = currentPersona?.roleType === 'TEAM_MEMBER'
+    ? requestsToDisplay.filter(r => {
+        const projCode = projects?.find(p => p.id?.toString() === r.projectId?.toString() || p.name === r.project)?.code;
+        const assigned = currentPersona?.assignedProjectCodes || [];
+        return (projCode && assigned.includes(projCode)) || r.requestedBy === currentPersona?.name || r.requestedBy === currentPersona?.email;
+      })
+    : requestsToDisplay;
+
+  const filteredRequests = visibleRequests.filter((req) => {
     const projectName = projects?.find(p => p.id?.toString() === req.projectId?.toString() || p.name === req.project)?.name || req.project || 'Unknown Project';
     const matchesSearch =
       req.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -315,18 +324,23 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
                         >
                           View
                         </button>
-                        <button
-                          onClick={() => setEditingRequest(req)}
-                          className="text-amber-600 hover:text-amber-800 hover:underline cursor-pointer transition-colors"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => setDeletingId(req.id)}
-                          className="text-red-600 hover:text-red-800 hover:underline cursor-pointer transition-colors"
-                        >
-                          Delete
-                        </button>
+                        {/* Only allow edit/delete for non-team members (PMs/Execs) */}
+                        {currentPersona?.roleType !== 'TEAM_MEMBER' && (
+                          <>
+                            <button
+                              onClick={() => setEditingRequest(req)}
+                              className="text-amber-600 hover:text-amber-800 hover:underline cursor-pointer transition-colors"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => setDeletingId(req.id)}
+                              className="text-red-600 hover:text-red-800 hover:underline cursor-pointer transition-colors"
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

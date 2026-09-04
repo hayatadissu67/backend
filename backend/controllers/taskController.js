@@ -18,12 +18,17 @@ class TaskController {
 
   async getTasks(req, res, next) {
     try {
-      const tasks = await taskService.getAllTasks();
+      let tasks = await taskService.getAllTasks();
 
-      return res.status(200).json({
-        success: true,
-        data: tasks,
-      });
+      // If team member, only return tasks assigned to them
+      const roleCode = req.user && (req.user.role?.code || req.user.role || req.user.role?.name);
+      if (String(roleCode).toUpperCase() === 'TEAM_MEMBER') {
+        const userName = req.user.name;
+        const userEmail = req.user.email;
+        tasks = tasks.filter(t => t.assignee === userName || t.assignee === userEmail);
+      }
+
+      return res.status(200).json({ success: true, data: tasks });
     } catch (error) {
       next(error);
     }

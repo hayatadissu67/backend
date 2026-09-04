@@ -6,13 +6,14 @@ import {
   updateProject,
   deleteProject,
 } from "../controllers/projectController.js";
+import { authorizePermission } from "../middleware/permissions.js";
 
 const router = express.Router();
 
-router.post("/", createProject);
-router.get("/", getAllProjects);
-router.get("/:id", getProjectById);
-router.put("/:id", updateProject);
-router.delete("/:id", deleteProject);
+router.post("/", authorizePermission('projects.create'), createProject);
+router.get("/", authorizePermission('projects.view'), getAllProjects);
+router.get("/:id", authorizePermission('projects.view'), getProjectById);
+router.put("/:id", authorizePermission('projects.update'), updateProject);
+router.delete("/:id", authorizePermission('projects.update'), deleteProject);
 
 export default router;

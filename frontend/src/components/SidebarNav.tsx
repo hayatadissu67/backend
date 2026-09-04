@@ -144,6 +144,11 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     }
   ];
 
+  // Filter navigation for Team Members: hide admin/executive-only sections
+  const filteredNavGroups = currentPersona?.roleType === 'TEAM_MEMBER'
+    ? navGroups.filter(g => !['portfolio', 'users', 'budget', 'admin', 'resources'].includes(g.id))
+    : navGroups;
+
   return (
     <aside
       className={`fixed left-0 top-0 h-full ${
@@ -186,7 +191,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
 
       {/* Navigation Scroll Area */}
       <nav className="flex-1 custom-scroll overflow-y-auto py-3 space-y-1">
-        {navGroups.map((group) => {
+        {filteredNavGroups.map((group) => {
           const isExpanded = expandedGroups[group.id];
           const hasChildren = group.children && group.children.length > 0;
           const isGroupActive =
