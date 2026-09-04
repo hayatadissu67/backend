@@ -26,6 +26,7 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [targetDate, setTargetDate] = useState('2026-12-31');
   const [description, setDescription] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
   
   // Get available team members from users
   const availableTeamMembers = users.filter(u => u.role === 'TEAM_MEMBER');
@@ -37,13 +38,32 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    
+    // Validation
+    const newErrors: Record<string, string> = {};
+    if (!name.trim()) newErrors.name = 'Project name is required';
+    else if (name.length > 100) newErrors.name = 'Project name must be under 100 characters';
+    
+    if (!owner.trim()) newErrors.owner = 'Project Manager/Owner is required';
+    
+    if (description && description.length > 2000) newErrors.description = 'Description is too long';
 
     const numBudget = parseFloat(budget);
-    if (isNaN(numBudget) || numBudget <= 0) {
-      alert('Please enter a valid project budget allocation.');
+    if (budget === '' || isNaN(numBudget) || numBudget < 0) {
+      newErrors.budget = 'Budget must be a valid non-negative number';
+    }
+
+    if (!startDate || isNaN(Date.parse(startDate))) newErrors.startDate = 'Invalid start date';
+    if (!targetDate || isNaN(Date.parse(targetDate))) newErrors.targetDate = 'Invalid target date';
+    if (startDate && targetDate && new Date(targetDate) < new Date(startDate)) {
+      newErrors.targetDate = 'End date must be after start date';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
       return;
     }
+    setErrors({});
 
     const stageMap: Record<string, LifecycleStage> = {
       'Gate 1': 'Initiation',
@@ -120,8 +140,9 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. NextGen Payment Engine"
-              className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none"
+              className={`w-full border rounded-sm p-2 text-xs outline-none ${errors.name ? 'border-red-500 bg-red-50 focus:border-red-600' : 'border-slate-300 focus:border-blue-600'}`}
             />
+            {errors.name && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span>{errors.name}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -153,8 +174,9 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
                 required
                 value={owner}
                 onChange={(e) => setOwner(e.target.value)}
-                className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none"
+                className={`w-full border rounded-sm p-2 text-xs outline-none ${errors.owner ? 'border-red-500 bg-red-50 focus:border-red-600' : 'border-slate-300 focus:border-blue-600'}`}
               />
+              {errors.owner && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span>{errors.owner}</p>}
             </div>
           </div>
 
@@ -166,8 +188,9 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe the project..."
-              className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none h-16 resize-none"
+              className={`w-full border rounded-sm p-2 text-xs outline-none h-16 resize-none ${errors.description ? 'border-red-500 bg-red-50 focus:border-red-600' : 'border-slate-300 focus:border-blue-600'}`}
             />
+            {errors.description && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span>{errors.description}</p>}
           </div>
 
           <div>
@@ -206,11 +229,17 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
                   type="button"
                   onClick={() => {
                     if (tempUserId && tempResp) {
+                      // Check for duplicates
+                      if (selectedTeamMembers.some(m => m.userId === tempUserId)) {
+                        setErrors({...errors, team: 'This team member is already assigned'});
+                        return;
+                      }
                       setSelectedTeamMembers([...selectedTeamMembers, { userId: tempUserId, responsibility: tempResp }]);
                       setTempUserId('');
                       setTempResp('');
+                      setErrors(prev => { const { team, ...rest } = prev; return rest; }); // clear error
                     } else {
-                      alert('Please select both a Team Member and a Responsibility.');
+                      setErrors({...errors, team: 'Please select both a Team Member and a Responsibility'});
                     }
                   }}
                   className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xs shrink-0"
@@ -252,6 +281,7 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
                   </table>
                 </div>
               )}
+              {errors.team && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span>{errors.team}</p>}
             </div>
           </div>
 
@@ -261,15 +291,19 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
                 Project Budget ($) *
               </label>
               <input
-                type="number"
+                type="text"
                 required
-                min="1000"
-                step="1000"
                 value={budget}
-                onChange={(e) => setBudget(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '' || /^\d+(\.\d*)?$/.test(val)) {
+                    setBudget(val);
+                  }
+                }}
                 placeholder="e.g. 750000"
-                className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none font-mono font-bold"
+                className={`w-full border rounded-sm p-2 text-xs outline-none font-mono font-bold ${errors.budget ? 'border-red-500 bg-red-50 focus:border-red-600' : 'border-slate-300 focus:border-blue-600'}`}
               />
+              {errors.budget && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1 leading-tight"><span className="material-symbols-outlined text-[12px]">warning</span>{errors.budget}</p>}
               <span className="text-[10px] text-slate-500 block mt-0.5">Read-only after creation</span>
             </div>
 
@@ -298,8 +332,9 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
                 required
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none font-mono"
+                className={`w-full border rounded-sm p-2 text-xs outline-none font-mono ${errors.startDate ? 'border-red-500 bg-red-50 focus:border-red-600' : 'border-slate-300 focus:border-blue-600'}`}
               />
+              {errors.startDate && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span>{errors.startDate}</p>}
             </div>
 
             <div>
@@ -312,8 +347,9 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
                 min={startDate || new Date().toISOString().split('T')[0]}
                 value={targetDate}
                 onChange={(e) => setTargetDate(e.target.value)}
-                className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none font-mono"
+                className={`w-full border rounded-sm p-2 text-xs outline-none font-mono ${errors.targetDate ? 'border-red-500 bg-red-50 focus:border-red-600' : 'border-slate-300 focus:border-blue-600'}`}
               />
+              {errors.targetDate && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span>{errors.targetDate}</p>}
             </div>
           </div>
 

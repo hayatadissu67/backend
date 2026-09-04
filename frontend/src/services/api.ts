@@ -213,6 +213,16 @@ export const deleteProjectApi = async (id: string): Promise<boolean> => {
   }
 };
 
+export const deleteProjectPermanentApi = async (id: string): Promise<boolean> => {
+  try {
+    const res = await api.delete(`/projects/${id}/permanent`);
+    return !!res.data?.success;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to permanently delete project.';
+    throw new Error(message);
+  }
+};
+
 export const getProjectTeamApi = async (id: string): Promise<UserItem[] | null> => {
   try {
     const res = await api.get(`/projects/${id}/team`);

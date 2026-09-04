@@ -152,29 +152,46 @@ export const deleteProject = async (req, res) => {
       });
     }
 
-    const isDraft = existingProject.status === 'PLANNING' || existingProject.approvalStatus === 'PENDING_APPROVAL';
-
-    if (isDraft) {
-      await deleteProjectService(req.params.id);
-      res.status(200).json({
-        success: true,
-        message: "Project deleted successfully",
-      });
-    } else {
-      await updateProjectService(req.params.id, {
-        status: 'COMPLETED',
-        approvalStatus: 'ARCHIVED'
-      });
-      res.status(200).json({
-        success: true,
-        message: "Project archived successfully to preserve history",
-      });
-    }
+    await updateProjectService(req.params.id, {
+      status: existingProject.status === 'PLANNING' ? 'PLANNING' : 'COMPLETED',
+      approvalStatus: 'ARCHIVED'
+    });
+    res.status(200).json({
+      success: true,
+      message: "Project archived successfully to preserve history",
+    });
   } catch (error) {
     res.status(500).json({
       success: false,
       message: error.message,
     });
+  }
+};
+
+export const deleteProjectPermanent = async (req, res) => {
+  try {
+    if (!req.user || req.user.role !== 'EXECUTIVE_MANAGER') {
+      return res.status(403).json({ success: false, message: "Only Executive Managers can permanently delete projects" });
+    }
+
+    const existingProject = await getProjectByIdService(req.params.id);
+    if (!existingProject) {
+      return res.status(404).json({ success: false, message: "Project not found" });
+    }
+
+    // Safely delete related records to preserve DB integrity (ProjectTeam)
+    const ProjectTeam = (await import('../../models/projectModel/ProjectTeam.js')).default;
+    await ProjectTeam.destroy({ where: { projectCode: existingProject.code } });
+
+    // Actually delete the project record
+    await deleteProjectService(req.params.id);
+
+    res.status(200).json({
+      success: true,
+      message: "Project permanently deleted",
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 

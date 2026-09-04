@@ -13,7 +13,7 @@ import {
   ProjectLifecycleInfo
 } from '../../types';
 import { AssignTeamModal } from '../AssignTeamModal';
-import { getProjectTeamApi, deleteProjectApi } from '../../services/api';
+import { getProjectTeamApi, deleteProjectApi, deleteProjectPermanentApi } from '../../services/api';
 
 interface ProjectsViewProps {
   projects: Project[];
@@ -31,6 +31,7 @@ interface ProjectsViewProps {
   currentPersona?: any;
   onApproveProject?: (id: string) => void;
   onRejectProject?: (id: string, reason: string) => void;
+  onRefreshProjects?: () => Promise<void>;
 }
 
 export const ProjectsView: React.FC<ProjectsViewProps> = ({
@@ -49,11 +50,12 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   currentPersona,
   onApproveProject,
   onRejectProject,
+  onRefreshProjects,
 }) => {
 
   // Navigation sub-tabs inside Projects View
   const [activeSubTab, setActiveSubTab] = useState<
-    'Directory' | 'Project Lifecycle' | 'Web Requirements' | 'Gate Roadmap' | 'Kanban Pipeline' | 'AI Charter Generator'
+    'Directory' | 'Project Lifecycle' | 'Web Requirements' | 'Gate Roadmap' | 'Kanban Pipeline' | 'AI Charter Generator' | 'Archived Projects'
   >('Directory');
 
   // Directory layout toggle: Grid or Table
@@ -82,6 +84,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   const [inspectStage, setInspectStage] = useState<LifecycleStage>('Initiation');
   const [isEditing, setIsEditing] = useState(false);
   const [editedProject, setEditedProject] = useState<Project | null>(null);
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [rejectingProjectId, setRejectingProjectId] = useState<string | null>(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
   const [projectTeamMembers, setProjectTeamMembers] = useState<UserItem[]>([]);
@@ -344,6 +347,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
   // Filtering & Sorting logic
   const filteredProjects = projects.filter((p) => {
+    if (p.approvalStatus === 'ARCHIVED') return false; // Hide archived projects from main view
     if (filterDept !== 'ALL' && p.department !== filterDept) return false;
     if (filterHealth !== 'ALL' && p.health !== filterHealth) return false;
     if (filterStatus !== 'ALL' && p.status !== filterStatus) return false;
@@ -365,6 +369,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     if (sortBy === 'targetDate') return a.targetDate.localeCompare(b.targetDate);
     return a.name.localeCompare(b.name);
   });
+
+  const archivedProjects = projects.filter((p) => p.approvalStatus === 'ARCHIVED');
 
   // KPI Computations
   const totalProjectsCount = projects.length;
@@ -420,6 +426,14 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
         <span className="px-2 py-0.5 bg-rose-100 text-rose-900 border border-rose-300 font-bold text-[9px] rounded-xs uppercase tracking-wider inline-flex items-center gap-1">
           <span className="material-symbols-outlined text-[12px]">cancel</span>
           Rejected
+        </span>
+      );
+    }
+    if (approval === 'ARCHIVED') {
+      return (
+        <span className="px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-300 font-bold text-[9px] rounded-xs uppercase tracking-wider inline-flex items-center gap-1">
+          <span className="material-symbols-outlined text-[12px]">inventory_2</span>
+          Archived
         </span>
       );
     }
@@ -614,7 +628,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
             { key: 'Web Requirements', label: 'Requirements Matrix', icon: 'checklist_rtl' },
             { key: 'Gate Roadmap', label: 'Gate Lifecycle Roadmap', icon: 'alt_route' },
             { key: 'Kanban Pipeline', label: 'Kanban Board', icon: 'view_kanban' },
-            { key: 'AI Charter Generator', label: 'AI Charter Generator', icon: 'auto_awesome' }
+            { key: 'AI Charter Generator', label: 'AI Charter Generator', icon: 'auto_awesome' },
+            { key: 'Archived Projects', label: 'Archived Projects', icon: 'inventory_2' }
           ].map((tab) => (
             <button
               key={tab.key}
@@ -963,6 +978,90 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
             </div>
           )}
 
+        </div>
+      )}
+
+      {/* SUB-TAB: ARCHIVED PROJECTS */}
+      {activeSubTab === 'Archived Projects' && (
+        <div className="space-y-4 animate-fadeIn">
+          <div className="bg-white border border-slate-200/80 p-6 rounded-sm shadow-2xs space-y-4">
+            <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+              <span className="material-symbols-outlined text-slate-500 text-[22px]">inventory_2</span>
+              Archived Projects
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">
+              Projects that have been archived. Executive Managers can permanently delete these projects.
+            </p>
+          </div>
+          {archivedProjects.length === 0 ? (
+            <div className="bg-white p-8 border border-slate-200/80 rounded-sm text-center">
+              <span className="material-symbols-outlined text-slate-300 text-4xl mb-2">inventory_2</span>
+              <h3 className="text-sm font-bold text-slate-700">No archived projects found</h3>
+            </div>
+          ) : (
+            <div className="bg-white border border-slate-200/80 rounded-sm overflow-x-auto shadow-2xs">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-[#f2f4f6] text-slate-600 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200/80">
+                    <th className="px-4 py-3">Code</th>
+                    <th className="px-4 py-3">Project Title</th>
+                    <th className="px-4 py-3">Dept &amp; Owner</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {archivedProjects.map((p) => (
+                    <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="px-4 py-3 font-mono font-bold text-slate-800">{p.code}</td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => { setSelectedProject(p); setIsEditing(false); }}
+                          className="font-bold text-blue-900 hover:underline text-left block text-xs"
+                        >
+                          {p.name}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="block font-bold text-slate-800">{p.department}</span>
+                        <span className="text-[10px] text-slate-500">{p.owner}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {renderApprovalBadge(p)}
+                      </td>
+                      <td className="px-4 py-3 text-right space-x-2 flex justify-end gap-1">
+                        <button
+                          onClick={() => { setSelectedProject(p); setIsEditing(false); }}
+                          className="px-2.5 py-1 bg-[#00174b] text-white rounded-xs font-bold text-[10px] uppercase tracking-wider hover:bg-indigo-950 transition-colors shadow-2xs"
+                        >
+                          Details
+                        </button>
+                        {currentPersona?.roleType === 'EXECUTIVE_MANAGER' && (
+                          <button
+                            onClick={async () => {
+                              if (confirm('Are you sure you want to permanently delete this project? This cannot be undone.')) {
+                                try {
+                                  await deleteProjectPermanentApi(p.id);
+                                  if (onRefreshProjects) {
+                                    await onRefreshProjects();
+                                  }
+                                } catch (e: any) {
+                                  alert(e?.message || 'Failed to permanently delete');
+                                }
+                              }
+                            }}
+                            className="px-2.5 py-1 bg-rose-600 text-white rounded-xs font-bold text-[10px] uppercase tracking-wider hover:bg-rose-700 transition-colors shadow-2xs"
+                          >
+                            Permanent Delete
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -1675,14 +1774,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                 {userRoleMode === 'Executive Admin' && [
                   { key: 'Overview', label: 'Overview & Financials', icon: 'dashboard' },
                   { key: 'Lifecycle', label: 'Lifecycle Governance', icon: 'account_tree' },
-                  {
-                    key: 'Participants', label: `Participants & Team (${(users || []).filter(u =>
-                      u.assignedProjectCodes?.some(c => c?.toLowerCase() === selectedProject.code?.toLowerCase() || selectedProject.code?.toLowerCase().includes(c?.toLowerCase())) ||
-                      u.name?.toLowerCase().includes(selectedProject.owner?.toLowerCase() || '') ||
-                      (u.department && selectedProject.department && u.department.toLowerCase() === selectedProject.department.toLowerCase())
-                    ).length || 3
-                      })`, icon: 'groups'
-                  },
+                  { key: 'Participants', label: `Participants & Team (${projectTeamMembers.length})`, icon: 'groups' },
                   { key: 'Works Done', label: 'Progress & Works Done', icon: 'task_alt' },
                   { key: 'Risks', label: 'Risks & Issues', icon: 'warning' },
                   { key: 'Chat', label: 'Project Chat & Telegram', icon: 'chat' },
@@ -1752,6 +1844,25 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
+                    
+                    const newErrors: Record<string, string> = {};
+                    if (!editedProject.name?.trim()) newErrors.name = 'Project name is required';
+                    else if (editedProject.name.length > 100) newErrors.name = 'Project name must be under 100 characters';
+                    
+                    if (!editedProject.department?.trim()) newErrors.department = 'Department is required';
+                    
+                    const numBudget = Number(editedProject.budget);
+                    if (isNaN(numBudget) || numBudget < 0) newErrors.budget = 'Budget must be a valid non-negative number';
+                    
+                    const numProgress = Number(editedProject.progress);
+                    if (isNaN(numProgress) || numProgress < 0 || numProgress > 100) newErrors.progress = 'Progress must be between 0 and 100';
+
+                    if (Object.keys(newErrors).length > 0) {
+                      setEditErrors(newErrors);
+                      return;
+                    }
+                    setEditErrors({});
+
                     onUpdateProject(editedProject);
                     setSelectedProject(editedProject);
                     setIsEditing(false);
@@ -1766,8 +1877,9 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                         type="text"
                         value={editedProject.name}
                         onChange={(e) => setEditedProject({ ...editedProject, name: e.target.value })}
-                        className="w-full border p-2 rounded-sm outline-none focus:border-blue-600"
+                        className={`w-full border p-2 rounded-sm outline-none ${editErrors.name ? 'border-red-500 bg-red-50 focus:border-red-600' : 'focus:border-blue-600'}`}
                       />
+                      {editErrors.name && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span>{editErrors.name}</p>}
                     </div>
                     <div>
                       <label className="block font-bold text-slate-700 uppercase mb-1">Department</label>
@@ -1775,8 +1887,9 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                         type="text"
                         value={editedProject.department}
                         onChange={(e) => setEditedProject({ ...editedProject, department: e.target.value })}
-                        className="w-full border p-2 rounded-sm outline-none focus:border-blue-600"
+                        className={`w-full border p-2 rounded-sm outline-none ${editErrors.department ? 'border-red-500 bg-red-50 focus:border-red-600' : 'focus:border-blue-600'}`}
                       />
+                      {editErrors.department && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span>{editErrors.department}</p>}
                     </div>
                   </div>
 
@@ -1785,23 +1898,24 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                       <div>
                         <label className="block font-bold text-slate-700 uppercase mb-1">Budget ($)</label>
                         <input
-                          type="number"
+                          type="text"
                           value={editedProject.budget}
-                        className="w-full border p-2 rounded-sm font-mono"
+                          onChange={(e) => setEditedProject({ ...editedProject, budget: e.target.value as any })}
+                          className={`w-full border p-2 rounded-sm font-mono outline-none ${editErrors.budget ? 'border-red-500 bg-red-50 focus:border-red-600' : 'focus:border-blue-600'}`}
                         />
+                        {editErrors.budget && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span>{editErrors.budget}</p>}
                       </div>
                     )}
                     <div>
                       <label className="block font-bold text-slate-700 uppercase mb-1">Progress (%)</label>
                       <input
-                        type="number"
-                        max={100}
-                        min={0}
+                        type="text"
                         value={editedProject.progress}
-                        onChange={(e) => setEditedProject({ ...editedProject, progress: Number(e.target.value) })}
+                        onChange={(e) => setEditedProject({ ...editedProject, progress: e.target.value as any })}
                         disabled={editedProject.approvalStatus === 'APPROVED' || editedProject.status === 'ACTIVE' || editedProject.status === 'COMPLETED'}
-                        className="w-full border p-2 rounded-sm font-mono disabled:bg-slate-100 disabled:text-slate-400"
+                        className={`w-full border p-2 rounded-sm font-mono outline-none disabled:bg-slate-100 disabled:text-slate-400 ${editErrors.progress ? 'border-red-500 bg-red-50 focus:border-red-600' : 'focus:border-blue-600'}`}
                       />
+                      {editErrors.progress && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span>{editErrors.progress}</p>}
                     </div>
                     <div>
                       <label className="block font-bold text-slate-700 uppercase mb-1">Gate Stage</label>
@@ -1823,7 +1937,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                   <div className="flex justify-end gap-2 pt-3 border-t">
                     <button
                       type="button"
-                      onClick={() => setIsEditing(false)}
+                      onClick={() => { setIsEditing(false); setEditErrors({}); }}
                       className="px-4 py-1.5 border rounded-sm font-bold text-slate-600"
                     >
                       Cancel
@@ -1874,39 +1988,57 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                             </div>
                           </div>
 
-                          {/* Executive Admin Oversight & Directives Banner */}
-                          <div className="bg-gradient-to-r from-slate-900 to-[#00174b] text-white p-5 rounded-sm shadow-sm space-y-3 border border-slate-800">
-                            <div className="flex flex-wrap justify-between items-center gap-2 border-b border-white/10 pb-2">
-                              <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-amber-400 text-[20px]">shield_person</span>
-                                <div>
-                                  <h4 className="font-extrabold text-sm uppercase tracking-wider text-white">Executive Admin Oversight &amp; PMO Governance Authority</h4>
-                                  <p className="text-[11px] text-indigo-200">System Level 1 Administrative Clearance Active</p>
+                          {/* Real Project Information Card */}
+                          <div className="bg-white border border-slate-200/80 p-5 rounded-sm shadow-2xs space-y-4">
+                            <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-wider flex items-center gap-1.5 border-b pb-2">
+                              <span className="material-symbols-outlined text-indigo-700 text-[18px]">assignment</span>
+                              Project Information
+                            </h4>
+                            <div className="grid grid-cols-2 gap-3 text-xs">
+                              <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
+                                <span className="block text-slate-500 font-bold uppercase text-[10px] mb-0.5">Project Code</span>
+                                <span className="text-slate-900 font-mono font-bold">{selectedProject.code}</span>
+                              </div>
+                              <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
+                                <span className="block text-slate-500 font-bold uppercase text-[10px] mb-0.5">Department</span>
+                                <span className="text-slate-900 font-bold">{selectedProject.department}</span>
+                              </div>
+                              <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
+                                <span className="block text-slate-500 font-bold uppercase text-[10px] mb-0.5">Project Manager</span>
+                                <span className="text-slate-900 font-bold">{selectedProject.owner}</span>
+                              </div>
+                              <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
+                                <span className="block text-slate-500 font-bold uppercase text-[10px] mb-0.5">Gate Phase</span>
+                                <span className="text-slate-900 font-bold">{selectedProject.gate || '—'}</span>
+                              </div>
+                              <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
+                                <span className="block text-slate-500 font-bold uppercase text-[10px] mb-0.5">Start Date</span>
+                                <span className="text-slate-900 font-mono font-bold">{selectedProject.startDate || '—'}</span>
+                              </div>
+                              <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
+                                <span className="block text-slate-500 font-bold uppercase text-[10px] mb-0.5">Target Date</span>
+                                <span className="text-slate-900 font-mono font-bold">{selectedProject.targetDate || '—'}</span>
+                              </div>
+                              <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
+                                <span className="block text-slate-500 font-bold uppercase text-[10px] mb-0.5">Health Indicator</span>
+                                <div className="pt-0.5">{renderHealthBadge(selectedProject.health)}</div>
+                              </div>
+                              <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
+                                <span className="block text-slate-500 font-bold uppercase text-[10px] mb-0.5">Project Status</span>
+                                <div className="pt-0.5">{renderStatusBadge(selectedProject.status)}</div>
+                              </div>
+                              {selectedProject.approvalStatus === 'APPROVED' && selectedProject.approvedBy && (
+                                <div className="bg-emerald-50 p-3 rounded-xs border border-emerald-200 col-span-2">
+                                  <span className="block text-emerald-700 font-bold uppercase text-[10px] mb-0.5">Approved By</span>
+                                  <span className="text-emerald-900 font-bold">{selectedProject.approvedBy}</span>
                                 </div>
-                              </div>
-                              <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono font-bold px-2.5 py-0.5 rounded-xs text-[10px] uppercase">
-                                Executive Gate Approved
-                              </span>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs pt-1">
-                              <div className="bg-white/5 border border-white/10 p-2.5 rounded-xs space-y-1">
-                                <span className="text-[10px] text-slate-300 font-bold uppercase block">Authorized Administrator</span>
-                                <p className="font-bold text-white font-mono">System Admin (Executive PMO)</p>
-                                <p className="text-[10px] text-indigo-300">Authority: Level 1 Unrestricted</p>
-                              </div>
-
-                              <div className="bg-white/5 border border-white/10 p-2.5 rounded-xs space-y-1">
-                                <span className="text-[10px] text-slate-300 font-bold uppercase block">Last Gate Sign-Off</span>
-                                <p className="font-bold text-amber-300 font-mono">2026-07-29 • 09:30 AM</p>
-                                <p className="text-[10px] text-indigo-300">Phase: {getProjectStage(selectedProject)} Verified</p>
-                              </div>
-
-                              <div className="bg-white/5 border border-white/10 p-2.5 rounded-xs space-y-1">
-                                <span className="text-[10px] text-slate-300 font-bold uppercase block">Executive Audit &amp; Compliance</span>
-                                <p className="font-bold text-emerald-400 font-mono">100% Compliant</p>
-                                <p className="text-[10px] text-indigo-300">Zero Critical Governance Blockers</p>
-                              </div>
+                              )}
+                              {selectedProject.approvalStatus === 'REJECTED' && selectedProject.rejectionReason && (
+                                <div className="bg-rose-50 p-3 rounded-xs border border-rose-200 col-span-2">
+                                  <span className="block text-rose-700 font-bold uppercase text-[10px] mb-0.5">Rejection Reason</span>
+                                  <span className="text-rose-900 font-bold text-xs">{selectedProject.rejectionReason}</span>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </>
@@ -2027,22 +2159,6 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                           {selectedProject.description ||
                             `Enterprise initiative ${selectedProject.name} (${selectedProject.code}) is commissioned under the ${selectedProject.department} division to deliver critical system capabilities, technical modernization, and governance gate clearances.`}
                         </p>
-                      </div>
-
-                      {/* Tech Architecture Stack */}
-                      <div className="bg-white border border-slate-200/80 p-5 rounded-sm shadow-2xs space-y-3">
-                        <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-wider flex items-center gap-1.5 border-b pb-2">
-                          <span className="material-symbols-outlined text-blue-700 text-[18px]">hub</span>
-                          Web Architecture &amp; Technology Stack
-                        </h4>
-                        <div className="flex flex-wrap gap-2">
-                          {getTechStack(selectedProject).map((tech) => (
-                            <span key={tech} className="bg-blue-50 text-blue-900 font-bold px-3 py-1.5 rounded-xs border border-blue-200 text-xs flex items-center gap-1">
-                              <span className="material-symbols-outlined text-[14px] text-blue-600">code</span>
-                              {tech}
-                            </span>
-                          ))}
-                        </div>
                       </div>
                     </div>
                   )}
@@ -3036,7 +3152,11 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                   try {
                     const success = await deleteProjectApi(deleteConfirmProject.id);
                     if (success) {
-                      window.location.reload(); // Quick refresh to sync state
+                      setDeleteConfirmProject(null);
+                      setSelectedProject(null);
+                      if (onRefreshProjects) {
+                        await onRefreshProjects();
+                      }
                     }
                   } catch (err: any) {
                     alert(err.message || "Failed to delete project");

@@ -479,6 +479,15 @@ export default function App() {
     updateProjectApi(updated.id, updated);
   };
 
+  const handleRefreshProjects = async () => {
+    try {
+      const apiProjects = await fetchProjectsFromApi();
+      if (apiProjects) setProjects(apiProjects);
+    } catch (err) {
+      console.error('Failed to refresh projects:', err);
+    }
+  };
+
   const handleAddUser = (newUser: UserItem) => {
     setUsers([newUser, ...users]);
   };
@@ -884,6 +893,7 @@ export default function App() {
                 currentPersona={currentPersona}
                 onApproveProject={handleApproveProject}
                 onRejectProject={handleRejectProject}
+                onRefreshProjects={handleRefreshProjects}
               />
             )}
 

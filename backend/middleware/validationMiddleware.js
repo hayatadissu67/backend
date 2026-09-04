@@ -21,29 +21,47 @@ export const validateRequest = (schema) => {
   };
 };
 
-export const createProjectSchema = z.object({
-  name: z.string().min(1, "Project name is required"),
-  code: z.string().min(1, "Project code is required"),
-  department: z.string().min(1, "Department is required"),
+const baseProjectSchema = z.object({
+  name: z.string().trim().min(1, "Project name is required").max(100, "Project name must be under 100 characters"),
+  code: z.string().trim().min(1, "Project code is required"),
+  department: z.string().trim().min(1, "Department is required"),
+  owner: z.string().trim().min(1, "Project Manager/Owner is required"),
   status: z.enum(["ACTIVE", "COMPLETED", "DELAYED", "PLANNING"]).optional(),
   health: z.enum(["GREEN", "YELLOW", "RED"]).optional(),
-  budget: z.number().nonnegative().optional(),
+  budget: z.number().nonnegative("Budget cannot be negative").optional(),
   spent: z.number().nonnegative().optional(),
-  progress: z.number().min(0).max(100).optional(),
+  progress: z.number().min(0, "Progress cannot be negative").max(100, "Progress cannot exceed 100").optional(),
   gate: z.string().optional(),
-  targetDate: z.string().optional(),
-  startDate: z.string().optional(),
-  description: z.string().optional(),
+  startDate: z.string().refine(val => !isNaN(Date.parse(val)), "Invalid start date").optional(),
+  targetDate: z.string().refine(val => !isNaN(Date.parse(val)), "Invalid target date").optional(),
+  description: z.string().max(2000, "Description is too long").optional(),
   priority: z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW"]).optional(),
   lifecycleStage: z.string().optional(),
   approvalStatus: z.string().optional(),
   assignedTeamMembers: z.array(z.object({
     userId: z.union([z.string(), z.number()]),
-    responsibility: z.string().optional()
+    responsibility: z.string().min(1, "Responsibility is required for each team member")
   })).optional()
 });
 
-export const updateProjectSchema = createProjectSchema.partial();
+const dateRefinement = (data) => {
+  if (data.startDate && data.targetDate) {
+    const start = new Date(data.startDate);
+    const end = new Date(data.targetDate);
+    return end >= start;
+  }
+  return true;
+};
+
+export const createProjectSchema = baseProjectSchema.refine(dateRefinement, {
+  message: "End date must be after the start date",
+  path: ["targetDate"]
+});
+
+export const updateProjectSchema = baseProjectSchema.partial().refine(dateRefinement, {
+  message: "End date must be after the start date",
+  path: ["targetDate"]
+});
 
 export const rejectProjectSchema = z.object({
   rejectionReason: z.string().min(1, "Rejection reason is required"),

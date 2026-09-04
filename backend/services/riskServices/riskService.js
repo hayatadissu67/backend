@@ -18,7 +18,14 @@ export const getAllRisksService = async (user) => {
       whereClause = { submittedBy: user.email };
     } else if (user.role === 'PROJECT_MANAGER') {
       const pmProjects = await Project.findAll({ where: { owner: user.email }, attributes: ['code'] });
-      const pmProjectCodes = pmProjects.map(p => p.code);
+      
+      const ProjectTeam = (await import('../../models/projectModel/ProjectTeam.js')).default;
+      const pmAssignments = await ProjectTeam.findAll({ where: { userId: user.id } });
+      
+      const pmProjectCodes = [
+          ...pmProjects.map(p => p.code),
+          ...pmAssignments.map(a => a.projectCode)
+      ];
 
       whereClause = {
         [Op.or]: [
