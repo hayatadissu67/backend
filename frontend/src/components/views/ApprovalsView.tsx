@@ -82,6 +82,11 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const isPendingProject = (p: Project) => {
+    const s = (p.approvalStatus || '').toUpperCase().trim();
+    return s !== 'APPROVED' && s !== 'REJECTED' && s !== 'ARCHIVED';
+  };
+
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Toast Notification */}
@@ -128,13 +133,13 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
       </div>
 
       {/* PROJECT CHARTERS & BUDGET APPROVALS TABLE */}
-      {projects.filter(p => p.approvalStatus === 'PENDING_APPROVAL' || !p.approvalStatus).length > 0 && (
+      {projects.filter(isPendingProject).length > 0 && (
         <div className="bg-white border-2 border-amber-300 rounded-sm overflow-hidden shadow-xs animate-fadeIn">
           <div className="p-4 bg-amber-50/80 border-b border-amber-200 flex justify-between items-center">
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-amber-800 text-[20px]">account_balance</span>
               <h3 className="font-extrabold text-xs uppercase tracking-wider text-amber-950">
-                Project Charters &amp; Budget Allocations Pending Executive Approval ({projects.filter(p => p.approvalStatus === 'PENDING_APPROVAL' || !p.approvalStatus).length})
+                Project Charters &amp; Budget Allocations Pending Executive Approval ({projects.filter(isPendingProject).length})
               </h3>
             </div>
             <span className="text-[11px] font-mono font-bold text-amber-900 bg-amber-200/80 border border-amber-300 px-2.5 py-0.5 rounded-xs">
@@ -156,7 +161,7 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-amber-100 font-sans">
-                {projects.filter(p => p.approvalStatus === 'PENDING_APPROVAL' || !p.approvalStatus).map((p) => (
+                {projects.filter(isPendingProject).map((p) => (
                   <tr key={p.id} className="hover:bg-amber-50/40 transition-colors">
                     <td className="px-5 py-4">
                       <span className="font-mono font-bold text-slate-900 block">{p.code}</span>
@@ -524,6 +529,8 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
         isOpen={!!detailsProject}
         onClose={() => setDetailsProject(null)}
         project={detailsProject}
+        onApprove={onApproveProject}
+        onReject={onRejectProject}
       />
     </div>
   );

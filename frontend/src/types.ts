@@ -52,7 +52,7 @@ export interface Project {
   assignedTeamMembers?: { userId: number; responsibility: string }[];
   lifecycleStage?: LifecycleStage;
   lifecycle?: ProjectLifecycleInfo;
-  approvalStatus?: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'ARCHIVED';
+  approvalStatus?: 'PENDING_APPROVAL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'ARCHIVED' | 'PENDING_DELETION' | string;
   approvedBy?: string;
   approvedAt?: string;
   rejectionReason?: string;

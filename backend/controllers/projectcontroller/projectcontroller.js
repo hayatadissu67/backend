@@ -153,8 +153,7 @@ export const deleteProject = async (req, res) => {
     }
 
     await updateProjectService(req.params.id, {
-      status: existingProject.status === 'PLANNING' ? 'PLANNING' : 'COMPLETED',
-      approvalStatus: 'ARCHIVED'
+      approvalStatus: 'PENDING_DELETION'
     });
     res.status(200).json({
       success: true,

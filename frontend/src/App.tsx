@@ -193,7 +193,14 @@ export default function App() {
     try {
       const updated = await approveProjectApi(projectId);
       if (updated) {
-        setProjects((prev) => prev.map((p) => (p.id === projectId ? updated : p)));
+        setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, ...updated, approvalStatus: 'APPROVED', status: 'ACTIVE' } : p)));
+        setSelectedProject((prev) => (prev?.id === projectId ? { ...prev, ...updated, approvalStatus: 'APPROVED', status: 'ACTIVE' } : prev));
+      }
+      const apiProjects = await fetchProjectsFromApi();
+      if (apiProjects) {
+        setProjects(apiProjects);
+        const ref = apiProjects.find((p) => p.id === projectId);
+        if (ref) setSelectedProject((prev) => (prev?.id === projectId ? ref : prev));
       }
     } catch (err: any) {
       alert(err.message || 'Failed to approve project.');
@@ -204,7 +211,14 @@ export default function App() {
     try {
       const updated = await rejectProjectApi(projectId, reason);
       if (updated) {
-        setProjects((prev) => prev.map((p) => (p.id === projectId ? updated : p)));
+        setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, ...updated, approvalStatus: 'REJECTED', status: 'DELAYED', rejectionReason: reason } : p)));
+        setSelectedProject((prev) => (prev?.id === projectId ? { ...prev, ...updated, approvalStatus: 'REJECTED', status: 'DELAYED', rejectionReason: reason } : prev));
+      }
+      const apiProjects = await fetchProjectsFromApi();
+      if (apiProjects) {
+        setProjects(apiProjects);
+        const ref = apiProjects.find((p) => p.id === projectId);
+        if (ref) setSelectedProject((prev) => (prev?.id === projectId ? ref : prev));
       }
     } catch (err: any) {
       alert(err.message || 'Failed to reject project.');
@@ -324,6 +338,20 @@ export default function App() {
     if (currentUser.role === 'EXECUTIVE_MANAGER') return budgets;
     return budgets.filter((b) => currentUser.assignedProjectCodes?.includes(b.projectCode));
   }, [budgets, currentUser]);
+
+  const combinedApprovals = useMemo(() => {
+    const pendingProjectDeletions: ApprovalRequest[] = projects
+      .filter((p) => p.approvalStatus === 'PENDING_DELETION')
+      .map((p) => ({
+        id: p.id,
+        project: p.code,
+        requestType: 'Project Deletion',
+        requestedBy: p.owner,
+        date: 'Just now',
+        status: 'Pending'
+      }));
+    return [...approvals, ...pendingProjectDeletions];
+  }, [projects, approvals]);
   const [meetings, setMeetings] = useState<MeetingItem[]>([]);
   const [discussions, setDiscussions] = useState<DiscussionItem[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -812,12 +840,12 @@ export default function App() {
             {/* Render Tab Views */}
             {currentTab === 'dashboard' && (
               <ExecutiveDashboardView
-                projects={searchedProjects}
-                risks={searchedRisks}
-                activities={activities}
-                milestones={milestones}
-                resources={resources}
-                approvals={approvals}
+                  projects={searchedProjects}
+                  risks={searchedRisks}
+                  activities={activities}
+                  milestones={milestones}
+                  resources={resources}
+                  approvals={combinedApprovals}
                 tasks={accessibleTasks}
                 budgets={accessibleBudgets}
                 meetings={meetings}
@@ -986,7 +1014,7 @@ export default function App() {
             {/* Approvals View */}
             {currentTab === 'approvals' && (
               <ApprovalsView
-                approvals={approvals}
+                approvals={combinedApprovals}
                 onAction={handleApprovalAction}
                 onApproveMemberAssignment={handleApproveMemberAssignment}
                 onNavigate={(tab) => handleSelectTab(tab)}

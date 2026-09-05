@@ -410,9 +410,24 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     }
   };
 
+  const isExecutiveUser = Boolean(
+    currentPersona?.roleType === 'EXECUTIVE_MANAGER' ||
+    currentPersona?.role === 'EXECUTIVE_MANAGER' ||
+    currentPersona?.roleType === 'EXECUTIVE' ||
+    (typeof currentPersona?.roleTitle === 'string' && currentPersona.roleTitle.toUpperCase().includes('EXECUTIVE')) ||
+    (typeof currentPersona?.role === 'string' && currentPersona.role.toUpperCase().includes('EXECUTIVE'))
+  );
+
+  const isPendingApprovalStatus = (status?: string) => {
+    if (!status) return true;
+    const s = status.toUpperCase().trim();
+    if (s === 'APPROVED' || s === 'REJECTED' || s === 'ARCHIVED') return false;
+    return true;
+  };
+
   // Handle Approval Status Badge
   const renderApprovalBadge = (p: Project) => {
-    const approval = p.approvalStatus || 'PENDING';
+    const approval = (p.approvalStatus || 'PENDING').toUpperCase().trim();
     if (approval === 'APPROVED') {
       return (
         <span className="px-2 py-0.5 bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold text-[9px] rounded-xs uppercase tracking-wider inline-flex items-center gap-1">
@@ -826,7 +841,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                           <div className="pt-0.5">{renderApprovalBadge(p)}</div>
                         </td>
                         <td className="px-4 py-3 text-right space-x-1.5 whitespace-nowrap">
-                          {currentPersona?.roleType === 'EXECUTIVE_MANAGER' && (p.approvalStatus === 'PENDING_APPROVAL' || !p.approvalStatus) && (
+                          {isExecutiveUser && isPendingApprovalStatus(p.approvalStatus) && (
                             <>
                               <button
                                 onClick={() => onApproveProject && onApproveProject(p.id)}
@@ -942,7 +957,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                       </div>
 
                       <div className="flex justify-between items-center pt-1 border-t border-slate-50">
-                        {currentPersona?.roleType === 'EXECUTIVE_MANAGER' && (p.approvalStatus === 'PENDING_APPROVAL' || !p.approvalStatus) ? (
+                        {isExecutiveUser && isPendingApprovalStatus(p.approvalStatus) ? (
                           <div className="flex gap-1">
                             <button
                               onClick={() => onApproveProject && onApproveProject(p.id)}
@@ -1627,7 +1642,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                     <>
                       <button
                         type="button"
-                        onClick={() => handleAdvanceStage(selectedProject)}
+                        onClick={() => onApproveProject && onApproveProject(selectedProject.id)}
                         className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-[11px] uppercase tracking-wider rounded-xs flex items-center gap-1 shadow-2xs"
                       >
                         <span className="material-symbols-outlined text-[15px]">verified</span>
@@ -1674,7 +1689,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                     </button>
                   )}
 
-                  {currentPersona?.roleType === 'EXECUTIVE_MANAGER' && (selectedProject.approvalStatus === 'PENDING_APPROVAL' || !selectedProject.approvalStatus) && (
+                  {isExecutiveUser && isPendingApprovalStatus(selectedProject.approvalStatus) && (
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => {
@@ -1954,217 +1969,47 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                 <>
                   {/* TAB 1: OVERVIEW & FINANCIALS */}
                   {projectDetailTab === 'Overview' && (
-                    <div className="space-y-6 animate-fadeIn">
-                      {/* Metric Cards Banner - Executive Admin View (Includes Financials) */}
-                      {userRoleMode === 'Executive Admin' && (
-                        <>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                            <div className="bg-white border border-slate-200/80 p-4 rounded-sm shadow-2xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Capital Budget</span>
-                              <p className="text-2xl font-black text-slate-900 font-mono">${(selectedProject.budget / 1000).toFixed(0)}k</p>
-                              <span className="text-[11px] text-slate-500">Allocated budget pool</span>
+                      <div className="space-y-6 animate-fadeIn">
+                        <div className="bg-white border border-slate-200/80 p-5 rounded-sm shadow-2xs space-y-4">
+                          <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-wider border-b pb-2">
+                            Project Details
+                          </h4>
+                          <div className="grid grid-cols-2 gap-4 text-xs">
+                            <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
+                              <span className="block text-slate-500 font-bold uppercase text-[10px]">Status</span>
+                              <span className="text-slate-900 font-bold">{selectedProject.status}</span>
                             </div>
-
-                            <div className="bg-white border border-slate-200/80 p-4 rounded-sm shadow-2xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Capital Burned</span>
-                              <p className="text-2xl font-black text-indigo-900 font-mono">${(selectedProject.spent / 1000).toFixed(0)}k</p>
-                              <span className="text-[11px] text-emerald-600 font-bold font-mono">
-                                {selectedProject.budget > 0 ? Math.round((selectedProject.spent / selectedProject.budget) * 100) : 0}% Utilized
+                            <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
+                              <span className="block text-slate-500 font-bold uppercase text-[10px]">Approval</span>
+                              <span className={`font-bold ${selectedProject.approvalStatus === 'REJECTED' ? 'text-rose-600' : selectedProject.approvalStatus === 'APPROVED' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                {selectedProject.approvalStatus || 'PENDING_APPROVAL'}
                               </span>
                             </div>
-
-                            <div className="bg-white border border-slate-200/80 p-4 rounded-sm shadow-2xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Remaining Balance</span>
-                              <p className="text-2xl font-black text-emerald-700 font-mono">
-                                ${(Math.max(0, selectedProject.budget - selectedProject.spent) / 1000).toFixed(0)}k
-                              </p>
-                              <span className="text-[11px] text-slate-500">Available capital funds</span>
+                            <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
+                              <span className="block text-slate-500 font-bold uppercase text-[10px]">Budget</span>
+                              <span className="text-slate-900 font-bold font-mono">${selectedProject.budget?.toLocaleString() || 0}</span>
                             </div>
-
-                            <div className="bg-white border border-slate-200/80 p-4 rounded-sm shadow-2xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Gate Milestone</span>
-                              <p className="text-xl font-black text-slate-900 font-mono">{selectedProject.gate}</p>
-                              <span className="text-[11px] text-indigo-700 font-bold uppercase">{getProjectStage(selectedProject)} Stage</span>
+                            <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
+                              <span className="block text-slate-500 font-bold uppercase text-[10px]">Start Date</span>
+                              <span className="text-slate-900 font-bold font-mono">{selectedProject.startDate || 'N/A'}</span>
+                            </div>
+                            <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
+                              <span className="block text-slate-500 font-bold uppercase text-[10px]">Target Date</span>
+                              <span className="text-slate-900 font-bold font-mono">{selectedProject.targetDate || 'N/A'}</span>
                             </div>
                           </div>
-
-                          {/* Real Project Information Card */}
-                          <div className="bg-white border border-slate-200/80 p-5 rounded-sm shadow-2xs space-y-4">
-                            <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-wider flex items-center gap-1.5 border-b pb-2">
-                              <span className="material-symbols-outlined text-indigo-700 text-[18px]">assignment</span>
-                              Project Information
-                            </h4>
-                            <div className="grid grid-cols-2 gap-3 text-xs">
-                              <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
-                                <span className="block text-slate-500 font-bold uppercase text-[10px] mb-0.5">Project Code</span>
-                                <span className="text-slate-900 font-mono font-bold">{selectedProject.code}</span>
-                              </div>
-                              <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
-                                <span className="block text-slate-500 font-bold uppercase text-[10px] mb-0.5">Department</span>
-                                <span className="text-slate-900 font-bold">{selectedProject.department}</span>
-                              </div>
-                              <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
-                                <span className="block text-slate-500 font-bold uppercase text-[10px] mb-0.5">Project Manager</span>
-                                <span className="text-slate-900 font-bold">{selectedProject.owner}</span>
-                              </div>
-                              <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
-                                <span className="block text-slate-500 font-bold uppercase text-[10px] mb-0.5">Gate Phase</span>
-                                <span className="text-slate-900 font-bold">{selectedProject.gate || '—'}</span>
-                              </div>
-                              <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
-                                <span className="block text-slate-500 font-bold uppercase text-[10px] mb-0.5">Start Date</span>
-                                <span className="text-slate-900 font-mono font-bold">{selectedProject.startDate || '—'}</span>
-                              </div>
-                              <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
-                                <span className="block text-slate-500 font-bold uppercase text-[10px] mb-0.5">Target Date</span>
-                                <span className="text-slate-900 font-mono font-bold">{selectedProject.targetDate || '—'}</span>
-                              </div>
-                              <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
-                                <span className="block text-slate-500 font-bold uppercase text-[10px] mb-0.5">Health Indicator</span>
-                                <div className="pt-0.5">{renderHealthBadge(selectedProject.health)}</div>
-                              </div>
-                              <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
-                                <span className="block text-slate-500 font-bold uppercase text-[10px] mb-0.5">Project Status</span>
-                                <div className="pt-0.5">{renderStatusBadge(selectedProject.status)}</div>
-                              </div>
-                              {selectedProject.approvalStatus === 'APPROVED' && selectedProject.approvedBy && (
-                                <div className="bg-emerald-50 p-3 rounded-xs border border-emerald-200 col-span-2">
-                                  <span className="block text-emerald-700 font-bold uppercase text-[10px] mb-0.5">Approved By</span>
-                                  <span className="text-emerald-900 font-bold">{selectedProject.approvedBy}</span>
-                                </div>
-                              )}
-                              {selectedProject.approvalStatus === 'REJECTED' && selectedProject.rejectionReason && (
-                                <div className="bg-rose-50 p-3 rounded-xs border border-rose-200 col-span-2">
-                                  <span className="block text-rose-700 font-bold uppercase text-[10px] mb-0.5">Rejection Reason</span>
-                                  <span className="text-rose-900 font-bold text-xs">{selectedProject.rejectionReason}</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-                      {/* Metric Cards Banner - Team Member View (Focuses on Execution & Tasks) */}
-                      {userRoleMode === 'Project Member' && (
-                        <>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                            <div className="bg-white border border-slate-200/80 p-4 rounded-sm shadow-2xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Project Completion</span>
-                              <p className="text-2xl font-black text-blue-700 font-mono">{selectedProject.progress}%</p>
-                              <span className="text-[11px] text-slate-500">Overall deliverable progress</span>
-                            </div>
-
-                            <div className="bg-white border border-slate-200/80 p-4 rounded-sm shadow-2xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Active Gate Phase</span>
-                              <p className="text-xl font-black text-slate-900 font-mono">{selectedProject.gate}</p>
-                              <span className="text-[11px] text-indigo-700 font-bold uppercase">{getProjectStage(selectedProject)} Stage</span>
-                            </div>
-
-                            <div className="bg-white border border-slate-200/80 p-4 rounded-sm shadow-2xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Target Launch Date</span>
-                              <p className="text-lg font-black text-slate-800 font-mono">{selectedProject.targetDate}</p>
-                              <span className="text-[11px] text-emerald-600 font-bold">On Schedule</span>
-                            </div>
-
-                            <div className="bg-white border border-slate-200/80 p-4 rounded-sm shadow-2xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Lead Executive PM</span>
-                              <p className="text-sm font-black text-slate-900">{selectedProject.owner}</p>
-                              <span className="text-[11px] text-slate-500">{selectedProject.department}</span>
-                            </div>
-                          </div>
-
-                          {/* Team Member Workspace Banner */}
-                          <div className="bg-blue-900 text-white p-4 rounded-sm shadow-2xs space-y-2 border border-blue-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                            <div className="flex items-center gap-3">
-                              <span className="material-symbols-outlined text-blue-300 text-[24px]">badge</span>
-                              <div>
-                                <h4 className="font-extrabold text-sm uppercase tracking-wider text-white">Team Member Work Portal</h4>
-                                <p className="text-[11px] text-blue-200">
-                                  Displaying assigned project objectives, deliverables, participant team, and tech stack.
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-4 border-t md:border-t-0 md:border-l border-blue-800 pt-3 md:pt-0 md:pl-4">
-                              <div className="text-right">
-                                <span className="block text-[10px] text-blue-300 uppercase tracking-wider font-bold">My Responsibility</span>
-                                <span className="block text-sm font-black text-amber-400">
-                                  {projectTeamMembers.find(m => String(m.id) === String(currentPersona?.id))?.responsibility || 'General Member'}
-                                </span>
-                              </div>
-                              <button
-                                onClick={() => setProjectDetailTab('Works Done')}
-                                className="px-3 py-1.5 bg-blue-500 hover:bg-blue-400 text-white font-bold text-xs uppercase tracking-wider rounded-xs shadow-2xs flex items-center gap-1 whitespace-nowrap"
-                              >
-                                <span className="material-symbols-outlined text-[15px]">task_alt</span>
-                                View Deliverables
-                              </button>
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-                      {/* Metric Cards Banner - Stakeholder Read-Only View */}
-                      {userRoleMode === 'Stakeholder' && (
-                        <>
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            <div className="bg-white border border-slate-200/80 p-4 rounded-sm shadow-2xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Initiative Health</span>
-                              <div className="pt-1">{renderHealthBadge(selectedProject.health)}</div>
-                              <span className="text-[11px] text-slate-500 block pt-1">Executive Health Indicator</span>
-                            </div>
-
-                            <div className="bg-white border border-slate-200/80 p-4 rounded-sm shadow-2xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Overall Progress</span>
-                              <p className="text-2xl font-black text-slate-900 font-mono">{selectedProject.progress}%</p>
-                              <span className="text-[11px] text-slate-500">Milestone completion</span>
-                            </div>
-
-                            <div className="bg-white border border-slate-200/80 p-4 rounded-sm shadow-2xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Target Delivery</span>
-                              <p className="text-xl font-black text-indigo-900 font-mono">{selectedProject.targetDate}</p>
-                              <span className="text-[11px] text-indigo-700 font-bold uppercase">{selectedProject.gate}</span>
-                            </div>
-                          </div>
-
-                          <div className="bg-slate-800 text-white p-4 rounded-sm shadow-2xs border border-slate-700 flex items-center gap-3">
-                            <span className="material-symbols-outlined text-amber-300 text-[22px]">visibility</span>
-                            <div>
-                              <h4 className="font-extrabold text-xs uppercase tracking-wider text-white">Stakeholder Overview Mode</h4>
-                              <p className="text-[11px] text-slate-300">
-                                Read-only summary presentation for enterprise stakeholders and executive observers.
-                              </p>
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-                      {/* Rejection Banner */}
-                      {selectedProject.approvalStatus === 'REJECTED' && selectedProject.rejectionReason && (
-                        <div className="bg-rose-50 border border-rose-200 p-4 rounded-xs flex items-start gap-3 shadow-2xs">
-                          <span className="material-symbols-outlined text-rose-600 text-[24px]">error</span>
                           <div>
-                            <h4 className="text-rose-900 font-extrabold text-sm mb-1">Project Charter Rejected</h4>
-                            <p className="text-rose-800 text-xs font-medium">{selectedProject.rejectionReason}</p>
+                            <span className="block text-slate-500 font-bold uppercase text-[10px] mb-1">Description</span>
+                            <p className="text-slate-800 text-xs bg-slate-50 p-3 rounded-xs border border-slate-200 whitespace-pre-wrap">
+                              {selectedProject.description || 'No description provided.'}
+                            </p>
                           </div>
                         </div>
-                      )}
-
-                      {/* Project Charter & Objectives */}
-                      <div className="bg-white border border-slate-200/80 p-5 rounded-sm shadow-2xs space-y-3">
-                        <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-wider flex items-center gap-1.5 border-b pb-2">
-                          <span className="material-symbols-outlined text-indigo-700 text-[18px]">description</span>
-                          Project Charter &amp; Objective Statement
-                        </h4>
-                        <p className="text-slate-700 leading-relaxed text-xs">
-                          {selectedProject.description ||
-                            `Enterprise initiative ${selectedProject.name} (${selectedProject.code}) is commissioned under the ${selectedProject.department} division to deliver critical system capabilities, technical modernization, and governance gate clearances.`}
-                        </p>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* TAB 2: LIFECYCLE GOVERNANCE & STAGE TEMPLATES */}
-                  {projectDetailTab === 'Lifecycle' && (
+                    {/* TAB 2: LIFECYCLE GOVERNANCE & STAGE TEMPLATES */}
+                    {false && (
                     <div className="space-y-6 animate-fadeIn">
                       {/* Interactive 5-Stage Stepper Banner */}
                       <div className="bg-white border border-slate-200/80 p-6 rounded-sm shadow-2xs space-y-4">
@@ -2623,7 +2468,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                   )}
 
                   {/* TAB 4: PROGRESS & WORKS DONE */}
-                  {projectDetailTab === 'Works Done' && (
+                  {false && (
                     <div className="space-y-6 animate-fadeIn">
                       {/* Work Deliverables Header Banner */}
                       <div className="bg-white p-5 border border-slate-200/80 rounded-sm shadow-2xs space-y-4">
@@ -2648,7 +2493,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                         </div>
 
                         {/* Add New Deliverable Form or Approval Lock Banner */}
-                        {selectedProject.approvalStatus === 'PENDING_APPROVAL' || (!selectedProject.approvalStatus && currentPersona?.roleType === 'PROJECT_MANAGER') ? (
+                        {isPendingApprovalStatus(selectedProject.approvalStatus) ? (
                           <div className="bg-amber-50 border border-amber-200 p-4 rounded-xs text-amber-900 text-xs flex items-center gap-3">
                             <span className="material-symbols-outlined text-amber-600 text-[24px]">pending_actions</span>
                             <div>
@@ -2883,7 +2728,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                   )}
 
                   {/* TAB 6: PROJECT CHAT & TELEGRAM */}
-                  {projectDetailTab === 'Chat' && (
+                  {false && (
                     <div className="space-y-4 animate-fadeIn">
                       <div className="bg-white p-4 border border-slate-200/80 rounded-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                         <div>
@@ -2983,7 +2828,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                   )}
 
                   {/* TAB 7: REQUIREMENTS MATRIX */}
-                  {projectDetailTab === 'Requirements' && (
+                  {false && (
                     <div className="space-y-4 animate-fadeIn">
                       <div className="bg-white p-4 border border-slate-200/80 rounded-sm">
                         <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">

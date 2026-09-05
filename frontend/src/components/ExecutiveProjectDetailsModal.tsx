@@ -6,15 +6,21 @@ interface ExecutiveProjectDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
   project: Project | null;
+  onApprove?: (id: string) => void;
+  onReject?: (id: string, reason: string) => void;
 }
 
 export const ExecutiveProjectDetailsModal: React.FC<ExecutiveProjectDetailsModalProps> = ({
   isOpen,
   onClose,
-  project
+  project,
+  onApprove,
+  onReject
 }) => {
   const [teamMembers, setTeamMembers] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isRejecting, setIsRejecting] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
 
   useEffect(() => {
     if (isOpen && project) {
@@ -69,7 +75,7 @@ export const ExecutiveProjectDetailsModal: React.FC<ExecutiveProjectDetailsModal
               <span className="material-symbols-outlined text-indigo-600">assignment</span>
               Project Information
             </h4>
-            
+
             <div className="grid grid-cols-2 gap-4 text-xs">
               <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
                 <span className="block text-slate-500 font-bold uppercase text-[10px]">Status</span>
@@ -119,7 +125,7 @@ export const ExecutiveProjectDetailsModal: React.FC<ExecutiveProjectDetailsModal
               <span className="material-symbols-outlined text-indigo-600">groups</span>
               Assigned Project Team
             </h4>
-            
+
             {loading ? (
               <div className="text-center py-4 text-slate-500 text-xs">Loading team members...</div>
             ) : teamMembers.length === 0 ? (
@@ -151,12 +157,60 @@ export const ExecutiveProjectDetailsModal: React.FC<ExecutiveProjectDetailsModal
             )}
           </div>
         </div>
-        
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end shrink-0">
-          <button onClick={onClose} className="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xs transition-colors text-xs uppercase tracking-wider">
-            Close
-          </button>
-        </div>
+
+        {isRejecting ? (
+          <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col gap-3 shrink-0">
+            <h4 className="text-slate-800 font-bold text-sm">Reason for Rejection</h4>
+            <textarea
+              className="w-full border border-slate-300 p-2 rounded-xs text-sm"
+              rows={3}
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              placeholder="Please provide a reason for rejecting this project..."
+            />
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setIsRejecting(false)} className="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xs transition-colors text-xs uppercase tracking-wider">
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (onReject) onReject(project.id, rejectionReason);
+                  onClose();
+                }}
+                disabled={!rejectionReason.trim()}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold rounded-xs transition-colors text-xs uppercase tracking-wider"
+              >
+                Confirm Rejection
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-between shrink-0 items-center">
+            <button onClick={onClose} className="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xs transition-colors text-xs uppercase tracking-wider">
+              Close
+            </button>
+
+            {((project.approvalStatus || '').toUpperCase().trim() !== 'APPROVED' && (project.approvalStatus || '').toUpperCase().trim() !== 'REJECTED' && (project.approvalStatus || '').toUpperCase().trim() !== 'ARCHIVED') && onApprove && onReject && (
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setIsRejecting(true)}
+                  className="px-5 py-2 border border-rose-600 text-rose-600 hover:bg-rose-50 font-bold rounded-xs transition-colors text-xs uppercase tracking-wider"
+                >
+                  Reject
+                </button>
+                <button
+                  onClick={() => {
+                    onApprove(project.id);
+                    onClose();
+                  }}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xs transition-colors text-xs uppercase tracking-wider shadow-2xs"
+                >
+                  Approve Project
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
