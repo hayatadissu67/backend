@@ -19,11 +19,20 @@ export const protect = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Load user including their role
-    const user = await User.findByPk(decoded.id, {
-      attributes: { exclude: ["password"] },
-      include: [{ model: Role, as: "role", attributes: ["id", "code", "name"] }],
-    });
+    // Load user including their role — fall back to plain lookup if FK join fails
+    let user;
+    try {
+      user = await User.findByPk(decoded.id, {
+        attributes: { exclude: ["password"] },
+        include: [{ model: Role, as: "role", attributes: ["id", "code", "name"] }],
+      });
+    } catch (joinErr) {
+      // FK schema conflict on the shared DB can cause the JOIN to fail.
+      // Fall back to loading the user without the role join.
+      user = await User.findByPk(decoded.id, {
+        attributes: { exclude: ["password"] },
+      });
+    }
 
     if (!user) {
       return res.status(401).json({ success: false, message: "User not found" });

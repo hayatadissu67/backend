@@ -14,8 +14,8 @@ export const permissions = {
 
   // Tasks
   'tasks.view': ['EXECUTIVE_MANAGER', 'PROJECT_MANAGER', 'RISK_MANAGER', 'TEAM_MEMBER'],
-  'tasks.create': ['PROJECT_MANAGER', 'TEAM_MEMBER'],
-  'tasks.update': ['PROJECT_MANAGER', 'TEAM_MEMBER'],
+  'tasks.create': ['EXECUTIVE_MANAGER', 'PROJECT_MANAGER', 'TEAM_MEMBER'],
+  'tasks.update': ['EXECUTIVE_MANAGER', 'PROJECT_MANAGER', 'TEAM_MEMBER'],
 
   // Change Requests
   'change_requests.view': ['EXECUTIVE_MANAGER', 'PROJECT_MANAGER', 'RISK_MANAGER'],
@@ -49,7 +49,9 @@ export const permissions = {
 
   // Resources & Portfolios
   'resources.view': ['EXECUTIVE_MANAGER', 'PROJECT_MANAGER', 'RISK_MANAGER'],
-  'resources.update': ['PROJECT_MANAGER'],
+  'resources.update': ['EXECUTIVE_MANAGER', 'PROJECT_MANAGER'],
+  'resources.request': ['EXECUTIVE_MANAGER', 'PROJECT_MANAGER'],
+  'resources.approve': ['EXECUTIVE_MANAGER'],
   'portfolios.view': ['EXECUTIVE_MANAGER', 'PROJECT_MANAGER'],
   'portfolios.create': ['EXECUTIVE_MANAGER'],
   'portfolios.update': ['EXECUTIVE_MANAGER'],

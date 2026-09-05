@@ -2,6 +2,15 @@ import React, { useState } from 'react';
 import { UserItem, UserRoleType, LoggedInPersona } from '../types';
 import { createUserApi, deleteUserApi, updateUserStatusApi, updateUserApi } from '../services/api';
 
+const getRoleCode = (role: unknown): string => {
+  if (typeof role === 'string') return role;
+  if (role && typeof role === 'object') {
+    const roleRecord = role as { code?: string; name?: string };
+    return roleRecord.code || roleRecord.name || '';
+  }
+  return '';
+};
+
 interface UsersViewProps {
   users: UserItem[];
   onAddUser: (user: UserItem) => void;
@@ -99,17 +108,16 @@ export const UsersView: React.FC<UsersViewProps> = ({
   // If current persona is a Project Manager, only show Team Members in this view
   const visibleUsers = isPM ? users.filter((u) => {
     if (!u) return false;
-    if (typeof u.role === 'string') return u.role === 'TEAM_MEMBER';
-    return u.role && (u.role.code === 'TEAM_MEMBER' || u.role.name === 'TEAM_MEMBER');
+    return getRoleCode(u.role) === 'TEAM_MEMBER';
   }) : users;
 
   const filteredUsers = visibleUsers.filter((u) => {
     const matchesSearch =
       u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.department.toLowerCase().includes(searchTerm.toLowerCase());
+      (u.department || '').toLowerCase().includes(searchTerm.toLowerCase());
 
-    const userRoleCode = typeof u.role === 'string' ? u.role : (u.role?.code || u.role?.name || '');
+    const userRoleCode = getRoleCode(u.role);
     const matchesRole = roleFilter === 'ALL' || userRoleCode === roleFilter;
     const matchesStatus = statusFilter === 'ALL' || u.status === statusFilter;
 
@@ -236,7 +244,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
             <p className="text-slate-700 leading-relaxed">
               Account for <strong className="text-slate-900">{createdPasswordInfo.user.name}</strong> (
               <span className="text-slate-600 font-mono">{createdPasswordInfo.user.email}</span>) was created as{' '}
-              <strong>{createdPasswordInfo.user.role.replace(/_/g, ' ')}</strong>.
+              <strong>{getRoleCode(createdPasswordInfo.user.role).replace(/_/g, ' ')}</strong>.
             </p>
 
             <div className="bg-slate-50 border border-slate-300 p-3 rounded-lg space-y-1.5">
@@ -528,7 +536,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
                           <div>
                             <p className="font-bold text-slate-900 group-hover:text-indigo-900 transition-colors flex items-center gap-1.5">
                               {u.name}
-                              {u.role === 'EXECUTIVE_MANAGER' && (
+                              {getRoleCode(u.role) === 'EXECUTIVE_MANAGER' && (
                                 <span className="text-[9px] bg-purple-100 text-purple-900 font-mono px-1.5 rounded-xs font-bold">
                                   DIRECTOR
                                 </span>
@@ -544,10 +552,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
                         </div>
                       </td>
                       <td className="p-3 font-bold text-slate-900">
-                        {u.role === 'PROJECT_MANAGER' ? 'Project Manager' :
-                         u.role === 'TEAM_MEMBER' ? 'Team Member' :
-                         u.role === 'RISK_MANAGER' ? 'Risk Manager' :
-                         u.role === 'EXECUTIVE_MANAGER' ? 'Executive Manager' : u.role}
+                        {getRoleCode(u.role).replace(/_/g, ' ')}
                       </td>
                       <td className="p-3 text-slate-600 font-medium">{u.department}</td>
                       <td className="p-3">

@@ -111,6 +111,28 @@ export interface ResourceLoading {
   colorClass: string;
 }
 
+export interface ResourceRecord {
+  id: number | string;
+  type: 'ALLOCATION' | 'ASSIGNMENT_REQUEST';
+  projectId?: string | null;
+  userId?: number | null;
+  employeeName?: string | null;
+  projectTarget?: string | null;
+  assignedTask?: string | null;
+  hoursPerWeek: number;
+  pmRequesterName?: string | null;
+  requestedWorkEmail?: string | null;
+  department: string;
+  projectRoleTitle?: string | null;
+  businessJustification?: string | null;
+  approvalComment?: string | null;
+  rejectionComment?: string | null;
+  status: 'ACTIVE' | 'PENDING' | 'APPROVED' | 'REJECTED';
+  createdAt?: string;
+  project?: Project;
+  user?: UserItem;
+}
+
 export interface ApprovalRequest {
   id: string;
   project: string;
@@ -279,6 +301,8 @@ export interface TaskItem {
   hoursLogged?: number;
   description?: string;
   comments?: TaskItemComment[];
+  parentTaskId?: string | null;
+  subTasks?: TaskItem[];
 }
 
 export interface BudgetItem {

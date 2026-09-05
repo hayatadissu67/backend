@@ -13,8 +13,8 @@ export const authorizePermission = (permission) => {
     } else if (req.user.role && typeof req.user.role === 'object') {
       roleCode = req.user.role.code || req.user.role.name || null;
     }
-    // Fallback: if top-level roleCode property exists on user
-    roleCode = roleCode || req.user.roleCode || req.user.roleCode || null;
+    // Fallback: support role values from older tokens/user records.
+    roleCode = roleCode || req.user.roleCode || null;
 
     if (!roleCode) {
       return res.status(403).json({ success: false, message: 'Access denied: no role' });
@@ -25,7 +25,11 @@ export const authorizePermission = (permission) => {
       return res.status(403).json({ success: false, message: 'Access denied: unknown permission' });
     }
 
-    if (!allowed.map((r) => r.toLowerCase()).includes(String(roleCode).toLowerCase())) {
+    const normalizedRoleCode = String(roleCode)
+      .trim()
+      .replace(/[\s-]+/g, "_")
+      .toUpperCase();
+    if (!allowed.map((r) => r.toUpperCase()).includes(normalizedRoleCode)) {
       return res.status(403).json({ success: false, message: 'Access denied: insufficient permissions' });
     }
 

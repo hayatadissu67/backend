@@ -37,7 +37,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
     | 'Create Task'
     | 'Assign Members'
     | 'Kanban Board'
-    | 'Calendar & Deadlines'
+    | 'Deadlines'
     | 'Reports'
   >(currentPersona && currentPersona.roleType !== 'PROJECT_MANAGER' && currentPersona.roleType !== 'EXECUTIVE_MANAGER' ? 'My Tasks' : 'Overview');
 
@@ -77,6 +77,21 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const [description, setDescription] = useState<string>('');
   const [initialStatus, setInitialStatus] = useState<TaskItem['status']>('Backlog');
 
+  // Sub Tasks state
+  const [subTaskInputs, setSubTaskInputs] = useState<{ id: number; title: string }[]>([]);
+
+  const addSubTaskInput = () => {
+    setSubTaskInputs(prev => [...prev, { id: Date.now(), title: '' }]);
+  };
+
+  const removeSubTaskInput = (id: number) => {
+    setSubTaskInputs(prev => prev.filter(st => st.id !== id));
+  };
+
+  const updateSubTaskTitle = (id: number, value: string) => {
+    setSubTaskInputs(prev => prev.map(st => st.id === id ? { ...st, title: value } : st));
+  };
+
   // Report Risk to PM State (Team Member Feature)
   const [showReportRiskModal, setShowReportRiskModal] = useState<boolean>(false);
   const [riskSubject, setRiskSubject] = useState<string>('');
@@ -88,6 +103,8 @@ export const TasksView: React.FC<TasksViewProps> = ({
 
   // Success Toast state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  // Completion notification state — shown as a modal overlay when notify button clicked
+  const [completionNotif, setCompletionNotif] = useState<{ task: TaskItem; member: string } | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -125,36 +142,63 @@ export const TasksView: React.FC<TasksViewProps> = ({
 
   const handleCreateTask = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+
+    // Deadline must not be in the past
+    const today = new Date().toISOString().split('T')[0];
+    if (dueDate < today) {
+      showToast('⚠️ Deadline cannot be a past date.');
+      return;
+    }
 
     const matchedProject = projects.find((p) => p.code === projectCode);
+    // Title is auto-generated from project + assignee since the field was removed
+    const autoTitle = title.trim() || `${matchedProject?.name || projectCode} — ${assignee}`;
 
     const newTask: TaskItem = {
       id: `t-${Date.now()}`,
-      title,
+      title: autoTitle,
       projectCode,
       projectName: matchedProject ? matchedProject.name : projectCode,
       assignee,
-      status: initialStatus,
+      status: 'Backlog',   // always TO_DO on creation — no user selection
       priority,
       dueDate,
       startDate,
-      progress: initialStatus === 'Done' ? 100 : 0,
+      progress: 0,
       estimatedHours: Number(estimatedHours) || 16,
       hoursLogged: 0,
-      description: description || 'Task assigned by Project Manager.',
-      comments: []
+      description: description || '',
+      comments: [],
+      subTasks: subTaskInputs
+        .filter(st => st.title.trim())
+        .map(st => ({
+          id: `st-${st.id}`,
+          title: st.title.trim(),
+          projectCode,
+          projectName: matchedProject ? matchedProject.name : projectCode,
+          assignee,
+          status: 'Backlog' as TaskItem['status'],
+          priority,
+          dueDate,
+          startDate,
+          progress: 0,
+          estimatedHours: Number(estimatedHours) || 16,
+          hoursLogged: 0,
+          description: '',
+          comments: [],
+        })),
     };
 
     onAddTask(newTask);
-    showToast(`Task "${title}" created and assigned to ${assignee}!`);
-    
+    showToast(`Task created and assigned to ${assignee}!`);
+
     // Reset form
     setTitle('');
     setDescription('');
+    setSubTaskInputs([]);
     setShowAddModal(false);
 
-    // If on Create Task tab, switch to Kanban or My Tasks
+    // If on Create Task tab, switch to Task List
     if (activeTab === 'Create Task') {
       setActiveTab('Task List');
     }
@@ -276,7 +320,6 @@ export const TasksView: React.FC<TasksViewProps> = ({
     { status: 'Backlog', title: 'To Do / Backlog', color: 'bg-slate-100 text-slate-800', border: 'border-slate-300', icon: 'list_alt' },
     { status: 'In Progress', title: 'In Progress', color: 'bg-blue-100 text-blue-900', border: 'border-blue-300', icon: 'directions_run' },
     { status: 'Blocked', title: 'Blocked', color: 'bg-red-100 text-red-900', border: 'border-red-300', icon: 'block' },
-    { status: 'Review', title: 'In Review', color: 'bg-amber-100 text-amber-900', border: 'border-amber-300', icon: 'rate_review' },
     { status: 'Done', title: 'Completed', color: 'bg-emerald-100 text-emerald-900', border: 'border-emerald-300', icon: 'task_alt' }
   ];
 
@@ -287,6 +330,15 @@ export const TasksView: React.FC<TasksViewProps> = ({
       if (!assigneeList.includes(u.name)) assigneeList.push(u.name);
     });
   }
+  const teamMemberNames = users
+    .filter((user) => user.role === 'TEAM_MEMBER' && user.status === 'Active')
+    .map((user) => user.name);
+
+  useEffect(() => {
+    if (teamMemberNames.length > 0 && !teamMemberNames.includes(assignee)) {
+      setAssignee(teamMemberNames[0]);
+    }
+  }, [assignee, teamMemberNames]);
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
@@ -337,7 +389,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
           { key: 'Create Task', label: 'Create Task', icon: 'add_task' },
           { key: 'Assign Members', label: 'Assign Members', icon: 'group_add' },
           { key: 'Kanban Board', label: 'Kanban Board', icon: 'view_kanban' },
-          { key: 'Calendar & Deadlines', label: 'Calendar & Deadlines', icon: 'event' },
+          { key: 'Deadlines', label: 'Deadlines', icon: 'event' },
           { key: 'Reports', label: 'Reports', icon: 'assessment' }
         ].filter(tab => {
           if (currentPersona?.roleType === 'TEAM_MEMBER') {
@@ -550,11 +602,16 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   onChange={(e) => setSelectedDeveloper(e.target.value)}
                   className="bg-white text-slate-900 border border-slate-300 font-bold text-xs rounded-sm px-3 py-1.5 outline-none shadow-xs"
                 >
-                  {assigneeList.map((person) => (
+                  {teamMemberNames.map((person) => (
                     <option key={person} value={person}>
                       {person}
                     </option>
                   ))}
+                  {teamMemberNames.length === 0 && (
+                    <option value="" disabled>
+                      No active team members available
+                    </option>
+                  )}
                 </select>
               </div>
             </div>
@@ -562,27 +619,18 @@ export const TasksView: React.FC<TasksViewProps> = ({
             {/* Selected Developer Stats Summary */}
             {(() => {
               const myTasksList = tasks.filter((t) => t.assignee === selectedDeveloper);
-              const myInProgress = myTasksList.filter((t) => t.status === 'In Progress').length;
-              const myBlocked = myTasksList.filter((t) => t.status === 'Blocked').length;
-              const totalHours = myTasksList.reduce((sum, t) => sum + (t.hoursLogged || 0), 0);
 
               return (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
                   <div className="bg-white/10 border border-white/15 p-2.5 rounded-xs">
                     <span className="text-[10px] text-slate-300 font-bold uppercase block">Assigned Tasks</span>
                     <p className="font-black text-xl text-white font-mono">{myTasksList.length}</p>
                   </div>
                   <div className="bg-white/10 border border-white/15 p-2.5 rounded-xs">
-                    <span className="text-[10px] text-slate-300 font-bold uppercase block">In Execution</span>
-                    <p className="font-black text-xl text-amber-300 font-mono">{myInProgress}</p>
-                  </div>
-                  <div className="bg-white/10 border border-white/15 p-2.5 rounded-xs">
-                    <span className="text-[10px] text-slate-300 font-bold uppercase block">Blocked Items</span>
-                    <p className="font-black text-xl text-red-300 font-mono">{myBlocked}</p>
-                  </div>
-                  <div className="bg-white/10 border border-white/15 p-2.5 rounded-xs">
-                    <span className="text-[10px] text-slate-300 font-bold uppercase block">Hours Logged</span>
-                    <p className="font-black text-xl text-emerald-300 font-mono">{totalHours} hrs</p>
+                    <span className="text-[10px] text-slate-300 font-bold uppercase block">Completed</span>
+                    <p className="font-black text-xl text-emerald-300 font-mono">
+                      {myTasksList.filter((t) => t.status === 'Done').length}
+                    </p>
                   </div>
                 </div>
               );
@@ -669,7 +717,6 @@ export const TasksView: React.FC<TasksViewProps> = ({
                               <option value="Backlog">To Do / Backlog</option>
                               <option value="In Progress">In Progress</option>
                               <option value="Blocked">Blocked</option>
-                              <option value="Review">In Review</option>
                               <option value="Done">Completed</option>
                             </select>
                           </div>
@@ -749,7 +796,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                               if (onNotifyPM) {
                                 onNotifyPM(t, selectedDeveloper, 'Finished task & updated progress to 100%.');
                               }
-                              showToast(`Task completed & notification sent to Project Manager.`);
+                              setCompletionNotif({ task: t, member: selectedDeveloper });
                             }}
                             className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-sm shadow-xs flex items-center gap-1.5 transition-all transform active:scale-95"
                           >
@@ -943,7 +990,6 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 <option value="Backlog">To Do / Backlog</option>
                 <option value="In Progress">In Progress</option>
                 <option value="Blocked">Blocked</option>
-                <option value="Review">In Review</option>
                 <option value="Done">Completed</option>
               </select>
 
@@ -973,19 +1019,21 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     <th className="p-3">Status</th>
                     <th className="p-3">Progress</th>
                     <th className="p-3">Deadline</th>
+                    <th className="p-3">Sub Tasks</th>
                     <th className="p-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredTasks.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="p-8 text-center text-slate-400 text-xs font-medium">
+                      <td colSpan={9} className="p-8 text-center text-slate-400 text-xs font-medium">
                         No tasks matching current search filter criteria.
                       </td>
                     </tr>
                   ) : (
                     filteredTasks.map((t) => {
                       const overdue = isOverdue(t);
+                      const subTaskList = t.subTasks || [];
                       return (
                         <tr key={t.id} className="hover:bg-slate-50 transition-colors">
                           <td className="p-3 font-mono font-bold text-indigo-900">
@@ -1054,6 +1102,37 @@ export const TasksView: React.FC<TasksViewProps> = ({
                               <span className="block text-[9px] font-bold text-red-600 uppercase">Overdue</span>
                             )}
                           </td>
+                          <td className="p-3 min-w-[160px]">
+                            {subTaskList.length === 0 ? (
+                              <span className="text-[10px] text-slate-400 italic">—</span>
+                            ) : (
+                              <div className="space-y-1">
+                                <span className="text-[10px] font-black text-indigo-700 uppercase tracking-wide flex items-center gap-1">
+                                  <span className="material-symbols-outlined text-[13px]">account_tree</span>
+                                  {subTaskList.length} Sub Task{subTaskList.length !== 1 ? 's' : ''}
+                                </span>
+                                <div className="space-y-0.5">
+                                  {subTaskList.map((st) => (
+                                    <div key={st.id} className="flex items-center gap-1 text-[10px] text-slate-600">
+                                      <span className="material-symbols-outlined text-[11px] text-slate-400">subdirectory_arrow_right</span>
+                                      <span className="truncate max-w-[130px] font-medium">{st.title}</span>
+                                      <span className={`shrink-0 px-1 py-px rounded-xs font-bold text-[9px] uppercase ${
+                                        st.status === 'Done'
+                                          ? 'bg-emerald-100 text-emerald-700'
+                                          : st.status === 'In Progress'
+                                          ? 'bg-blue-100 text-blue-700'
+                                          : st.status === 'Blocked'
+                                          ? 'bg-red-100 text-red-700'
+                                          : 'bg-slate-100 text-slate-600'
+                                      }`}>
+                                        {st.status}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </td>
                           <td className="p-3 text-right">
                             <div className="flex justify-end items-center gap-1">
                               <button
@@ -1099,18 +1178,6 @@ export const TasksView: React.FC<TasksViewProps> = ({
           </div>
 
           <form onSubmit={handleCreateTask} className="space-y-4 text-xs">
-            <div>
-              <label className="block font-bold text-slate-800 uppercase mb-1">Task Title / Deliverable Name *</label>
-              <input
-                type="text"
-                required
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g., Build API Gateway Auth Middleware or Database Indexing..."
-                className="w-full border border-slate-300 p-2.5 rounded-sm text-xs outline-none focus:border-blue-600 font-medium"
-              />
-            </div>
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block font-bold text-slate-800 uppercase mb-1">Target Project *</label>
@@ -1142,16 +1209,21 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   onChange={(e) => setAssignee(e.target.value)}
                   className="w-full border border-slate-300 p-2.5 rounded-sm text-xs font-bold text-slate-800 outline-none"
                 >
-                  {assigneeList.map((person) => (
+                  {teamMemberNames.map((person) => (
                     <option key={person} value={person}>
                       {person}
                     </option>
                   ))}
+                  {teamMemberNames.length === 0 && (
+                    <option value="" disabled>
+                      No active team members available
+                    </option>
+                  )}
                 </select>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block font-bold text-slate-800 uppercase mb-1">Priority</label>
                 <select
@@ -1163,18 +1235,6 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   <option value="Medium">Medium Priority</option>
                   <option value="Low">Low Priority</option>
                 </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-800 uppercase mb-1">Estimated Work Hours</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="500"
-                  value={estimatedHours}
-                  onChange={(e) => setEstimatedHours(parseInt(e.target.value) || 16)}
-                  className="w-full border border-slate-300 p-2.5 rounded-sm text-xs font-mono font-bold"
-                />
               </div>
 
               <div>
@@ -1190,29 +1250,59 @@ export const TasksView: React.FC<TasksViewProps> = ({
               </div>
             </div>
 
-            <div>
-              <label className="block font-bold text-slate-800 uppercase mb-1">Initial Status</label>
-              <select
-                value={initialStatus}
-                onChange={(e) => setInitialStatus(e.target.value as any)}
-                className="w-full border border-slate-300 p-2.5 rounded-sm text-xs font-bold outline-none"
-              >
-                <option value="Backlog">To Do / Backlog</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Blocked">Blocked</option>
-                <option value="Review">In Review</option>
-              </select>
-            </div>
+            {/* SUB TASKS SECTION */}
+            <div className="border border-slate-200 rounded-sm overflow-hidden">
+              <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-indigo-600 text-[18px]">account_tree</span>
+                  <span className="font-black text-slate-800 text-xs uppercase tracking-wider">Sub Tasks</span>
+                  {subTaskInputs.length > 0 && (
+                    <span className="bg-indigo-100 text-indigo-800 text-[10px] font-black px-2 py-0.5 rounded-full">
+                      {subTaskInputs.length}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={addSubTaskInput}
+                  className="flex items-center gap-1 px-3 py-1 bg-[#00174b] hover:bg-indigo-950 text-white font-bold text-[11px] rounded-xs transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[14px]">add</span>
+                  Add Sub Task
+                </button>
+              </div>
 
-            <div>
-              <label className="block font-bold text-slate-800 uppercase mb-1">Deliverable Instructions &amp; Description</label>
-              <textarea
-                rows={4}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Provide details, acceptance criteria, tech stack notes, or links for the developer..."
-                className="w-full border border-slate-300 p-2.5 rounded-sm text-xs outline-none focus:border-blue-600"
-              />
+              <div className="p-3 space-y-2">
+                {subTaskInputs.length === 0 ? (
+                  <p className="text-[11px] text-slate-400 italic text-center py-3">
+                    No sub tasks added yet. Click "Add Sub Task" to break this task into smaller steps.
+                  </p>
+                ) : (
+                  subTaskInputs.map((st, index) => (
+                    <div key={st.id} className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xs px-3 py-2">
+                      <span className="text-[10px] font-black text-slate-400 font-mono w-5 shrink-0">
+                        {index + 1}.
+                      </span>
+                      <span className="material-symbols-outlined text-slate-400 text-[16px] shrink-0">subdirectory_arrow_right</span>
+                      <input
+                        type="text"
+                        value={st.title}
+                        onChange={(e) => updateSubTaskTitle(st.id, e.target.value)}
+                        placeholder={`Sub task ${index + 1} title...`}
+                        className="flex-1 bg-white border border-slate-300 rounded-xs px-2.5 py-1.5 text-xs outline-none focus:border-blue-600 font-medium"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeSubTaskInput(st.id)}
+                        title="Remove sub task"
+                        className="text-red-400 hover:text-red-600 font-bold text-base leading-none shrink-0 transition-colors"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
 
             <div className="pt-3 border-t flex justify-end gap-3">
@@ -1335,7 +1425,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             {kanbanColumns.map((col) => {
               const colTasks = filteredTasks.filter((t) => t.status === col.status);
               return (
@@ -1410,8 +1500,6 @@ export const TasksView: React.FC<TasksViewProps> = ({
                                   onClick={() => {
                                     const prev =
                                       col.status === 'Done'
-                                        ? 'Review'
-                                        : col.status === 'Review'
                                         ? 'Blocked'
                                         : col.status === 'Blocked'
                                         ? 'In Progress'
@@ -1437,9 +1525,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                                       col.status === 'Backlog'
                                         ? 'In Progress'
                                         : col.status === 'In Progress'
-                                        ? 'Review'
-                                        : col.status === 'Review'
-                                        ? 'Done'
+                                        ? 'Blocked'
                                         : 'Done';
                                     handleStatusChange(t, next);
                                   }}
@@ -1462,8 +1548,8 @@ export const TasksView: React.FC<TasksViewProps> = ({
         </div>
       )}
 
-      {/* TAB 7: CALENDAR & DEADLINES */}
-      {activeTab === 'Calendar & Deadlines' && (
+      {/* TAB 7: DEADLINES */}
+      {activeTab === 'Deadlines' && (
         <div className="space-y-6">
           <div className="bg-white p-4 rounded-sm border border-slate-200 shadow-2xs">
             <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
@@ -1605,7 +1691,6 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   <option value="Backlog">To Do / Backlog</option>
                   <option value="In Progress">In Progress</option>
                   <option value="Blocked">Blocked</option>
-                  <option value="Review">In Review</option>
                   <option value="Done">Completed</option>
                 </select>
               </div>
@@ -1767,11 +1852,16 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     onChange={(e) => setAssignee(e.target.value)}
                     className="w-full border border-slate-300 p-2 rounded-sm font-bold"
                   >
-                    {assigneeList.map((person) => (
+                    {teamMemberNames.map((person) => (
                       <option key={person} value={person}>
                         {person}
                       </option>
                     ))}
+                    {teamMemberNames.length === 0 && (
+                      <option value="" disabled>
+                        No active team members available
+                      </option>
+                    )}
                   </select>
                 </div>
               </div>
@@ -1812,6 +1902,55 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   placeholder="Task instructions..."
                   className="w-full border border-slate-300 p-2 rounded-sm"
                 />
+              </div>
+
+              {/* SUB TASKS SECTION — MODAL */}
+              <div className="border border-slate-200 rounded-sm overflow-hidden">
+                <div className="bg-slate-50 px-3 py-2 border-b border-slate-200 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-indigo-600 text-[16px]">account_tree</span>
+                    <span className="font-black text-slate-800 text-[11px] uppercase tracking-wider">Sub Tasks</span>
+                    {subTaskInputs.length > 0 && (
+                      <span className="bg-indigo-100 text-indigo-800 text-[10px] font-black px-1.5 py-0.5 rounded-full">
+                        {subTaskInputs.length}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addSubTaskInput}
+                    className="flex items-center gap-1 px-2.5 py-1 bg-[#00174b] hover:bg-indigo-950 text-white font-bold text-[10px] rounded-xs transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[13px]">add</span>
+                    Add Sub Task
+                  </button>
+                </div>
+                <div className="p-2 space-y-1.5 max-h-40 overflow-y-auto">
+                  {subTaskInputs.length === 0 ? (
+                    <p className="text-[10px] text-slate-400 italic text-center py-2">
+                      Optional: add sub tasks to break this down further.
+                    </p>
+                  ) : (
+                    subTaskInputs.map((st, index) => (
+                      <div key={st.id} className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xs px-2 py-1.5">
+                        <span className="text-[10px] font-black text-slate-400 font-mono w-4 shrink-0">{index + 1}.</span>
+                        <span className="material-symbols-outlined text-slate-400 text-[14px] shrink-0">subdirectory_arrow_right</span>
+                        <input
+                          type="text"
+                          value={st.title}
+                          onChange={(e) => updateSubTaskTitle(st.id, e.target.value)}
+                          placeholder={`Sub task ${index + 1}...`}
+                          className="flex-1 bg-white border border-slate-300 rounded-xs px-2 py-1 text-xs outline-none focus:border-blue-600"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeSubTaskInput(st.id)}
+                          className="text-red-400 hover:text-red-600 font-bold text-sm leading-none shrink-0"
+                        >✕</button>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
 
               <div className="pt-3 border-t flex justify-end gap-2">

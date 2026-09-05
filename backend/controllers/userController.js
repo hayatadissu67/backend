@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { randomBytes } from "crypto";
 import User from "../models/userModel.js";
 import Role from "../models/roleModel.js";
 
@@ -7,8 +8,8 @@ export const addUser = async (req, res) => {
   try {
     const { name, email, password, roleId, role, department, avatar } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ message: "Email and password are required" });
+    if (!email || !name) {
+      return res.status(400).json({ message: "Name and email are required" });
     }
 
     const existingUser = await User.findOne({ where: { email } });
@@ -26,7 +27,8 @@ export const addUser = async (req, res) => {
       return res.status(400).json({ message: "role or roleId is required" });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const temporaryPassword = password || `Pmo-${randomBytes(6).toString("base64url")}!`;
+    const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
 
     const user = await User.create({
       name,
@@ -37,7 +39,16 @@ export const addUser = async (req, res) => {
       avatar,
     });
 
-    res.status(201).json({ success: true, message: "User added successfully", data: user });
+    await user.reload({
+      include: { model: Role, as: "role" },
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "User added successfully",
+      data: user,
+      temporaryPassword: password ? undefined : temporaryPassword,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
