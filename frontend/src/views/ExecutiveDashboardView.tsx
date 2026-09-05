@@ -102,13 +102,6 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
             Action Templates
           </button>
           <button
-            onClick={onOpenExportPDF}
-            className="px-3.5 py-2 bg-white border border-slate-300 text-slate-700 font-bold text-xs uppercase tracking-wider rounded-xs hover:bg-slate-50 transition-colors flex items-center gap-1.5 shadow-2xs"
-          >
-            <span className="material-symbols-outlined text-[18px]">file_download</span>
-            Export Executive Brief
-          </button>
-          <button
             onClick={() => onNavigate('approvals')}
             className="relative px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xs transition-colors flex items-center gap-1.5 shadow-2xs"
           >
@@ -117,7 +110,7 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
           </button>
           <button
             onClick={onOpenNewProject}
-            className="px-4 py-2 bg-[#00174b] hover:bg-indigo-950 text-white font-bold text-xs uppercase tracking-wider rounded-xs transition-all flex items-center gap-1.5 shadow-xs"
+            className="px-3.5 py-2 bg-[#00174b] hover:bg-indigo-950 text-white font-bold text-xs uppercase tracking-wider rounded-xs transition-colors flex items-center gap-1.5 shadow-2xs"
           >
             <span className="material-symbols-outlined text-[18px]">add_circle</span>
             New Project Charter

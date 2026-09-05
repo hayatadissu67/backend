@@ -1,8 +1,10 @@
-
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/userModel.js";
 import Role from "../models/roleModel.js";
+
+const JWT_SECRET = process.env.JWT_SECRET || "pmo-dev-secret-change-me-in-production";
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "1d";
 
 export const login = async (req, res) => {
     try {
@@ -51,12 +53,6 @@ export const login = async (req, res) => {
         }
 
         // JWT secret
-        const JWT_SECRET = process.env.JWT_SECRET;
-
-        if (!JWT_SECRET) {
-            throw new Error("JWT_SECRET is not configured.");
-        }
-
         const roleCode = (user.role && user.role.code) ? user.role.code : "TEAM_MEMBER";
 
         // Create token
@@ -68,7 +64,7 @@ export const login = async (req, res) => {
             },
             JWT_SECRET,
             {
-                expiresIn: "1d"
+                expiresIn: JWT_EXPIRES_IN
             }
         );
 
@@ -83,7 +79,9 @@ export const login = async (req, res) => {
                 role: roleCode,
                 department: user.get("department"),
                 status: user.get("status"),
-                avatar: user.get("avatar")
+                avatar: user.get("avatar"),
+                assignedProjectCodes: user.get("assignedProjectCodes") || [],
+                mustChangePassword: !!user.get("mustChangePassword"),
             }
         });
 

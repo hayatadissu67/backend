@@ -94,6 +94,16 @@ export const fetchUsersFromApi = async (): Promise<UserItem[] | null> => {
   }
 };
 
+export const fetchTeamMembersFromApi = async (): Promise<UserItem[] | null> => {
+  try {
+    const res = await api.get('/users/team-members');
+    return res.data?.success && Array.isArray(res.data.data) ? res.data.data : [];
+  } catch (err) {
+    console.warn('Failed to fetch team members from API:', err);
+    return null;
+  }
+};
+
 export interface CreateUserResponse {
   success: boolean;
   message?: string;

@@ -2,6 +2,8 @@ import jwt from "jsonwebtoken";
 import User from "../models/userModel.js";
 import Role from "../models/roleModel.js";
 
+const JWT_SECRET = process.env.JWT_SECRET || "pmo-dev-secret-change-me-in-production";
+
 export const protect = async (req, res, next) => {
   let token;
 
@@ -17,7 +19,7 @@ export const protect = async (req, res, next) => {
       return res.status(401).json({ success: false, message: "Not authorized, no token provided" });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET);
 
     // Load user including their role
     const user = await User.findByPk(decoded.id, {

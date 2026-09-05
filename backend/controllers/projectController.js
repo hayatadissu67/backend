@@ -51,6 +51,19 @@ export const getProjectById = async (req, res) => {
         message: "Project not found",
       });
     }
+
+    // Team members can only view projects they are assigned to.
+    const roleCode = req.user && (req.user.role?.code || req.user.role || req.user.role?.name);
+    if (String(roleCode).toUpperCase() === 'TEAM_MEMBER') {
+      const assigned = req.user.assignedProjectCodes || [];
+      if (!assigned.includes(project.code)) {
+        return res.status(403).json({
+          success: false,
+          message: "You are not assigned to this project",
+        });
+      }
+    }
+
     res.status(200).json({
       success: true,
       data: project,

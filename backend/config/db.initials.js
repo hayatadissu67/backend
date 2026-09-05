@@ -48,20 +48,26 @@ const initDB = async () => {
     await sequelize.authenticate();
     console.log("✅ Database connection established");
 
+    // Try a non-altering sync first. This avoids the MySQL "ER_TOO_MANY_KEYS"
+    // (errno 1069) error that ALTER-heavy syncs can trigger on InnoDB tables
+    // that already exist or have a high column/index count. The non-alter
+    // sync only creates missing tables and does not touch existing schemas.
     try {
-      await sequelize.sync({ alter: true });
-      console.log("✅ All models synced successfully (alter)");
+      await sequelize.sync({ alter: false });
+      console.log("✅ All models synced successfully");
     } catch (syncErr) {
-      // Handle MySQL 'Too many keys specified' when running ALTER operations
+      // Handle MySQL 'Too many keys specified' as a final safety net:
+      // retry without index management if it ever surfaces.
       if (
         syncErr &&
-        (syncErr.parent && syncErr.parent.code === "ER_TOO_MANY_KEYS")
+        syncErr.parent &&
+        (syncErr.parent.code === "ER_TOO_MANY_KEYS" || syncErr.parent.errno === 1069)
       ) {
         console.warn(
-          "⚠️ Too many keys for ALTER; falling back to non-alter sync to avoid index errors"
+          "⚠️ Too many keys detected during sync; retrying with indexes disabled"
         );
-        await sequelize.sync();
-        console.log("✅ All models synced successfully (fallback)");
+        await sequelize.sync({ alter: false, indexes: false });
+        console.log("✅ All models synced successfully (indexes skipped)");
       } else {
         throw syncErr;
       }

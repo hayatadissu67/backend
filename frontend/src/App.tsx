@@ -27,6 +27,7 @@ import {
   markNotificationsReadApi,
   clearNotificationsApi,
   fetchUsersFromApi,
+  fetchTeamMembersFromApi,
   deleteUserApi,
   updateUserStatusApi,
   updateUserApi,
@@ -279,9 +280,10 @@ export default function App() {
     try {
       const assignedMembers = await assignProjectTeamMembersApi(projectId, userIds);
       if (assignedMembers) {
-        // Optimistically, we could just alert success, 
+        // Optimistically, we could just alert success,
         // but let's re-fetch the users to ensure the UI updates if necessary.
-        const apiUsers = await fetchUsersFromApi();
+        const isExec = currentUser?.role === 'EXECUTIVE_MANAGER';
+        const apiUsers = isExec ? await fetchUsersFromApi() : await fetchTeamMembersFromApi();
         if (apiUsers) setUsers(apiUsers);
       }
     } catch (err: any) {
@@ -463,12 +465,15 @@ export default function App() {
 
     const syncWithBackendApi = async () => {
 
+      const isExecutive = currentUser.role === 'EXECUTIVE_MANAGER';
+
       try {
         const [
           apiUsers, apiProjects, apiRisks, apiTasks, apiBudgets, apiCRs, apiReports, apiTemplates,
           apiDiscussions, apiMeetings, apiNotifications, apiDepartmentLoading, apiResources
         ] = await Promise.all([
-          fetchUsersFromApi(),
+          // Executives can list all users; PMs/Risk Managers/Team Members only see TEAM_MEMBERs.
+          isExecutive ? fetchUsersFromApi() : fetchTeamMembersFromApi(),
           fetchProjectsFromApi(),
           fetchRisksFromApi(),
           fetchTasksFromApi(),
