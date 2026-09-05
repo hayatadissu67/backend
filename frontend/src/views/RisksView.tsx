@@ -26,8 +26,8 @@ export const RisksView: React.FC<RisksViewProps> = ({
   // New Risk state
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
-  const owner = 'Alex Rivers (Project Manager)';
-  const assignedRiskManager = 'Marcus Vance (Risk Manager)';
+  const owner = currentPersona?.name || 'PMO User';
+  const [assignedRiskManager, setAssignedRiskManager] = useState('');
   const flaggedBy = currentPersona?.roleType === 'TEAM_MEMBER' ? 'Team Member' : 'Project Manager';
   const [projectRef, setProjectRef] = useState(projects[0]?.code || 'PMO-101');
   const [milestoneRef, setMilestoneRef] = useState('Gate 2 Security Audit');
@@ -148,7 +148,7 @@ export const RisksView: React.FC<RisksViewProps> = ({
     const updated: RiskItem = {
       ...resolvingRisk,
       status: 'RESOLVED',
-      resolvedBy: currentPersona?.name || 'Alex Rivers (Project Manager)',
+      resolvedBy: currentPersona?.name || 'PMO User',
       resolvedAt: new Date().toISOString(),
       resolutionNotes: resolutionNotesInput || 'Issue resolved and verified by Project Manager.'
     };
@@ -164,7 +164,7 @@ export const RisksView: React.FC<RisksViewProps> = ({
     const updated: RiskItem = {
       ...escalatingRisk,
       status: 'ESCALATED',
-      assignedRiskManager: 'Marcus Vance (Risk Manager)',
+      assignedRiskManager: 'Risk Manager',
       escalatedAt: new Date().toISOString(),
       escalationNotes: escalationNotesInput || 'Escalated by Project Manager to Risk Manager for enterprise governance review.'
     };
@@ -180,7 +180,7 @@ export const RisksView: React.FC<RisksViewProps> = ({
     const updated: RiskItem = {
       ...mitigatingRisk,
       status: 'MITIGATED',
-      resolvedBy: currentPersona?.name || 'Marcus Vance (Risk Manager)',
+      resolvedBy: currentPersona?.name || 'PMO User',
       resolvedAt: new Date().toISOString(),
       resolutionNotes: mitigationNotesInput || 'Mitigation controls applied and approved by Risk Manager.'
     };
@@ -206,12 +206,10 @@ export const RisksView: React.FC<RisksViewProps> = ({
       );
     }
     if (activeTab === 'My Risks') {
-      if (
-        !r.owner.toLowerCase().includes('m. thompson') &&
-        !r.owner.toLowerCase().includes('thompson') &&
-        !r.owner.toLowerCase().includes('vance') &&
-        !r.owner.toLowerCase().includes('rivers')
-      ) {
+      const myName = currentPersona?.name?.toLowerCase() || '';
+      const isOwner = r.owner?.toLowerCase().includes(myName);
+      const isAssignee = r.assignedRiskManager?.toLowerCase().includes(myName);
+      if (!myName || (!isOwner && !isAssignee)) {
         return false;
       }
     }

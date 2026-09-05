@@ -1,4 +1,5 @@
 import { sequelize } from "./db.js";
+import { DataTypes } from "sequelize";
 import mysql from "mysql2/promise";
 
 import "../models/reportModel.js";
@@ -13,6 +14,10 @@ import "../models/projectModel.js";
 import "../models/riskModel.js";
 import "../models/Resource.js";
 
+import Project from "../models/projectModel.js";
+import User from "../models/userModel.js";
+import { Resource } from "../models/Resource.js";
+
 const ensureDatabaseExists = async () => {
   const dbName = process.env.DB_NAME || "pmo";
   const host = process.env.DB_HOST || "localhost";
@@ -26,6 +31,7 @@ const ensureDatabaseExists = async () => {
       port,
       user,
       password,
+      connectTimeout: 10000,
     });
 
     await connection.query(
@@ -40,38 +46,50 @@ const ensureDatabaseExists = async () => {
   }
 };
 
+const backfillResourceRelationships = async () => {
+  const legacyResources = await Resource.findAll({
+    where: {
+      projectId: null,
+      userId: null,
+    },
+  });
+  let unmatched = 0;
+
+  for (const resource of legacyResources) {
+    const [projects, users] = await Promise.all([
+      resource.projectTarget
+        ? Project.findAll({ where: { name: resource.projectTarget } })
+        : [],
+      resource.employeeName
+        ? User.findAll({ where: { name: resource.employeeName } })
+        : [],
+    ]);
+
+    if (projects.length === 1 && users.length === 1) {
+      await resource.update({ projectId: projects[0].id, userId: users[0].id });
+    } else {
+      unmatched += 1;
+    }
+  }
+
+  if (unmatched > 0) {
+    console.warn(
+      `⚠️ ${unmatched} resource record(s) could not be safely matched to unique existing project/user records`
+    );
+  }
+};
+
 const initDB = async () => {
   try {
-    // Make sure the database exists before letting Sequelize connect
     await ensureDatabaseExists();
 
     await sequelize.authenticate();
     console.log("✅ Database connection established");
 
-    // Try a non-altering sync first. This avoids the MySQL "ER_TOO_MANY_KEYS"
-    // (errno 1069) error that ALTER-heavy syncs can trigger on InnoDB tables
-    // that already exist or have a high column/index count. The non-alter
-    // sync only creates missing tables and does not touch existing schemas.
-    try {
-      await sequelize.sync({ alter: false });
-      console.log("✅ All models synced successfully");
-    } catch (syncErr) {
-      // Handle MySQL 'Too many keys specified' as a final safety net:
-      // retry without index management if it ever surfaces.
-      if (
-        syncErr &&
-        syncErr.parent &&
-        (syncErr.parent.code === "ER_TOO_MANY_KEYS" || syncErr.parent.errno === 1069)
-      ) {
-        console.warn(
-          "⚠️ Too many keys detected during sync; retrying with indexes disabled"
-        );
-        await sequelize.sync({ alter: false, indexes: false });
-        console.log("✅ All models synced successfully (indexes skipped)");
-      } else {
-        throw syncErr;
-      }
-    }
+    await sequelize.sync({ alter: false });
+    console.log("✅ All models synced successfully");
+
+    await backfillResourceRelationships();
   } catch (error) {
     console.error("❌ Error initializing database:", error);
   }

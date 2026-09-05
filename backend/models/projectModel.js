@@ -20,7 +20,11 @@ const Project = sequelize.define('Project', {
   targetDate: { type: DataTypes.DATEONLY },
   description: { type: DataTypes.TEXT },
   priority: { type: DataTypes.ENUM('CRITICAL', 'HIGH', 'MEDIUM', 'LOW'), defaultValue: 'MEDIUM' },
-  lifecycleStage: { type: DataTypes.STRING }
+  lifecycleStage: { type: DataTypes.STRING },
+  approvalStatus: { type: DataTypes.ENUM('PENDING', 'APPROVED', 'REJECTED'), defaultValue: 'PENDING' },
+  approvedBy: { type: DataTypes.STRING },
+  rejectionReason: { type: DataTypes.TEXT },
+  team: { type: DataTypes.JSON }
 }, {
   timestamps: true,
   tableName: 'projects',

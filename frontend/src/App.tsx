@@ -19,11 +19,8 @@ import {
   rejectChangeRequestApi,
   fetchReportsApi,
   fetchTemplatesApi,
-  fetchDiscussionsApi,
   createDiscussionApi,
-  fetchMeetingsApi,
   createMeetingApi,
-  fetchNotificationsApi,
   markNotificationsReadApi,
   clearNotificationsApi,
   fetchUsersFromApi,
@@ -34,6 +31,7 @@ import {
   getCurrentUserApi,
   fetchDepartmentLoadingApi,
   fetchResourcesFromApi,
+  createAssignmentRequestApi,
 } from './services/api';
 
 
@@ -44,6 +42,7 @@ import {
   RiskItem,
   ActivityItem,
   ResourceLoading,
+  ResourceRecord,
   ApprovalRequest,
   UserItem,
   TaskItem,
@@ -92,19 +91,61 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
-  // Authentication State: Always start on Login page
+  // Authentication lifecycle: CHECKING (resolving session) ->
+  // AUTHENTICATED (valid server-verified JWT) -> NOT_AUTHENTICATED (no/invalid session).
+  // Authentication is NEVER inferred from a stored boolean; it requires a real
+  // token validated against the backend /auth/me endpoint.
+  type AuthStatus = 'checking' | 'authenticated' | 'unauthenticated';
   const [currentUser, setCurrentUser] = useState<UserItem | null>(null);
+  const [authStatus, setAuthStatus] = useState<AuthStatus>('checking');
 
-  // Restore session on page load if token exists
+  // Stale/boolean auth keys left by previous dev builds or legacy localStorage
+  // sessions. These must never act as proof of authentication.
+  const STALE_AUTH_KEYS = [
+    'isAuthenticated', 'loggedIn', 'user', 'currentUser',
+    'authToken', 'accessToken', 'refreshToken', 'session', 'auth', 'persona',
+  ];
+
+  // Clear ONLY authentication-related persisted data. Unrelated application
+  // storage is intentionally left untouched.
+  const clearAuthData = () => {
+    ['token', ...STALE_AUTH_KEYS].forEach((key) => {
+      sessionStorage.removeItem(key);
+      localStorage.removeItem(key);
+    });
+  };
+
+  // Restore session on startup using the REAL backend-verified JWT mechanism.
   useEffect(() => {
-    const tryRestoreSession = async () => {
-      const token = localStorage.getItem('token');
-      if (!token) return;
+    let cancelled = false;
+
+    const restoreSession = async () => {
+      // One-time purge of stale/boolean auth state so a persisted
+      // "isAuthenticated=true" or a legacy localStorage token can never
+      // shortcut authentication. The active session token lives only in
+      // sessionStorage under "token" and is re-validated below.
+      STALE_AUTH_KEYS.forEach((key) => {
+        sessionStorage.removeItem(key);
+        localStorage.removeItem(key);
+      });
+      localStorage.removeItem('token');
+
+      const token = sessionStorage.getItem('token');
+      if (!token) {
+        if (!cancelled) {
+          setCurrentUser(null);
+          setAuthStatus('unauthenticated');
+        }
+        return;
+      }
 
       try {
         const user = await getCurrentUserApi();
+        if (cancelled) return;
+
         if (user) {
           setCurrentUser(user);
+          setAuthStatus('authenticated');
           // restore navigation based on role
           if (window.location.hash) {
             const hash = window.location.hash.replace('#', '') as NavigationTab;
@@ -123,16 +164,25 @@ export default function App() {
             else setCurrentTab('dashboard');
           }
         } else {
-          // token invalid or expired
-          localStorage.removeItem('token');
+          // token invalid or expired -> clear it, do NOT enter the application
+          clearAuthData();
+          if (!cancelled) {
+            setCurrentUser(null);
+            setAuthStatus('unauthenticated');
+          }
         }
-      } catch (err) {
-        console.error('Failed to restore session:', err);
-        localStorage.removeItem('token');
+      } catch {
+        if (cancelled) return;
+        clearAuthData();
+        setCurrentUser(null);
+        setAuthStatus('unauthenticated');
       }
     };
 
-    tryRestoreSession();
+    restoreSession();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -162,8 +212,9 @@ export default function App() {
   };
 
   const handleLoginSuccess = (token: string, user: UserItem) => {
-    localStorage.setItem('token', token);
+    sessionStorage.setItem('token', token);
     setCurrentUser(user);
+    setAuthStatus('authenticated');
 
     // Role-based redirection upon verified login
     let targetTab: NavigationTab = 'dashboard';
@@ -181,9 +232,9 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    localStorage.clear();
-    sessionStorage.clear();
+    clearAuthData();
     setCurrentUser(null);
+    setAuthStatus('unauthenticated');
     window.location.hash = '';
     window.location.replace('/');
   };
@@ -243,14 +294,6 @@ export default function App() {
       const updated = await approveProjectApi(projectId);
       if (updated) {
         setProjects((prev) => prev.map((p) => (p.id === projectId ? updated : p)));
-      } else {
-        setProjects((prev) =>
-          prev.map((p) =>
-            p.id === projectId
-              ? { ...p, approvalStatus: 'APPROVED', status: 'ACTIVE', approvedBy: currentUser?.name }
-              : p
-          )
-        );
       }
     } catch (err: any) {
       alert(err.message || 'Failed to approve project.');
@@ -262,14 +305,6 @@ export default function App() {
       const updated = await rejectProjectApi(projectId, reason);
       if (updated) {
         setProjects((prev) => prev.map((p) => (p.id === projectId ? updated : p)));
-      } else {
-        setProjects((prev) =>
-          prev.map((p) =>
-            p.id === projectId
-              ? { ...p, approvalStatus: 'REJECTED', status: 'DELAYED', rejectionReason: reason }
-              : p
-          )
-        );
       }
     } catch (err: any) {
       alert(err.message || 'Failed to reject project.');
@@ -325,13 +360,15 @@ export default function App() {
     }
   };
 
-  const handleNotifyPMTaskCompleted = (task: TaskItem, memberName: string) => {
+  const handleNotifyPMTaskCompleted = async (task: TaskItem, memberName: string) => {
     const updated: TaskItem = {
       ...task,
       status: 'Done',
       progress: 100
     };
+    // Persist the completion to the database
     setTasks((prev) => prev.map((t) => (t.id === task.id ? updated : t)));
+    await updateTaskApi(task.id, updated);
 
     const newNotif: NotificationItem = {
       id: `notif-${Date.now()}`,
@@ -359,6 +396,7 @@ export default function App() {
   const [risks, setRisks] = useState<RiskItem[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [resources, setResources] = useState<ResourceLoading[]>([]);
+  const [resourceRecords, setResourceRecords] = useState<ResourceRecord[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
 
   const accessibleProjects = useMemo(() => {
@@ -447,6 +485,7 @@ export default function App() {
   const [selectedUserProfile, setSelectedUserProfile] = useState<UserItem | null>(null);
   const [isUserProfileModalOpen, setIsUserProfileModalOpen] = useState(false);
   const [isAssignMemberModalOpen, setIsAssignMemberModalOpen] = useState(false);
+  const [assignMemberModalMode, setAssignMemberModalMode] = useState<'assign' | 'request'>('assign');
 
   const handleOpenUserProfile = (user?: UserItem) => {
     if (user) {
@@ -470,7 +509,7 @@ export default function App() {
       try {
         const [
           apiUsers, apiProjects, apiRisks, apiTasks, apiBudgets, apiCRs, apiReports, apiTemplates,
-          apiDiscussions, apiMeetings, apiNotifications, apiDepartmentLoading, apiResources
+          apiDepartmentLoading, apiResources
         ] = await Promise.all([
           // Executives can list all users; PMs/Risk Managers/Team Members only see TEAM_MEMBERs.
           isExecutive ? fetchUsersFromApi() : fetchTeamMembersFromApi(),
@@ -481,9 +520,6 @@ export default function App() {
           fetchChangeRequestsFromApi(),
           fetchReportsApi(),
           fetchTemplatesApi(),
-          fetchDiscussionsApi(),
-          fetchMeetingsApi(),
-          fetchNotificationsApi(),
           fetchDepartmentLoadingApi(),
           fetchResourcesFromApi(),
         ]);
@@ -496,13 +532,8 @@ export default function App() {
         if (apiCRs) setChangeRequests(apiCRs);
         if (apiReports) setReports(apiReports);
         if (apiTemplates) setTemplates(apiTemplates);
-        if (apiDiscussions) setDiscussions(apiDiscussions);
-        if (apiMeetings) setMeetings(apiMeetings);
-        if (apiNotifications) setNotifications(apiNotifications);
         if (apiDepartmentLoading && apiDepartmentLoading.length > 0) setResources(apiDepartmentLoading);
-        if (apiResources) {
-          // Raw resource records are available via fetchResourcesFromApi() on demand.
-        }
+        if (apiResources) setResourceRecords(apiResources);
       } catch (err) {
         console.error('Failed to sync data with backend API:', err);
       }
@@ -510,39 +541,39 @@ export default function App() {
 
     syncWithBackendApi();
 
-    // Polling interval for messages and notifications
-    const interval = setInterval(async () => {
-      try {
-        const [apiNotifications] = await Promise.all([
-          fetchNotificationsApi()
-        ]);
-        if (apiNotifications) setNotifications(apiNotifications);
-      } catch (e) {
-        // silent fail on poll
-      }
-    }, 10000);
-
-    return () => clearInterval(interval);
+    return undefined;
   }, [currentUser?.id]);
 
   // Handlers
-  const handleAddProject = (newProject: Project) => {
-    setProjects([newProject, ...projects]);
-    createProjectApi(newProject);
-    const act: ActivityItem = {
-      id: `a-${Date.now()}`,
-      type: 'gate',
-      title: `Project Added: ${newProject.name}`,
-      subtitle: `Charter registered by ${currentUser?.name || 'PMO User'} • Just now`,
-      timestamp: 'Just now',
-      badgeType: 'check'
-    };
-    setActivities([act, ...activities]);
+  const handleAddProject = async (newProject: Project) => {
+    try {
+      const created = await createProjectApi(newProject);
+      if (created) {
+        setProjects([created, ...projects]);
+        const act: ActivityItem = {
+          id: `a-${Date.now()}`,
+          type: 'gate',
+          title: `Project Added: ${created.name}`,
+          subtitle: `Charter registered by ${currentUser?.name || 'PMO User'} • Just now`,
+          timestamp: 'Just now',
+          badgeType: 'check'
+        };
+        setActivities([act, ...activities]);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to create project.');
+    }
   };
 
-  const handleUpdateProject = (updated: Project) => {
-    setProjects(projects.map((p) => (p.id === updated.id ? updated : p)));
-    updateProjectApi(updated.id, updated);
+  const handleUpdateProject = async (updated: Project) => {
+    try {
+      const result = await updateProjectApi(updated.id, updated);
+      if (result) {
+        setProjects(projects.map((p) => (p.id === result.id ? result : p)));
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to update project.');
+    }
   };
 
   const handleAddUser = (newUser: UserItem) => {
@@ -566,69 +597,86 @@ export default function App() {
     updateUserApi(updatedUser.id, updatedUser).catch(console.error);
   };
 
-  const handleAddTask = (newTask: TaskItem) => {
-    setTasks([newTask, ...tasks]);
-    createTaskApi(newTask);
+  const handleAddTask = async (newTask: TaskItem) => {
+    // Optimistically add to UI immediately
+    setTasks((prev) => [newTask, ...prev]);
+    // Persist to DB and replace the temp record with the real DB record
+    const saved = await createTaskApi(newTask);
+    if (saved) {
+      setTasks((prev) => prev.map((t) => t.id === newTask.id ? saved : t));
+    }
   };
 
-  const handleUpdateTaskStatus = (taskId: string, newStatus: TaskItem['status']) => {
+  const handleUpdateTaskStatus = async (taskId: string, newStatus: TaskItem['status']) => {
     setTasks(tasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)));
-    updateTaskApi(taskId, { status: newStatus });
+    const saved = await updateTaskApi(taskId, { status: newStatus });
+    if (saved) {
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? saved : t)));
+    }
   };
 
-  const handleUpdateTask = (updatedTask: TaskItem) => {
+  const handleUpdateTask = async (updatedTask: TaskItem) => {
     setTasks(tasks.map((t) => (t.id === updatedTask.id ? updatedTask : t)));
-    updateTaskApi(updatedTask.id, updatedTask);
+    const saved = await updateTaskApi(updatedTask.id, updatedTask);
+    if (saved) {
+      setTasks((prev) => prev.map((t) => (t.id === updatedTask.id ? saved : t)));
+    }
   };
 
   const handleDeleteTask = (taskId: string) => {
     setTasks(tasks.filter((t) => t.id !== taskId));
   };
 
-  const handleAddRisk = (newRisk: RiskItem) => {
-    setRisks([newRisk, ...risks]);
-    createRiskApi(newRisk);
+  const handleAddRisk = async (newRisk: RiskItem) => {
+    try {
+      const created = await createRiskApi(newRisk);
+      if (created) {
+        setRisks([created, ...risks]);
+        const assignee = created.assignedRiskManager || created.owner || 'Risk Manager';
+        const notif: NotificationItem = {
+          id: `notif-risk-${Date.now()}`,
+          title: `Risk Delegated: ${created.ref}`,
+          message: `Risk "${created.subject}" linked to ${created.projectRef || 'PMO Project'} delegated to ${assignee}.`,
+          type: created.severity === 'CRITICAL' || created.severity === 'HIGH' ? 'alert' : 'warning',
+          timestamp: 'Just now',
+          isRead: false
+        };
+        setNotifications((prev) => [notif, ...prev]);
 
-    const assignee = newRisk.assignedRiskManager || newRisk.owner || 'Risk Manager';
-    const notif: NotificationItem = {
-      id: `notif-risk-${Date.now()}`,
-      title: `Risk Delegated: ${newRisk.ref}`,
-      message: `Risk "${newRisk.subject}" linked to ${newRisk.projectRef || 'PMO Project'} delegated to ${assignee}.`,
-      type: newRisk.severity === 'CRITICAL' || newRisk.severity === 'HIGH' ? 'alert' : 'warning',
-      timestamp: 'Just now',
-      isRead: false
-    };
-    setNotifications((prev) => [notif, ...prev]);
-
-    const act: ActivityItem = {
-      id: `act-risk-${Date.now()}`,
-      type: 'risk',
-      title: `Risk Registered & Delegated (${newRisk.ref})`,
-      subtitle: `"${newRisk.subject}" assigned to ${assignee} • Flagged by ${newRisk.flaggedBy || 'PMO Team'}`,
-      timestamp: 'Just now',
-      badgeType: 'warning'
-    };
-    setActivities((prev) => [act, ...prev]);
+        const act: ActivityItem = {
+          id: `act-risk-${Date.now()}`,
+          type: 'risk',
+          title: `Risk Registered & Delegated (${created.ref})`,
+          subtitle: `"${created.subject}" assigned to ${assignee} • Flagged by ${created.flaggedBy || 'PMO Team'}`,
+          timestamp: 'Just now',
+          badgeType: 'warning'
+        };
+        setActivities((prev) => [act, ...prev]);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to create risk.');
+    }
   };
 
-  const handleUpdateRisk = (updated: RiskItem) => {
-    setRisks(risks.map((r) => (r.id === updated.id ? updated : r)));
-    updateRiskApi(updated.id, updated);
-
-    const assignee = updated.assignedRiskManager || updated.owner || 'Risk Manager';
-    const notif: NotificationItem = {
-      id: `notif-risk-up-${Date.now()}`,
-      title: `Risk ${updated.ref} Updated`,
-      message: `Risk "${updated.subject}" status set to ${updated.status}. Delegated Manager: ${assignee}.`,
-      type: updated.status === 'MITIGATED' ? 'success' : 'info',
-      timestamp: 'Just now',
-      isRead: false
-    };
-    setNotifications((prev) => [notif, ...prev]);
-  };
-
-  const handleUpdateResource = (dept: string, newPct: number) => {
-    setResources(resources.map((r) => (r.department === dept ? { ...r, percentage: newPct } : r)));
+  const handleUpdateRisk = async (updated: RiskItem) => {
+    try {
+      const result = await updateRiskApi(updated.id, updated);
+      if (result) {
+        setRisks(risks.map((r) => (r.id === result.id ? result : r)));
+        const assignee = result.assignedRiskManager || result.owner || 'Risk Manager';
+        const notif: NotificationItem = {
+          id: `notif-risk-up-${Date.now()}`,
+          title: `Risk ${result.ref} Updated`,
+          message: `Risk "${result.subject}" status set to ${result.status}. Delegated Manager: ${assignee}.`,
+          type: result.status === 'MITIGATED' ? 'success' : 'info',
+          timestamp: 'Just now',
+          isRead: false
+        };
+        setNotifications((prev) => [notif, ...prev]);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to update risk.');
+    }
   };
 
   const handleAddMeeting = (newMeeting: MeetingItem) => {
@@ -784,7 +832,21 @@ export default function App() {
       )
     : risks;
 
-  if (!currentUser) {
+  // Authentication gate: CHECKING -> loading, NOT_AUTHENTICATED -> Login,
+  // AUTHENTICATED -> protected application. The protected app is never rendered
+  // before authentication is resolved.
+  if (authStatus === 'checking') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="flex items-center gap-3 text-slate-600">
+          <span className="material-symbols-outlined animate-spin">progress_activity</span>
+          <span className="text-sm font-medium">Checking authentication…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (authStatus === 'unauthenticated') {
     return <LoginView onLoginSuccess={handleLoginSuccess} />;
   }
 
@@ -963,11 +1025,20 @@ export default function App() {
             {currentTab === 'resources' && (
               <ResourcesView
               resources={resources}
-              onUpdateResource={handleUpdateResource}
-              onOpenAssignMemberModal={() => setIsAssignMemberModalOpen(true)}
+              resourceRecords={resourceRecords}
+              projects={projects}
+              users={users}
+              onOpenAssignMemberModal={() => {
+                setAssignMemberModalMode('request');
+                setIsAssignMemberModalOpen(true);
+              }}
               onRefresh={async () => {
-                const loading = await fetchDepartmentLoadingApi();
+                const [loading, records] = await Promise.all([
+                  fetchDepartmentLoadingApi(),
+                  fetchResourcesFromApi(),
+                ]);
                 if (loading && loading.length > 0) setResources(loading);
+                if (records) setResourceRecords(records);
               }}
             />
             )}
@@ -1119,11 +1190,26 @@ export default function App() {
       {/* Assign Member Modal */}
       <AssignMemberModal
         isOpen={isAssignMemberModalOpen}
-        onClose={() => setIsAssignMemberModalOpen(false)}
+        onClose={() => {
+          setIsAssignMemberModalOpen(false);
+          setAssignMemberModalMode('assign');
+        }}
         projects={projects}
         selectedProject={selectedProject}
         users={users}
+        resourceRecords={resourceRecords}
         onAssign={handleAssignTeamMember}
+        mode={assignMemberModalMode}
+        requesterName={currentUser?.name || 'Project Manager'}
+        onRequest={async (payload) => {
+          await createAssignmentRequestApi(payload);
+          const [loading, records] = await Promise.all([
+            fetchDepartmentLoadingApi(),
+            fetchResourcesFromApi(),
+          ]);
+          if (loading) setResources(loading);
+          if (records) setResourceRecords(records);
+        }}
       />
     </div>
   );

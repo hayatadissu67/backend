@@ -1,5 +1,4 @@
 import bcrypt from "bcryptjs";
-import crypto from "crypto";
 import User from "../models/userModel.js";
 import Role from "../models/roleModel.js";
 
@@ -37,11 +36,8 @@ export const addUser = async (req, res) => {
       mustChangePassword,
     } = req.body;
 
-    if (!email || !name) {
-      return res.status(400).json({
-        success: false,
-        message: "Name and email are required",
-      });
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password are required" });
     }
 
     const existingUser = await User.findOne({ where: { email } });
@@ -73,19 +69,7 @@ export const addUser = async (req, res) => {
         .json({ success: false, message: "role or roleId is required" });
     }
 
-    // If no password is provided, generate a secure temporary one.
-    let plainPassword = password || tempPassword;
-    let generatedTemp = false;
-    if (!plainPassword) {
-      plainPassword = crypto
-        .randomBytes(6)
-        .toString("base64")
-        .replace(/[^A-Za-z0-9]/g, "A")
-        .slice(0, 10);
-      generatedTemp = true;
-    }
-
-    const hashedPassword = await bcrypt.hash(plainPassword, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await User.create({
       name,
@@ -100,14 +84,7 @@ export const addUser = async (req, res) => {
       mustChangePassword: generatedTemp || mustChangePassword === true,
     });
 
-    const safe = serializeUser(user);
-
-    return res.status(201).json({
-      success: true,
-      message: "User added successfully",
-      data: safe,
-      temporaryPassword: generatedTemp ? plainPassword : undefined,
-    });
+    res.status(201).json({ success: true, message: "User added successfully", data: user });
   } catch (error) {
     console.error("addUser error:", error);
     return res
