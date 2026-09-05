@@ -39,4 +39,16 @@ app.get("/", (req, res) => {
 // ===============================
 initDB();
 
+// ===============================
+// ERROR HANDLER (return JSON for API clients)
+// ===============================
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err && err.stack ? err.stack : err);
+  const status = err && err.status ? err.status : 500;
+  const message = err && err.message ? err.message : 'Internal Server Error';
+  const payload = { success: false, message };
+  if (process.env.NODE_ENV === 'development' && err && err.stack) payload.stack = err.stack;
+  res.status(status).json(payload);
+});
+
 export default app;

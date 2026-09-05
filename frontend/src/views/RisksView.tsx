@@ -190,7 +190,12 @@ export const RisksView: React.FC<RisksViewProps> = ({
   };
 
 
-  const filteredRisks = risks.filter((r) => {
+  // Team Members should only see risks related to their assigned projects
+  const visibleRisks = currentPersona?.roleType === 'TEAM_MEMBER'
+    ? risks.filter(r => (currentPersona.assignedProjectCodes || []).includes(r.projectRef))
+    : risks;
+
+  const filteredRisks = visibleRisks.filter((r) => {
     if (activeTab === 'Team Escalations') {
       return (
         r.status === 'REPORTED' ||

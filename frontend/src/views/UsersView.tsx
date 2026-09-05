@@ -2,6 +2,15 @@ import React, { useState } from 'react';
 import { UserItem, UserRoleType, LoggedInPersona } from '../types';
 import { createUserApi, deleteUserApi, updateUserStatusApi, updateUserApi } from '../services/api';
 
+const getRoleCode = (role: unknown): string => {
+  if (typeof role === 'string') return role;
+  if (role && typeof role === 'object') {
+    const roleRecord = role as { code?: string; name?: string };
+    return roleRecord.code || roleRecord.name || '';
+  }
+  return '';
+};
+
 interface UsersViewProps {
   users: UserItem[];
   onAddUser: (user: UserItem) => void;
@@ -42,7 +51,6 @@ export const UsersView: React.FC<UsersViewProps> = ({
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRoleType>(isPM ? 'TEAM_MEMBER' : 'PROJECT_MANAGER');
   const [department, setDepartment] = useState('Engineering');
-  const [assignedProject, setAssignedProject] = useState('Project Delta');
   const [status, setStatus] = useState<'Active' | 'Pending'>('Active');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
@@ -74,8 +82,6 @@ export const UsersView: React.FC<UsersViewProps> = ({
         department,
         status,
         avatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150`,
-        assignedProjectCodes: assignedProject ? [assignedProject] : [],
-        projectsAssigned: assignedProject ? 1 : 0,
       });
 
       if (res && res.success && res.data) {
@@ -99,13 +105,20 @@ export const UsersView: React.FC<UsersViewProps> = ({
   };
 
   // Filter users
-  const filteredUsers = users.filter((u) => {
+  // If current persona is a Project Manager, only show Team Members in this view
+  const visibleUsers = isPM ? users.filter((u) => {
+    if (!u) return false;
+    return getRoleCode(u.role) === 'TEAM_MEMBER';
+  }) : users;
+
+  const filteredUsers = visibleUsers.filter((u) => {
     const matchesSearch =
       u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.department.toLowerCase().includes(searchTerm.toLowerCase());
+      (u.department || '').toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
+    const userRoleCode = getRoleCode(u.role);
+    const matchesRole = roleFilter === 'ALL' || userRoleCode === roleFilter;
     const matchesStatus = statusFilter === 'ALL' || u.status === statusFilter;
 
     return matchesSearch && matchesRole && matchesStatus;
@@ -191,10 +204,10 @@ export const UsersView: React.FC<UsersViewProps> = ({
   };
 
   // Metrics
-  const totalCount = users.length;
-  const activeCount = users.filter((u) => u.status === 'Active').length;
-  const inactiveCount = users.filter((u) => u.status === 'Inactive').length;
-  const pendingCount = users.filter((u) => u.status === 'Pending').length;
+  const totalCount = visibleUsers.length;
+  const activeCount = visibleUsers.filter((u) => u.status === 'Active').length;
+  const inactiveCount = visibleUsers.filter((u) => u.status === 'Inactive').length;
+  const pendingCount = visibleUsers.filter((u) => u.status === 'Pending').length;
 
   const handleCopyPassword = () => {
     if (createdPasswordInfo) {
@@ -231,7 +244,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
             <p className="text-slate-700 leading-relaxed">
               Account for <strong className="text-slate-900">{createdPasswordInfo.user.name}</strong> (
               <span className="text-slate-600 font-mono">{createdPasswordInfo.user.email}</span>) was created as{' '}
-              <strong>{createdPasswordInfo.user.role.replace(/_/g, ' ')}</strong>.
+              <strong>{getRoleCode(createdPasswordInfo.user.role).replace(/_/g, ' ')}</strong>.
             </p>
 
             <div className="bg-slate-50 border border-slate-300 p-3 rounded-lg space-y-1.5">
@@ -316,7 +329,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
               }`}
             >
               <span className="material-symbols-outlined text-[16px]">format_list_bulleted</span>
-              Directory ({users.length})
+              Directory ({visibleUsers.length})
             </button>
             <button
               onClick={() => setActiveSubTab('add')}
@@ -523,7 +536,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
                           <div>
                             <p className="font-bold text-slate-900 group-hover:text-indigo-900 transition-colors flex items-center gap-1.5">
                               {u.name}
-                              {u.role === 'EXECUTIVE_MANAGER' && (
+                              {getRoleCode(u.role) === 'EXECUTIVE_MANAGER' && (
                                 <span className="text-[9px] bg-purple-100 text-purple-900 font-mono px-1.5 rounded-xs font-bold">
                                   DIRECTOR
                                 </span>
@@ -539,10 +552,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
                         </div>
                       </td>
                       <td className="p-3 font-bold text-slate-900">
-                        {u.role === 'PROJECT_MANAGER' ? 'Project Manager' :
-                         u.role === 'TEAM_MEMBER' ? 'Team Member' :
-                         u.role === 'RISK_MANAGER' ? 'Risk Manager' :
-                         u.role === 'EXECUTIVE_MANAGER' ? 'Executive Manager' : u.role}
+                        {getRoleCode(u.role).replace(/_/g, ' ')}
                       </td>
                       <td className="p-3 text-slate-600 font-medium">{u.department}</td>
                       <td className="p-3">
@@ -742,25 +752,6 @@ export const UsersView: React.FC<UsersViewProps> = ({
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Assigned Project
-                </label>
-                <select
-                  value={assignedProject}
-                  onChange={(e) => setAssignedProject(e.target.value)}
-                  className="w-full border border-slate-300 rounded-sm p-2 outline-none focus:border-blue-600"
-                >
-                  <option value="Project Delta">Project Delta (PRJ-DELTA)</option>
-                  <option value="Alpha Module">Alpha Module (PRJ-ALPHA)</option>
-                  <option value="Project Sigma">Project Sigma (PRJ-SIGMA)</option>
-                  <option value="Data Migration Pipeline">Data Migration Pipeline (PRJ-MIGR8)</option>
-                  <option value="ERP System Upgrade">ERP System Upgrade (PRJ-ERP)</option>
-                  <option value="Cloud Compliance Automation">Cloud Compliance Automation (PRJ-COMP)</option>
-                  <option value="AI Analytics Platform">AI Analytics Platform (PRJ-AI)</option>
-                </select>
-              </div>
-
               <div>
                 <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Account Access Status

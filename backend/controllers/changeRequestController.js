@@ -56,15 +56,20 @@ export const createChangeRequest = async (req, res) => {
 // ===============================
 export const getAllChangeRequests = async (req, res) => {
   try {
-    const changeRequests = await ChangeRequest.findAll({
-      order: [["createdAt", "DESC"]],
-    });
+    let changeRequests = await ChangeRequest.findAll({ order: [["createdAt", "DESC"]] });
 
-    return res.status(200).json({
-      success: true,
-      count: changeRequests.length,
-      data: changeRequests,
-    });
+    // If Team Member, only return requests they created or related to their assigned projects
+    const roleCode = req.user && (req.user.role?.code || req.user.role || req.user.role?.name);
+    if (String(roleCode).toUpperCase() === 'TEAM_MEMBER') {
+      const assigned = req.user.assignedProjectCodes || [];
+      changeRequests = changeRequests.filter(r => {
+        if (r.requestedBy && Number(r.requestedBy) === Number(req.user.id)) return true;
+        if (r.projectId && assigned.includes(String(r.projectId))) return true;
+        return false;
+      });
+    }
+
+    return res.status(200).json({ success: true, count: changeRequests.length, data: changeRequests });
   } catch (error) {
     console.error("Get Change Requests Error:", error);
 

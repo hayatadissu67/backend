@@ -24,11 +24,16 @@ export const createProject = async (req, res) => {
 
 export const getAllProjects = async (req, res) => {
   try {
-    const projects = await getAllProjectsService();
-    res.status(200).json({
-      success: true,
-      data: projects,
-    });
+    let projects = await getAllProjectsService();
+
+    // If Team Member, filter projects to those assigned to the user (by code)
+    const roleCode = req.user && (req.user.role?.code || req.user.role || req.user.role?.name);
+    if (String(roleCode).toUpperCase() === 'TEAM_MEMBER') {
+      const assigned = req.user.assignedProjectCodes || [];
+      projects = projects.filter(p => assigned.includes(p.code));
+    }
+
+    res.status(200).json({ success: true, data: projects });
   } catch (error) {
     res.status(500).json({
       success: false,

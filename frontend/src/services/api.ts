@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Project, RiskItem, TaskItem, BudgetItem, ChangeRequestItem, ReportItem, ReportTemplate, UserItem, UserRoleType, ActivityItem, ApprovalRequest } from '../types';
+import { Project, RiskItem, TaskItem, BudgetItem, ChangeRequestItem, ReportItem, ReportTemplate, UserItem, UserRoleType, ActivityItem, ApprovalRequest, ResourceRecord } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
@@ -13,7 +13,7 @@ const api = axios.create({
 // Request interceptor for API calls to attach JWT token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -28,9 +28,12 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 && !error.config.url?.includes('/auth/login')) {
-      // Clear token on 401 if unauthenticated
-      // localStorage.removeItem('token');
+    if (
+      [401, 403].includes(error.response?.status) &&
+      !error.config.url?.includes('/auth/login')
+    ) {
+      // Force a fresh login when an old/invalid token causes repeated auth failures.
+      sessionStorage.removeItem('token');
     }
     return Promise.reject(error);
   }
@@ -47,11 +50,10 @@ export const checkApiHealth = async () => {
 };
 
 // --- Authentication API ---
-export const loginApi = async (email: string, password: string, role?: UserRoleType) => {
+export const loginApi = async (email: string, password: string) => {
   const res = await api.post('/auth/login', {
     email: email.trim().toLowerCase(),
     password,
-    role,
   });
   return res.data;
 };
@@ -88,7 +90,16 @@ export const logoutApi = async () => {
 export const fetchUsersFromApi = async (): Promise<UserItem[] | null> => {
   try {
     const res = await api.get('/users');
-    return res.data?.success && Array.isArray(res.data.data) ? res.data.data : [];
+    const rawUsers = Array.isArray(res.data)
+      ? res.data
+      : res.data?.success && Array.isArray(res.data.data)
+        ? res.data.data
+        : [];
+
+    return rawUsers.map((user: any) => ({
+      ...user,
+      role: typeof user.role === 'object' ? user.role?.code : user.role,
+    })) as UserItem[];
   } catch (err) {
     console.warn('Failed to fetch users from API:', err);
     return null;
@@ -255,10 +266,108 @@ export const updateRiskApi = async (id: string, riskData: Partial<RiskItem>): Pr
 };
 
 // --- Tasks API ---
+
+// Maps a backend task record (DB field names) → frontend TaskItem shape
+const mapTaskFromApi = (t: any): any => ({
+  id:             t.id,
+  title:          t.title,
+  projectCode:    t.projectCode   || t.targetProject  || '',
+  projectName:    t.projectName   || t.targetProject  || '',
+  assignee:       t.assignee,
+  status:         mapStatusToFrontend(t.status),
+  priority:       mapPriorityToFrontend(t.priority),
+  dueDate:        t.dueDate       || t.completionDeadline || '',
+  startDate:      t.startDate,
+  progress:       t.progress      ?? 0,
+  estimatedHours: t.estimatedHours ?? t.estimatedWorkHours ?? 0,
+  hoursLogged:    t.hoursLogged   ?? 0,
+  description:    t.description,
+  comments:       t.comments      || [],
+  parentTaskId:   t.parentTaskId  ?? null,
+  subTasks:       Array.isArray(t.subTasks) ? t.subTasks.map(mapTaskFromApi) : [],
+});
+
+// Maps a frontend TaskItem → backend payload field names
+const mapTaskToApi = (t: any): any => ({
+  title:               t.title || `${t.projectCode} — ${t.assignee}`,
+  targetProject:       t.projectCode   || t.targetProject  || '',
+  assignee:            t.assignee,
+  priority:            mapPriorityToBackend(t.priority),
+  estimatedWorkHours:  t.estimatedHours ?? t.estimatedWorkHours ?? 16,
+  completionDeadline:  t.dueDate       || t.completionDeadline || '',
+  status:              mapStatusToBackend(t.status),
+  progress:            t.progress      ?? 0,
+  description:         t.description   || '',
+  parentTaskId:        t.parentTaskId  ?? null,
+  subTasks: Array.isArray(t.subTasks)
+    ? t.subTasks.map((st: any) => ({ title: st.title, description: st.description || '' }))
+    : [],
+});
+
+const mapStatusToFrontend = (s: string): any => {
+  const map: Record<string, string> = {
+    TO_DO:       'Backlog',
+    IN_PROGRESS: 'In Progress',
+    IN_REVIEW:   'Review',
+    COMPLETED:   'Done',
+    BLOCKED:     'Blocked',
+    // pass through if already frontend format
+    Backlog:     'Backlog',
+    'In Progress': 'In Progress',
+    Review:      'Review',
+    Done:        'Done',
+    Blocked:     'Blocked',
+  };
+  return map[s] ?? 'Backlog';
+};
+
+const mapStatusToBackend = (s: string): string => {
+  const map: Record<string, string> = {
+    Backlog:       'TO_DO',
+    'In Progress': 'IN_PROGRESS',
+    Review:        'IN_REVIEW',
+    Done:          'COMPLETED',
+    Blocked:       'BLOCKED',
+    // pass through if already backend format
+    TO_DO:         'TO_DO',
+    IN_PROGRESS:   'IN_PROGRESS',
+    IN_REVIEW:     'IN_REVIEW',
+    COMPLETED:     'COMPLETED',
+    BLOCKED:       'BLOCKED',
+  };
+  return map[s] ?? 'TO_DO';
+};
+
+const mapPriorityToFrontend = (p: string): any => {
+  const map: Record<string, string> = {
+    HIGH:     'High',
+    MEDIUM:   'Medium',
+    LOW:      'Low',
+    CRITICAL: 'High',
+    High:     'High',
+    Medium:   'Medium',
+    Low:      'Low',
+  };
+  return map[p] ?? 'Medium';
+};
+
+const mapPriorityToBackend = (p: string): string => {
+  const map: Record<string, string> = {
+    High:   'HIGH',
+    Medium: 'MEDIUM',
+    Low:    'LOW',
+    HIGH:   'HIGH',
+    MEDIUM: 'MEDIUM',
+    LOW:    'LOW',
+  };
+  return map[p] ?? 'MEDIUM';
+};
+
 export const fetchTasksFromApi = async (): Promise<TaskItem[] | null> => {
   try {
     const res = await api.get('/tasks');
-    return res.data?.success && Array.isArray(res.data.data) ? res.data.data : [];
+    const raw = res.data?.success && Array.isArray(res.data.data) ? res.data.data : [];
+    return raw.map(mapTaskFromApi);
   } catch (err) {
     console.warn('Failed to fetch tasks from API:', err);
     return null;
@@ -267,8 +376,8 @@ export const fetchTasksFromApi = async (): Promise<TaskItem[] | null> => {
 
 export const createTaskApi = async (taskData: Partial<TaskItem>): Promise<TaskItem | null> => {
   try {
-    const res = await api.post('/tasks', taskData);
-    return res.data?.success ? res.data.data : null;
+    const res = await api.post('/tasks', mapTaskToApi(taskData));
+    return res.data?.success ? mapTaskFromApi(res.data.data) : null;
   } catch (err) {
     console.warn('Failed to create task via API:', err);
     return null;
@@ -277,8 +386,8 @@ export const createTaskApi = async (taskData: Partial<TaskItem>): Promise<TaskIt
 
 export const updateTaskApi = async (id: string, taskData: Partial<TaskItem>): Promise<TaskItem | null> => {
   try {
-    const res = await api.put(`/tasks/${id}`, taskData);
-    return res.data?.success ? res.data.data : null;
+    const res = await api.put(`/tasks/${id}`, mapTaskToApi(taskData));
+    return res.data?.success ? mapTaskFromApi(res.data.data) : null;
   } catch (err) {
     console.warn('Failed to update task via API:', err);
     return null;
@@ -662,6 +771,77 @@ export const updateApprovalApi = async (id: string, approvalData: Partial<Approv
   } catch (err) {
     console.warn('Failed to update approval via API:', err);
     return null;
+  }
+};
+
+// --- Resources API ---
+export const fetchResourcesFromApi = async (): Promise<ResourceRecord[] | null> => {
+  try {
+    const res = await api.get('/resources');
+    return res.data?.success && Array.isArray(res.data.data) ? res.data.data : [];
+  } catch (err) {
+    console.warn('Failed to fetch resources from API:', err);
+    return null;
+  }
+};
+
+export const fetchDepartmentLoadingApi = async (): Promise<ResourceLoading[] | null> => {
+  try {
+    const res = await api.get('/resources/loading');
+    return res.data?.success && Array.isArray(res.data.data) ? res.data.data : [];
+  } catch (err) {
+    console.warn('Failed to fetch department loading from API:', err);
+    return null;
+  }
+};
+
+export const createResourceApi = async (data: Record<string, any>) => {
+  try {
+    const res = await api.post('/resources', data);
+    return res.data?.success ? res.data.data : null;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to create resource.';
+    throw new Error(message);
+  }
+};
+
+export const updateResourceApi = async (id: string | number, data: Partial<ResourceRecord>) => {
+  try {
+    const res = await api.put(`/resources/${id}`, data);
+    return res.data?.success ? res.data.data as ResourceRecord : null;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to update resource.';
+    throw new Error(message);
+  }
+};
+
+export const createAssignmentRequestApi = async (data: Record<string, any>) => {
+  try {
+    const res = await api.post('/resources/request', data);
+    return res.data?.success ? res.data.data : null;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to create assignment request.';
+    throw new Error(message);
+  }
+};
+
+export const updateResourceStatusApi = async (id: string | number, status: string, comment: string) => {
+  try {
+    const res = await api.patch(`/resources/${id}/status`, { status, comment });
+    return res.data?.success ? res.data.data : null;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to update resource status.';
+    throw new Error(message);
+  }
+};
+
+export const deleteResourceApi = async (id: string | number) => {
+  try {
+    const res = await api.delete(`/resources/${id}`);
+    return !!res.data?.success;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to delete resource.';
+    throw new Error(message);
   }
 };
 

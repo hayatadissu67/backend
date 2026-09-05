@@ -9,7 +9,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "nodemon server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "seed": "node ./seeds/seedRolesAndUsers.js",
+    "seed:resources": "node ./seeds/seedResources.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

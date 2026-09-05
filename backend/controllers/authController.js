@@ -98,46 +98,65 @@ export const login = async (req, res) => {
 };
 
 export const register = async (req, res) => {
-  try {
-    const { name, email, password, role, department } = req.body;
+    try {
+        const { name, email, password, roleId, department } = req.body;
 
-    // Validate required fields
-    if (!email || !password) {
-      return res.status(400).json({
-        status: "failed",
-        message: "Email and password are required",
-      });
+        if (!email || !password) {
+            return res.status(400).json({ status: "failed", message: "Email and password are required" });
+        }
+
+        // If roleId provided, ensure it exists
+        if (roleId) {
+            const role = await Role.findByPk(roleId);
+            if (!role) return res.status(400).json({ status: "failed", message: "Invalid roleId" });
+        }
+
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const user = await User.create({
+            name,
+            email,
+            password: hashedPassword,
+            roleId: roleId || null,
+            department,
+        });
+
+        // Remove password before returning
+        const userSafe = user.toJSON();
+        delete userSafe.password;
+
+        return res.status(201).json({ status: "success", message: "User registered successfully", data: userSafe });
+    } catch (error) {
+        console.error("Error registering user:", error.message || error);
+        return res.status(500).json({ status: "failed", message: "Server Error" });
     }
+};
 
-    let roleId = null;
-    if (role) {
-      const roleRecord = await Role.findOne({ where: { code: role } });
-      if (roleRecord) {
-        roleId = roleRecord.id;
-      }
+export const getMe = async (req, res) => {
+    try {
+        if (!req.user) {
+            return res.status(401).json({ success: false, message: 'Not authenticated' });
+        }
+
+        const user = req.user;
+        const roleCode = (user.role && (user.role.code || user.role.name)) ? (user.role.code || user.role.name) : 'TEAM_MEMBER';
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: roleCode,
+                department: user.department,
+                status: user.status,
+                avatar: user.avatar,
+                assignedProjectCodes: user.assignedProjectCodes || []
+            }
+        });
+    } catch (error) {
+        console.error('getMe error:', error);
+        return res.status(500).json({ success: false, message: 'Server error' });
     }
-
-    // Create user (await is required)
-    const user = await User.create({
-      name,
-      email,
-      password, 
-      roleId,
-      department,
-    });
-
-    // Respond with success
-    return res.status(201).json({
-      status: "success",
-      message: "User registered successfully",
-      data: user,
-    });
-
-  } catch (error) {
-    console.error("Error registering user:", error);
-    return res.status(500).json({
-      status: "failed",
-      message: "Server Error",
-    });
-  }
 };

@@ -10,6 +10,22 @@ const Resource = sequelize.define(
       autoIncrement: true,
     },
 
+    projectId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: { model: "projects", key: "id" },
+      onUpdate: "CASCADE",
+      onDelete: "RESTRICT",
+    },
+
+    userId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: { model: "users", key: "id" },
+      onUpdate: "CASCADE",
+      onDelete: "RESTRICT",
+    },
+
     type: {
       type: DataTypes.ENUM("ALLOCATION", "ASSIGNMENT_REQUEST"),
       allowNull: false,
@@ -18,12 +34,12 @@ const Resource = sequelize.define(
 
     employeeName: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
     },
 
     projectTarget: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
     },
 
     assignedTask: {
@@ -57,6 +73,16 @@ const Resource = sequelize.define(
     },
 
     businessJustification: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+
+    approvalComment: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+
+    rejectionComment: {
       type: DataTypes.TEXT,
       allowNull: true,
     },

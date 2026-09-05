@@ -288,7 +288,17 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const totalRisks = risks.length;
   const highRisks = risks.filter((r) => r.severity === 'CRITICAL' || r.severity === 'HIGH').length;
 
-  const filteredReports = reports.filter((r) => {
+  // If team member, only show reports related to their assigned projects or prepared by them
+  const visibleReports = currentPersona?.roleType === 'TEAM_MEMBER'
+    ? reports.filter(r => {
+        const assigned = currentPersona?.assignedProjectCodes || [];
+        // report may include projectCode or relatedProject fields
+        const projectCode = (r as any).projectCode || (r as any).relatedProject || '';
+        return assigned.includes(projectCode) || r.preparedBy === currentPersona?.name || r.preparedBy === currentPersona?.email;
+      })
+    : reports;
+
+  const filteredReports = visibleReports.filter((r) => {
     return selectedReportCategory === 'All' || r.category === selectedReportCategory;
   });
 

@@ -334,56 +334,77 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ currentPersona }) 
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-4">
         <div>
           <nav className="flex items-center gap-1 text-[#45464d] font-bold text-[11px] tracking-wider uppercase mb-1">
-            <span>EXECUTIVE GOVERNANCE</span>
+            <span>{currentPersona?.roleType === 'TEAM_MEMBER' ? 'TEMPLATES' : 'EXECUTIVE GOVERNANCE'}</span>
             <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-            <span className="text-[#00174b]">EXECUTIVE ACTION TEMPLATES &amp; APPROVALS</span>
+            <span className="text-[#00174b]">{currentPersona?.roleType === 'TEAM_MEMBER' ? 'ACTION TEMPLATES LIBRARY' : 'EXECUTIVE ACTION TEMPLATES &amp; APPROVALS'}</span>
           </nav>
           <h2 className="text-[26px] font-bold tracking-tight text-[#191c1e]">
-            Executive Action Templates Engine
+            {currentPersona?.roleType === 'TEAM_MEMBER' ? 'Action Templates Library' : 'Executive Action Templates Engine'}
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Standardized templates with version control, document upload, and one-click download for Stage-Gate governance.
+            {currentPersona?.roleType === 'TEAM_MEMBER'
+              ? 'Download and use approved action templates relevant to your assigned tasks. Creation and management are restricted to administrators.'
+              : 'Standardized templates with version control, document upload, and one-click download for Stage-Gate governance.'}
           </p>
         </div>
 
         {/* Global Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={handleOpenCreateModal}
-            className="px-3.5 py-1.5 bg-[#00174b] hover:bg-indigo-950 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
-          >
-            <span className="material-symbols-outlined text-[16px]">post_add</span>
-            <span>Create Action Template</span>
-          </button>
+          {currentPersona?.roleType !== 'TEAM_MEMBER' && (
+            <button
+              onClick={handleOpenCreateModal}
+              className="px-3.5 py-1.5 bg-[#00174b] hover:bg-indigo-950 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
+            >
+              <span className="material-symbols-outlined text-[16px]">post_add</span>
+              <span>Create Action Template</span>
+            </button>
+          )}
         </div>
       </div>
 
       {/* Navigation Sub-Tabs */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-2">
         <div className="flex flex-wrap items-center gap-1">
-          {[
-            { key: 'Library', label: 'Action Templates Library', icon: 'collections_bookmark', badge: templates.length },
-            { key: 'Requests', label: 'Pending Executive Queue', icon: 'pending_actions', badge: pendingRequestsCount },
-            { key: 'Audit Log', label: 'Executive Audit Log', icon: 'verified', badge: requests.filter((r) => r.status !== 'Pending').length }
-          ].map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveSubTab(tab.key as any)}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                activeSubTab === tab.key
-                  ? 'bg-[#00174b] text-white shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[16px]">{tab.icon}</span>
-              <span>{tab.label}</span>
-              {tab.badge !== undefined && (
-                <span className="bg-indigo-500/20 text-indigo-900 px-1.5 py-0.2 rounded-full font-mono text-[10px]">
-                  {tab.badge}
-                </span>
-              )}
-            </button>
-          ))}
+          {currentPersona?.roleType === 'TEAM_MEMBER' ? (
+            <>
+              <button
+                onClick={() => setActiveSubTab('Library')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  activeSubTab === 'Library' ? 'bg-[#00174b] text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[16px]">collections_bookmark</span>
+                <span>Action Templates Library</span>
+                <span className="bg-indigo-500/20 text-indigo-900 px-1.5 py-0.2 rounded-full font-mono text-[10px]">{templates.length}</span>
+              </button>
+            </>
+          ) : (
+            <>
+              {[
+                { key: 'Library', label: 'Action Templates Library', icon: 'collections_bookmark', badge: templates.length },
+                { key: 'Requests', label: 'Pending Executive Queue', icon: 'pending_actions', badge: pendingRequestsCount },
+                { key: 'Audit Log', label: 'Executive Audit Log', icon: 'verified', badge: requests.filter((r) => r.status !== 'Pending').length }
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveSubTab(tab.key as any)}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                    activeSubTab === tab.key
+                      ? 'bg-[#00174b] text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[16px]">{tab.icon}</span>
+                  <span>{tab.label}</span>
+                  {tab.badge !== undefined && (
+                    <span className="bg-indigo-500/20 text-indigo-900 px-1.5 py-0.2 rounded-full font-mono text-[10px]">
+                      {tab.badge}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </>
+          )}
         </div>
 
         <div className="relative w-64">
@@ -440,41 +461,42 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ currentPersona }) 
                     </div>
 
                     <div className="flex items-center gap-1">
-                      {/* EDIT BUTTON */}
-                      <button
-                        onClick={() => handleOpenEditModal(tpl)}
-                        className="text-indigo-600 hover:bg-indigo-50 p-1.5 rounded-md transition-colors cursor-pointer"
-                        title="Edit Template"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">edit</span>
-                      </button>
+                      {/* EDIT / VERSION / DELETE actions disabled for Team Members */}
+                      {currentPersona?.roleType !== 'TEAM_MEMBER' && (
+                        <>
+                          <button
+                            onClick={() => handleOpenEditModal(tpl)}
+                            className="text-indigo-600 hover:bg-indigo-50 p-1.5 rounded-md transition-colors cursor-pointer"
+                            title="Edit Template"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">edit</span>
+                          </button>
 
-                      {/* UPLOAD ATTACHMENT BUTTON */}
-                      <button
-                        onClick={() => setUploadingTemplate(tpl)}
-                        className="text-emerald-600 hover:bg-emerald-50 p-1.5 rounded-md transition-colors cursor-pointer"
-                        title="Upload/Attach Template File"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">upload_file</span>
-                      </button>
+                          <button
+                            onClick={() => setUploadingTemplate(tpl)}
+                            className="text-emerald-600 hover:bg-emerald-50 p-1.5 rounded-md transition-colors cursor-pointer"
+                            title="Upload/Attach Template File"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">upload_file</span>
+                          </button>
 
-                      {/* NEW VERSION BUTTON */}
-                      <button
-                        onClick={() => handleOpenVersionModal(tpl)}
-                        className="text-amber-600 hover:bg-amber-50 p-1.5 rounded-md transition-colors cursor-pointer"
-                        title="Create New Version"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">published_with_changes</span>
-                      </button>
+                          <button
+                            onClick={() => handleOpenVersionModal(tpl)}
+                            className="text-amber-600 hover:bg-amber-50 p-1.5 rounded-md transition-colors cursor-pointer"
+                            title="Create New Version"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">published_with_changes</span>
+                          </button>
 
-                      {/* DELETE BUTTON */}
-                      <button
-                        onClick={() => setTemplateToDelete(tpl)}
-                        className="text-red-500 hover:bg-red-50 p-1.5 rounded-md transition-colors cursor-pointer"
-                        title="Delete Template"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">delete</span>
-                      </button>
+                          <button
+                            onClick={() => setTemplateToDelete(tpl)}
+                            className="text-red-500 hover:bg-red-50 p-1.5 rounded-md transition-colors cursor-pointer"
+                            title="Delete Template"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">delete</span>
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
 

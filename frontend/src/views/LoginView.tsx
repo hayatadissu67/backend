@@ -9,10 +9,11 @@ interface LoginViewProps {
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<UserRoleType>('EXECUTIVE_MANAGER');
+  const [role, setRole] = useState<UserRoleType | null>(null);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  // role metadata kept for display elsewhere
   const roleMeta: Record<UserRoleType, { title: string; desc: string; icon: string }> = {
     EXECUTIVE_MANAGER: {
       title: 'Executive Manager',
@@ -36,11 +37,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     },
   };
 
-  const handleRoleChange = (newRole: UserRoleType) => {
-    setRole(newRole);
-    setError('');
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -53,7 +49,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     setIsLoading(true);
 
     try {
-      const data = await loginApi(email, password, role);
+      const data = await loginApi(email, password);
 
       if (!data || !data.success) {
         throw new Error(data?.message || 'Login failed. Please check credentials.');
@@ -83,7 +79,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           Enterprise PMO Control Tower
         </h2>
         <p className="mt-2 text-center text-xs text-slate-500 font-medium">
-          Select your role and enter credentials to sign in
+          Enter your credentials to sign in
         </p>
       </div>
 
@@ -103,36 +99,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               </div>
             )}
 
-            {/* Role Selection Dropdown */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center justify-between">
-                <span>Account Role *</span>
-                <span className="text-[10px] text-indigo-600 normal-case font-bold">Verified against database</span>
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <span className="material-symbols-outlined text-indigo-600 text-lg">
-                    {roleMeta[role]?.icon || 'badge'}
-                  </span>
-                </div>
-                <select
-                  value={role}
-                  onChange={(e) => handleRoleChange(e.target.value as UserRoleType)}
-                  className="appearance-none block w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-lg shadow-2xs font-bold text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all cursor-pointer"
-                >
-                  <option value="EXECUTIVE_MANAGER">Executive Manager (Director)</option>
-                  <option value="PROJECT_MANAGER">Project Manager (PM)</option>
-                  <option value="RISK_MANAGER">Risk Manager (Governance)</option>
-                  <option value="TEAM_MEMBER">Team Member (Engineer / Specialist)</option>
-                </select>
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <span className="material-symbols-outlined text-slate-400 text-lg">expand_more</span>
-                </div>
-              </div>
-              <p className="text-[10px] text-slate-500 mt-1 italic">
-                {roleMeta[role]?.desc}
-              </p>
-            </div>
+            {/* Role removed: backend determines role from user account */}
 
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
@@ -181,10 +148,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 {isLoading ? (
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined animate-spin text-base">progress_activity</span>
-                    <span>Verifying Credentials &amp; Role...</span>
+                    <span>Verifying credentials...</span>
                   </div>
                 ) : (
-                  `Sign In as ${roleMeta[role]?.title || 'User'}`
+                  'Sign In'
                 )}
               </button>
             </div>

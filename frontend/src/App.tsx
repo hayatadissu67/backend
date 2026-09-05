@@ -19,17 +19,18 @@ import {
   rejectChangeRequestApi,
   fetchReportsApi,
   fetchTemplatesApi,
-  fetchDiscussionsApi,
   createDiscussionApi,
-  fetchMeetingsApi,
   createMeetingApi,
-  fetchNotificationsApi,
   markNotificationsReadApi,
   clearNotificationsApi,
   fetchUsersFromApi,
   deleteUserApi,
   updateUserStatusApi,
   updateUserApi,
+  getCurrentUserApi,
+  fetchDepartmentLoadingApi,
+  fetchResourcesFromApi,
+  createAssignmentRequestApi,
 } from './services/api';
 
 
@@ -40,6 +41,7 @@ import {
   RiskItem,
   ActivityItem,
   ResourceLoading,
+  ResourceRecord,
   ApprovalRequest,
   UserItem,
   TaskItem,
@@ -64,6 +66,8 @@ import { AssignMemberModal } from './components/AssignMemberModal';
 import { FirstLoginChangePasswordModal } from './components/FirstLoginChangePasswordModal';
 
 import { ExecutiveDashboardView } from "./views/ExecutiveDashboardView";
+import PMDashboardView from './views/PMDashboardView';
+import TeamMemberDashboardView from './views/TeamMemberDashboardView';
 import { ProjectsView } from "./views/ProjectsView";
 import { PortfolioView } from "./views/PortfolioView";
 import { UsersView } from "./views/UsersView";
@@ -86,8 +90,100 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
-  // Authentication State: Always start on Login page
+  // Authentication lifecycle: CHECKING (resolving session) ->
+  // AUTHENTICATED (valid server-verified JWT) -> NOT_AUTHENTICATED (no/invalid session).
+  // Authentication is NEVER inferred from a stored boolean; it requires a real
+  // token validated against the backend /auth/me endpoint.
+  type AuthStatus = 'checking' | 'authenticated' | 'unauthenticated';
   const [currentUser, setCurrentUser] = useState<UserItem | null>(null);
+  const [authStatus, setAuthStatus] = useState<AuthStatus>('checking');
+
+  // Stale/boolean auth keys left by previous dev builds or legacy localStorage
+  // sessions. These must never act as proof of authentication.
+  const STALE_AUTH_KEYS = [
+    'isAuthenticated', 'loggedIn', 'user', 'currentUser',
+    'authToken', 'accessToken', 'refreshToken', 'session', 'auth', 'persona',
+  ];
+
+  // Clear ONLY authentication-related persisted data. Unrelated application
+  // storage is intentionally left untouched.
+  const clearAuthData = () => {
+    ['token', ...STALE_AUTH_KEYS].forEach((key) => {
+      sessionStorage.removeItem(key);
+      localStorage.removeItem(key);
+    });
+  };
+
+  // Restore session on startup using the REAL backend-verified JWT mechanism.
+  useEffect(() => {
+    let cancelled = false;
+
+    const restoreSession = async () => {
+      // One-time purge of stale/boolean auth state so a persisted
+      // "isAuthenticated=true" or a legacy localStorage token can never
+      // shortcut authentication. The active session token lives only in
+      // sessionStorage under "token" and is re-validated below.
+      STALE_AUTH_KEYS.forEach((key) => {
+        sessionStorage.removeItem(key);
+        localStorage.removeItem(key);
+      });
+      localStorage.removeItem('token');
+
+      const token = sessionStorage.getItem('token');
+      if (!token) {
+        if (!cancelled) {
+          setCurrentUser(null);
+          setAuthStatus('unauthenticated');
+        }
+        return;
+      }
+
+      try {
+        const user = await getCurrentUserApi();
+        if (cancelled) return;
+
+        if (user) {
+          setCurrentUser(user);
+          setAuthStatus('authenticated');
+          // restore navigation based on role
+          if (window.location.hash) {
+            const hash = window.location.hash.replace('#', '') as NavigationTab;
+            if (isTabAllowedForRole(user.role, hash)) {
+              setCurrentTab(hash);
+            } else {
+              // pick default tab for role
+              if (user.role === 'RISK_MANAGER') setCurrentTab('risks');
+              else if (user.role === 'TEAM_MEMBER') setCurrentTab('tasks');
+              else setCurrentTab('dashboard');
+            }
+          } else {
+            if (user.role === 'RISK_MANAGER') setCurrentTab('risks');
+            else if (user.role === 'TEAM_MEMBER') setCurrentTab('tasks');
+            else if (user.role === 'PROJECT_MANAGER') setCurrentTab('dashboard');
+            else setCurrentTab('dashboard');
+          }
+        } else {
+          // token invalid or expired -> clear it, do NOT enter the application
+          clearAuthData();
+          if (!cancelled) {
+            setCurrentUser(null);
+            setAuthStatus('unauthenticated');
+          }
+        }
+      } catch {
+        if (cancelled) return;
+        clearAuthData();
+        setCurrentUser(null);
+        setAuthStatus('unauthenticated');
+      }
+    };
+
+    restoreSession();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Sync navigation with browser back/forward buttons via hash
   useEffect(() => {
@@ -115,8 +211,9 @@ export default function App() {
   };
 
   const handleLoginSuccess = (token: string, user: UserItem) => {
-    localStorage.setItem('token', token);
+    sessionStorage.setItem('token', token);
     setCurrentUser(user);
+    setAuthStatus('authenticated');
 
     // Role-based redirection upon verified login
     let targetTab: NavigationTab = 'dashboard';
@@ -124,6 +221,8 @@ export default function App() {
       targetTab = 'risks';
     } else if (user.role === 'TEAM_MEMBER') {
       targetTab = 'tasks';
+    } else if (user.role === 'PROJECT_MANAGER') {
+      targetTab = 'dashboard';
     } else {
       targetTab = 'dashboard';
     }
@@ -132,9 +231,9 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    localStorage.clear();
-    sessionStorage.clear();
+    clearAuthData();
     setCurrentUser(null);
+    setAuthStatus('unauthenticated');
     window.location.hash = '';
     window.location.replace('/');
   };
@@ -167,8 +266,13 @@ export default function App() {
 
     if (role === 'TEAM_MEMBER') {
       const allowedForTeam: NavigationTab[] = [
+        'dashboard',
         'tasks',
+        'change_requests',
+        'reports',
+        'templates',
         'projects',
+        'risks',
         'collaboration',
         'communication',
         'chat',
@@ -254,13 +358,15 @@ export default function App() {
     }
   };
 
-  const handleNotifyPMTaskCompleted = (task: TaskItem, memberName: string) => {
+  const handleNotifyPMTaskCompleted = async (task: TaskItem, memberName: string) => {
     const updated: TaskItem = {
       ...task,
       status: 'Done',
       progress: 100
     };
+    // Persist the completion to the database
     setTasks((prev) => prev.map((t) => (t.id === task.id ? updated : t)));
+    await updateTaskApi(task.id, updated);
 
     const newNotif: NotificationItem = {
       id: `notif-${Date.now()}`,
@@ -287,12 +393,8 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [risks, setRisks] = useState<RiskItem[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
-  const [resources, setResources] = useState<ResourceLoading[]>([
-    { department: 'Frontend Eng', percentage: 85, headcount: 12, colorClass: 'bg-blue-600' },
-    { department: 'Backend Eng', percentage: 92, headcount: 14, colorClass: 'bg-indigo-600' },
-    { department: 'DevOps & Cloud', percentage: 78, headcount: 8, colorClass: 'bg-emerald-600' },
-    { department: 'QA & Compliance', percentage: 64, headcount: 6, colorClass: 'bg-purple-600' },
-  ]);
+  const [resources, setResources] = useState<ResourceLoading[]>([]);
+  const [resourceRecords, setResourceRecords] = useState<ResourceRecord[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
 
   const accessibleProjects = useMemo(() => {
@@ -381,6 +483,7 @@ export default function App() {
   const [selectedUserProfile, setSelectedUserProfile] = useState<UserItem | null>(null);
   const [isUserProfileModalOpen, setIsUserProfileModalOpen] = useState(false);
   const [isAssignMemberModalOpen, setIsAssignMemberModalOpen] = useState(false);
+  const [assignMemberModalMode, setAssignMemberModalMode] = useState<'assign' | 'request'>('assign');
 
   const handleOpenUserProfile = (user?: UserItem) => {
     if (user) {
@@ -402,7 +505,7 @@ export default function App() {
       try {
         const [
           apiUsers, apiProjects, apiRisks, apiTasks, apiBudgets, apiCRs, apiReports, apiTemplates,
-          apiDiscussions, apiMeetings, apiNotifications
+          apiDepartmentLoading, apiResources
         ] = await Promise.all([
           fetchUsersFromApi(),
           fetchProjectsFromApi(),
@@ -412,11 +515,10 @@ export default function App() {
           fetchChangeRequestsFromApi(),
           fetchReportsApi(),
           fetchTemplatesApi(),
-          fetchDiscussionsApi(),
-          fetchMeetingsApi(),
-          fetchNotificationsApi()
+          fetchDepartmentLoadingApi(),
+          fetchResourcesFromApi(),
         ]);
-        
+
         if (apiUsers) setUsers(apiUsers);
         if (apiProjects) setProjects(apiProjects);
         if (apiRisks) setRisks(apiRisks);
@@ -425,9 +527,8 @@ export default function App() {
         if (apiCRs) setChangeRequests(apiCRs);
         if (apiReports) setReports(apiReports);
         if (apiTemplates) setTemplates(apiTemplates);
-        if (apiDiscussions) setDiscussions(apiDiscussions);
-        if (apiMeetings) setMeetings(apiMeetings);
-        if (apiNotifications) setNotifications(apiNotifications);
+        if (apiDepartmentLoading && apiDepartmentLoading.length > 0) setResources(apiDepartmentLoading);
+        if (apiResources) setResourceRecords(apiResources);
       } catch (err) {
         console.error('Failed to sync data with backend API:', err);
       }
@@ -435,23 +536,12 @@ export default function App() {
 
     syncWithBackendApi();
 
-    // Polling interval for messages and notifications
-    const interval = setInterval(async () => {
-      try {
-        const [apiNotifications] = await Promise.all([
-          fetchNotificationsApi()
-        ]);
-        if (apiNotifications) setNotifications(apiNotifications);
-      } catch (e) {
-        // silent fail on poll
-      }
-    }, 10000);
-
-    return () => clearInterval(interval);
+    return undefined;
   }, [currentUser?.id]);
 
   // Handlers
   const handleAddProject = async (newProject: Project) => {
+<<<<<<< HEAD
     try {
       const created = await createProjectApi(newProject);
       if (created) {
@@ -469,6 +559,24 @@ export default function App() {
     } catch (err: any) {
       alert(err.message || 'Failed to create project.');
     }
+=======
+    const createdProject = await createProjectApi(newProject);
+    if (!createdProject) {
+      alert('The project could not be saved to the database.');
+      return;
+    }
+
+    setProjects((prev) => [createdProject, ...prev]);
+    const act: ActivityItem = {
+      id: `a-${Date.now()}`,
+      type: 'gate',
+      title: `Project Added: ${createdProject.name}`,
+      subtitle: `Charter registered by ${currentUser?.name || 'PMO User'} • Just now`,
+      timestamp: 'Just now',
+      badgeType: 'check'
+    };
+    setActivities([act, ...activities]);
+>>>>>>> aa592568bb6d78f2d31bb02ac268b220f3f0ade9
   };
 
   const handleUpdateProject = async (updated: Project) => {
@@ -503,19 +611,30 @@ export default function App() {
     updateUserApi(updatedUser.id, updatedUser).catch(console.error);
   };
 
-  const handleAddTask = (newTask: TaskItem) => {
-    setTasks([newTask, ...tasks]);
-    createTaskApi(newTask);
+  const handleAddTask = async (newTask: TaskItem) => {
+    // Optimistically add to UI immediately
+    setTasks((prev) => [newTask, ...prev]);
+    // Persist to DB and replace the temp record with the real DB record
+    const saved = await createTaskApi(newTask);
+    if (saved) {
+      setTasks((prev) => prev.map((t) => t.id === newTask.id ? saved : t));
+    }
   };
 
-  const handleUpdateTaskStatus = (taskId: string, newStatus: TaskItem['status']) => {
+  const handleUpdateTaskStatus = async (taskId: string, newStatus: TaskItem['status']) => {
     setTasks(tasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)));
-    updateTaskApi(taskId, { status: newStatus });
+    const saved = await updateTaskApi(taskId, { status: newStatus });
+    if (saved) {
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? saved : t)));
+    }
   };
 
-  const handleUpdateTask = (updatedTask: TaskItem) => {
+  const handleUpdateTask = async (updatedTask: TaskItem) => {
     setTasks(tasks.map((t) => (t.id === updatedTask.id ? updatedTask : t)));
-    updateTaskApi(updatedTask.id, updatedTask);
+    const saved = await updateTaskApi(updatedTask.id, updatedTask);
+    if (saved) {
+      setTasks((prev) => prev.map((t) => (t.id === updatedTask.id ? saved : t)));
+    }
   };
 
   const handleDeleteTask = (taskId: string) => {
@@ -523,6 +642,7 @@ export default function App() {
   };
 
   const handleAddRisk = async (newRisk: RiskItem) => {
+<<<<<<< HEAD
     try {
       const created = await createRiskApi(newRisk);
       if (created) {
@@ -537,6 +657,10 @@ export default function App() {
           isRead: false
         };
         setNotifications((prev) => [notif, ...prev]);
+=======
+    setRisks([newRisk, ...risks]);
+    await createRiskApi(newRisk);
+>>>>>>> aa592568bb6d78f2d31bb02ac268b220f3f0ade9
 
         const act: ActivityItem = {
           id: `act-risk-${Date.now()}`,
@@ -572,10 +696,6 @@ export default function App() {
     } catch (err: any) {
       alert(err.message || 'Failed to update risk.');
     }
-  };
-
-  const handleUpdateResource = (dept: string, newPct: number) => {
-    setResources(resources.map((r) => (r.department === dept ? { ...r, percentage: newPct } : r)));
   };
 
   const handleAddMeeting = (newMeeting: MeetingItem) => {
@@ -731,7 +851,21 @@ export default function App() {
       )
     : risks;
 
-  if (!currentUser) {
+  // Authentication gate: CHECKING -> loading, NOT_AUTHENTICATED -> Login,
+  // AUTHENTICATED -> protected application. The protected app is never rendered
+  // before authentication is resolved.
+  if (authStatus === 'checking') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="flex items-center gap-3 text-slate-600">
+          <span className="material-symbols-outlined animate-spin">progress_activity</span>
+          <span className="text-sm font-medium">Checking authentication…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (authStatus === 'unauthenticated') {
     return <LoginView onLoginSuccess={handleLoginSuccess} />;
   }
 
@@ -791,22 +925,58 @@ export default function App() {
           <>
             {/* Render Tab Views */}
             {currentTab === 'dashboard' && (
-              <ExecutiveDashboardView
-                projects={searchedProjects}
-                risks={searchedRisks}
-                activities={activities}
-                resources={resources}
-                approvals={approvals}
-                tasks={accessibleTasks}
-                budgets={accessibleBudgets}
-                meetings={meetings}
-                onNavigate={(tab) => handleSelectTab(tab)}
-                onOpenNewProject={() => setIsNewProjectOpen(true)}
-                onOpenExportPDF={() => setIsExportPDFOpen(true)}
-                onApprovalAction={handleApprovalAction}
-                onUpdateRiskStatus={handleUpdateRisk}
-                onSelectProject={handleSelectProject}
-              />
+              currentUser.role === 'EXECUTIVE_MANAGER' ? (
+                <ExecutiveDashboardView
+                  projects={searchedProjects}
+                  risks={searchedRisks}
+                  activities={activities}
+                  resources={resources}
+                  approvals={approvals}
+                  tasks={accessibleTasks}
+                  budgets={accessibleBudgets}
+                  meetings={meetings}
+                  onNavigate={(tab) => handleSelectTab(tab)}
+                  onOpenNewProject={() => setIsNewProjectOpen(true)}
+                  onOpenExportPDF={() => setIsExportPDFOpen(true)}
+                  onApprovalAction={handleApprovalAction}
+                  onUpdateRiskStatus={handleUpdateRisk}
+                  onSelectProject={handleSelectProject}
+                />
+              ) : currentUser.role === 'PROJECT_MANAGER' ? (
+                <PMDashboardView
+                  projects={searchedProjects}
+                  tasks={tasks}
+                  users={users}
+                  resources={resources}
+                  currentPersona={currentPersona}
+                  onNavigate={(tab) => handleSelectTab(tab)}
+                  onOpenAssignMemberModal={() => setIsAssignMemberModalOpen(true)}
+                />
+              ) : currentUser.role === 'TEAM_MEMBER' ? (
+                <TeamMemberDashboardView
+                  projects={searchedProjects}
+                  tasks={tasks}
+                  risks={risks}
+                  currentPersona={currentPersona}
+                  onNavigate={(tab) => handleSelectTab(tab)}
+                />
+              ) : (
+                <ProjectsView
+                  projects={searchedProjects}
+                  risks={searchedRisks}
+                  tasks={tasks}
+                  users={users}
+                  selectedProject={selectedProject}
+                  onSelectProject={handleSelectProject}
+                  onOpenNewProject={() => setIsNewProjectOpen(true)}
+                  onUpdateProject={handleUpdateProject}
+                  onAddProject={handleAddProject}
+                  onOpenAssignMemberModal={() => setIsAssignMemberModalOpen(true)}
+                  currentPersona={currentPersona}
+                  onApproveProject={handleApproveProject}
+                  onRejectProject={handleRejectProject}
+                />
+              )
             )}
 
             {/* Users Views */}
@@ -874,8 +1044,21 @@ export default function App() {
             {currentTab === 'resources' && (
               <ResourcesView
               resources={resources}
-              onUpdateResource={handleUpdateResource}
-              onOpenAssignMemberModal={() => setIsAssignMemberModalOpen(true)}
+              resourceRecords={resourceRecords}
+              projects={projects}
+              users={users}
+              onOpenAssignMemberModal={() => {
+                setAssignMemberModalMode('request');
+                setIsAssignMemberModalOpen(true);
+              }}
+              onRefresh={async () => {
+                const [loading, records] = await Promise.all([
+                  fetchDepartmentLoadingApi(),
+                  fetchResourcesFromApi(),
+                ]);
+                if (loading && loading.length > 0) setResources(loading);
+                if (records) setResourceRecords(records);
+              }}
             />
             )}
 
@@ -1026,11 +1209,26 @@ export default function App() {
       {/* Assign Member Modal */}
       <AssignMemberModal
         isOpen={isAssignMemberModalOpen}
-        onClose={() => setIsAssignMemberModalOpen(false)}
+        onClose={() => {
+          setIsAssignMemberModalOpen(false);
+          setAssignMemberModalMode('assign');
+        }}
         projects={projects}
         selectedProject={selectedProject}
         users={users}
+        resourceRecords={resourceRecords}
         onAssign={handleAssignTeamMember}
+        mode={assignMemberModalMode}
+        requesterName={currentUser?.name || 'Project Manager'}
+        onRequest={async (payload) => {
+          await createAssignmentRequestApi(payload);
+          const [loading, records] = await Promise.all([
+            fetchDepartmentLoadingApi(),
+            fetchResourcesFromApi(),
+          ]);
+          if (loading) setResources(loading);
+          if (records) setResourceRecords(records);
+        }}
       />
     </div>
   );

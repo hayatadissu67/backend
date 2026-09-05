@@ -25,12 +25,14 @@ export const createBudget = async (req, res) => {
 
 export const getAllBudgets = async (req, res) => {
   try {
-    const budgets = await getAllBudgetsService();
+    // Budgets are not accessible to Team Members
+    const roleCode = req.user && (req.user.role?.code || req.user.role || req.user.role?.name);
+    if (String(roleCode).toUpperCase() === 'TEAM_MEMBER') {
+      return res.status(403).json({ success: false, message: 'Access denied: budgets are restricted' });
+    }
 
-    res.status(200).json({
-      success: true,
-      data: budgets,
-    });
+    const budgets = await getAllBudgetsService();
+    res.status(200).json({ success: true, data: budgets });
   } catch (error) {
     res.status(500).json({
       success: false,

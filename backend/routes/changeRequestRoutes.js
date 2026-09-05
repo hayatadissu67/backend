@@ -11,14 +11,16 @@ import {
 } from "../controllers/changeRequestController.js";
 
 // Yoo protect fayyadamuu baatte yeroof route keessaa haqi:
+import { authorizePermission } from "../middleware/permissions.js";
+
 const router = express.Router();
 
-router.post("/", createChangeRequest);
-router.get("/", getAllChangeRequests);
-router.get("/:id", getChangeRequestById);
-router.put("/:id", updateChangeRequest);
-router.patch("/:id/approve", approveChangeRequest);
-router.patch("/:id/reject", rejectChangeRequest);
-router.delete("/:id", deleteChangeRequest);
+router.post("/", authorizePermission('change_requests.create'), createChangeRequest);
+router.get("/", authorizePermission('change_requests.view'), getAllChangeRequests);
+router.get("/:id", authorizePermission('change_requests.view'), getChangeRequestById);
+router.put("/:id", authorizePermission('change_requests.update'), updateChangeRequest);
+router.patch("/:id/approve", authorizePermission('change_requests.approve'), approveChangeRequest);
+router.patch("/:id/reject", authorizePermission('change_requests.approve'), rejectChangeRequest);
+router.delete("/:id", authorizePermission('change_requests.update'), deleteChangeRequest);
 
 export default router;
