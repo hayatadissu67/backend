@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Project, BudgetItem, RiskItem, ResourceLoading, NavigationTab } from '../../types';
+import { Project, BudgetItem, RiskItem, ResourceLoading, NavigationTab, LoggedInPersona } from '../../types';
 
 interface PortfolioViewProps {
   projects: Project[];
@@ -8,6 +8,7 @@ interface PortfolioViewProps {
   resources?: ResourceLoading[];
   onNavigate?: (tab: NavigationTab) => void;
   onSelectProject?: (project: Project | string) => void;
+  currentPersona?: LoggedInPersona | null;
 }
 
 export const PortfolioView: React.FC<PortfolioViewProps> = ({
@@ -16,11 +17,14 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
   risks,
   resources = [],
   onNavigate,
-  onSelectProject
+  onSelectProject,
+  currentPersona
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'Overview' | 'Departments' | 'Health & Risks' | 'Strategic ROI'>('Overview');
   const [departmentFilter, setDepartmentFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
+
+  const isTeamMember = currentPersona?.roleType === 'TEAM_MEMBER';
 
   // Calculations
   const totalBudget = projects.reduce((acc, p) => acc + (p.budget || 0), 0);

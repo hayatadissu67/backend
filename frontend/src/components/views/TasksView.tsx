@@ -63,6 +63,25 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
+  const isTaskEditable = (task: TaskItem) => {
+    const project = projects.find(p => p.code === task.projectCode);
+    if (project?.approvalStatus === 'CLOSED') return false;
+    if (currentPersona?.roleType === 'EXECUTIVE_MANAGER') return true;
+    if (currentPersona?.roleType === 'PROJECT_MANAGER') return true;
+    if (currentPersona?.roleType === 'TEAM_MEMBER') {
+      return task.assignee === currentPersona.name;
+    }
+    return false;
+  };
+
+  const isTaskDeletable = (task: TaskItem) => {
+    const project = projects.find(p => p.code === task.projectCode);
+    if (project?.approvalStatus === 'CLOSED') return false;
+    if (currentPersona?.roleType === 'EXECUTIVE_MANAGER') return true;
+    if (currentPersona?.roleType === 'PROJECT_MANAGER') return true;
+    return false;
+  };
+
   // Modal States
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
   const [quickUpdateTask, setQuickUpdateTask] = useState<TaskItem | null>(null);
@@ -1075,14 +1094,20 @@ export const TasksView: React.FC<TasksViewProps> = ({
                           </td>
                           <td className="p-3 text-right">
                             <div className="flex justify-end items-center gap-1">
-                              <button
-                                onClick={() => setQuickUpdateTask(t)}
-                                className="px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold rounded-xs text-[11px]"
-                                title="Update Progress & Details"
-                              >
-                                Edit / Progress
-                              </button>
-                              {onDeleteTask && (
+                              {isTaskEditable(t) ? (
+                                <button
+                                  onClick={() => setQuickUpdateTask(t)}
+                                  className="px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold rounded-xs text-[11px]"
+                                  title="Update Progress & Details"
+                                >
+                                  Edit / Progress
+                                </button>
+                              ) : (
+                                <span className="px-2 py-1 text-slate-400 font-mono text-[11px] bg-slate-100 rounded-xs border border-slate-200">
+                                  Read-Only
+                                </span>
+                              )}
+                              {onDeleteTask && isTaskDeletable(t) && (
                                 <button
                                   onClick={() => onDeleteTask(t.id)}
                                   className="px-2 py-1 text-red-600 hover:bg-red-50 rounded-xs text-[11px] font-bold"
@@ -1424,49 +1449,55 @@ export const TasksView: React.FC<TasksViewProps> = ({
 
                             {/* Move Controls */}
                             <div className="pt-1 flex justify-between gap-1 border-t border-slate-100">
-                              {col.status !== 'Backlog' && (
-                                <button
-                                  onClick={() => {
-                                    const prev =
-                                      col.status === 'Done'
-                                        ? 'Review'
-                                        : col.status === 'Review'
-                                        ? 'Blocked'
-                                        : col.status === 'Blocked'
-                                        ? 'In Progress'
-                                        : 'Backlog';
-                                    handleStatusChange(t, prev);
-                                  }}
-                                  className="text-[10px] text-slate-500 hover:text-slate-800 flex items-center font-bold"
-                                >
-                                  <span className="material-symbols-outlined text-[14px]">arrow_back</span>
-                                  Back
-                                </button>
-                              )}
-                              <button
-                                onClick={() => setQuickUpdateTask(t)}
-                                className="text-[10px] text-slate-600 hover:text-slate-900 font-bold"
-                              >
-                                Edit
-                              </button>
-                              {col.status !== 'Done' && (
-                                <button
-                                  onClick={() => {
-                                    const next =
-                                      col.status === 'Backlog'
-                                        ? 'In Progress'
-                                        : col.status === 'In Progress'
-                                        ? 'Review'
-                                        : col.status === 'Review'
-                                        ? 'Done'
-                                        : 'Done';
-                                    handleStatusChange(t, next);
-                                  }}
-                                  className="text-[10px] text-blue-700 hover:text-blue-900 font-bold flex items-center gap-0.5 ml-auto"
-                                >
-                                  Advance
-                                  <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
-                                </button>
+                              {isTaskEditable(t) ? (
+                                <>
+                                  {col.status !== 'Backlog' && (
+                                    <button
+                                      onClick={() => {
+                                        const prev =
+                                          col.status === 'Done'
+                                            ? 'Review'
+                                            : col.status === 'Review'
+                                            ? 'Blocked'
+                                            : col.status === 'Blocked'
+                                            ? 'In Progress'
+                                            : 'Backlog';
+                                        handleStatusChange(t, prev);
+                                      }}
+                                      className="text-[10px] text-slate-500 hover:text-slate-800 flex items-center font-bold"
+                                    >
+                                      <span className="material-symbols-outlined text-[14px]">arrow_back</span>
+                                      Back
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => setQuickUpdateTask(t)}
+                                    className="text-[10px] text-slate-600 hover:text-slate-900 font-bold"
+                                  >
+                                    Edit
+                                  </button>
+                                  {col.status !== 'Done' && (
+                                    <button
+                                      onClick={() => {
+                                        const next =
+                                          col.status === 'Backlog'
+                                            ? 'In Progress'
+                                            : col.status === 'In Progress'
+                                            ? 'Review'
+                                            : col.status === 'Review'
+                                            ? 'Done'
+                                            : 'Done';
+                                        handleStatusChange(t, next);
+                                      }}
+                                      className="text-[10px] text-blue-700 hover:text-blue-900 font-bold flex items-center gap-0.5 ml-auto"
+                                    >
+                                      Advance
+                                      <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                                    </button>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="text-[9px] font-mono text-slate-400 font-bold w-full text-center py-0.5 bg-slate-50 rounded-xs">READ-ONLY</span>
                               )}
                             </div>
                           </div>

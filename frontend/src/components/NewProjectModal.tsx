@@ -74,10 +74,11 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
     };
     const stage = stageMap[gate] || 'Initiation';
 
+    const cleanCodePart = name.substring(0, 4).toUpperCase().replace(/[^A-Z0-9]/g, '') || 'PMO';
     const newPrj: Project = {
       id: `p-${Date.now()}`,
       name,
-      code: `PRJ-${name.substring(0, 4).toUpperCase().replace(/[^A-Z0-9]/g, '') || 'PMO'}`,
+      code: `PRJ-${cleanCodePart}-${Math.floor(100 + Math.random() * 900)}`,
       department,
       owner,
       status: 'PLANNING',

@@ -157,9 +157,9 @@ export const createProjectApi = async (projectData: Partial<Project>): Promise<P
   try {
     const res = await api.post('/projects', projectData);
     return res.data?.success ? res.data.data : null;
-  } catch (err) {
-    console.warn('Failed to create project via API:', err);
-    return null;
+  } catch (err: any) {
+    console.error('Failed to create project via API:', err?.response?.data || err);
+    throw new Error(err?.response?.data?.message || 'Failed to create project on backend database.');
   }
 };
 
@@ -199,6 +199,36 @@ export const rejectProjectApi = async (id: string, rejectionReason: string): Pro
     return res.data?.success ? res.data.data : null;
   } catch (err: any) {
     const message = err.response?.data?.message || err.message || 'Failed to reject project.';
+    throw new Error(message);
+  }
+};
+
+export const closeProjectApi = async (id: string): Promise<Project | null> => {
+  try {
+    const res = await api.patch(`/projects/${id}/close`);
+    return res.data?.success ? res.data.data : null;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to close project.';
+    throw new Error(message);
+  }
+};
+
+export const rejectClosureApi = async (id: string, rejectionReason?: string): Promise<Project | null> => {
+  try {
+    const res = await api.patch(`/projects/${id}/reject-closure`, { rejectionReason });
+    return res.data?.success ? res.data.data : null;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to reject closure request.';
+    throw new Error(message);
+  }
+};
+
+export const submitClosureApi = async (id: string): Promise<Project | null> => {
+  try {
+    const res = await api.patch(`/projects/${id}/submit-closure`);
+    return res.data?.success ? res.data.data : null;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to submit project for closure.';
     throw new Error(message);
   }
 };

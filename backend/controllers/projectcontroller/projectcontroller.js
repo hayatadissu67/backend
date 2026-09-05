@@ -8,10 +8,24 @@ import {
 
 export const createProject = async (req, res) => {
   try {
+    if (req.body.id && typeof req.body.id === 'string') {
+      delete req.body.id;
+    }
     if (req.user && req.user.email) {
-      req.body.owner = req.user.email;
+      if (!req.body.owner) {
+        req.body.owner = req.user.name || req.user.email;
+      }
     }
     req.body.approvalStatus = 'PENDING';
+
+    if (req.body.code) {
+      const Project = (await import('../../models/projectModel/projectModel.js')).default;
+      const existingWithCode = await Project.findOne({ where: { code: req.body.code } });
+      if (existingWithCode) {
+        req.body.code = `${req.body.code}-${Math.floor(100 + Math.random() * 900)}`;
+      }
+    }
+
     const project = await createProjectService(req.body);
 
     if (req.body.assignedTeamMembers && Array.isArray(req.body.assignedTeamMembers) && req.body.assignedTeamMembers.length > 0) {
@@ -30,6 +44,13 @@ export const createProject = async (req, res) => {
       data: project,
     });
   } catch (error) {
+    console.error("Create project error:", error);
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(400).json({
+        success: false,
+        message: "A project with this project code already exists. Please choose a unique project name."
+      });
+    }
     res.status(500).json({
       success: false,
       message: error.message,
@@ -62,7 +83,7 @@ export const getProjectById = async (req, res) => {
       });
     }
 
-    if (req.user.role === 'PROJECT_MANAGER' && project.owner !== req.user.email) {
+    if (req.user.role === 'PROJECT_MANAGER' && project.owner !== req.user.email && project.owner !== req.user.name) {
       return res.status(403).json({ success: false, message: "Unauthorized access to project" });
     }
 
@@ -103,6 +124,15 @@ export const updateProject = async (req, res) => {
       });
     }
 
+    if (existingProject.approvalStatus === 'CLOSED' || existingProject.status === 'COMPLETED') {
+      if (req.user && req.user.role !== 'EXECUTIVE_MANAGER') {
+        return res.status(403).json({
+          success: false,
+          message: "Closed projects are read-only and cannot be modified",
+        });
+      }
+    }
+
     let updateData = { ...req.body };
     if (req.user && req.user.role !== 'EXECUTIVE_MANAGER') {
       if (existingProject.approvalStatus === 'APPROVED' || existingProject.status === 'ACTIVE' || existingProject.status === 'COMPLETED') {
@@ -113,10 +143,15 @@ export const updateProject = async (req, res) => {
             updateData[field] = req.body[field];
           }
         });
+        if (req.body.approvalStatus === 'PENDING_CLOSURE') {
+          updateData.approvalStatus = 'PENDING_CLOSURE';
+        }
       } else {
-        // Even for drafts, PMs cannot change owner or approval status directly via edit
+        // Even for drafts, PMs cannot change owner or approval status directly via edit unless submitting for closure
         delete updateData.owner;
-        delete updateData.approvalStatus;
+        if (req.body.approvalStatus !== 'PENDING_CLOSURE') {
+          delete updateData.approvalStatus;
+        }
         delete updateData.approvedBy;
       }
     }
@@ -247,7 +282,7 @@ export const assignProjectTeam = async (req, res) => {
     
     // Create new assignments
     const dbAssignments = assignments.map(a => ({
-      userId: a.userId,
+      userId: Number(a.userId),
       projectCode: project.code,
       responsibility: a.responsibility || null
     }));
@@ -304,6 +339,58 @@ export const getProjectTeam = async (req, res) => {
     });
 
     res.status(200).json({ success: true, data: teamData });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const submitClosure = async (req, res) => {
+  try {
+    const project = await getProjectByIdService(req.params.id);
+    if (!project) {
+      return res.status(404).json({ success: false, message: "Project not found" });
+    }
+    if (req.user.role !== 'EXECUTIVE_MANAGER' && project.owner !== req.user.email && project.owner !== req.user.name) {
+      return res.status(403).json({ success: false, message: "Not authorized to request closure for this project" });
+    }
+    const updatedProject = await updateProjectService(req.params.id, {
+      approvalStatus: 'PENDING_CLOSURE'
+    });
+    res.status(200).json({ success: true, message: "Project submitted for closure", data: updatedProject });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const closeProject = async (req, res) => {
+  try {
+    const project = await getProjectByIdService(req.params.id);
+    if (!project) {
+      return res.status(404).json({ success: false, message: "Project not found" });
+    }
+    const updatedProject = await updateProjectService(req.params.id, {
+      approvalStatus: 'CLOSED',
+      status: 'COMPLETED',
+      approvedBy: req.user ? req.user.name : "Executive Manager"
+    });
+    res.status(200).json({ success: true, message: "Project closed successfully", data: updatedProject });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const rejectClosure = async (req, res) => {
+  try {
+    const project = await getProjectByIdService(req.params.id);
+    if (!project) {
+      return res.status(404).json({ success: false, message: "Project not found" });
+    }
+    const updatedProject = await updateProjectService(req.params.id, {
+      approvalStatus: 'CLOSURE_REJECTED',
+      status: 'ACTIVE',
+      rejectionReason: req.body.rejectionReason || "Closure request rejected by Executive Manager"
+    });
+    res.status(200).json({ success: true, message: "Project closure request rejected", data: updatedProject });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

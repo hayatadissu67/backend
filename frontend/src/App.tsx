@@ -5,6 +5,9 @@ import {
   updateProjectApi,
   approveProjectApi,
   rejectProjectApi,
+  closeProjectApi,
+  rejectClosureApi,
+  submitClosureApi,
   fetchRisksFromApi,
   createRiskApi,
   updateRiskApi,
@@ -59,7 +62,6 @@ import { RestrictedAccessView } from './components/RestrictedAccessView';
 
 import { SidebarNav } from './components/SidebarNav';
 import { TopHeader } from './components/TopHeader';
-import { AIAssistantModal } from './components/AIAssistantModal';
 import { NewProjectModal } from './components/NewProjectModal';
 import { ExportPDFModal } from './components/ExportPDFModal';
 import { UserProfileModal } from './components/UserProfileModal';
@@ -225,6 +227,60 @@ export default function App() {
     }
   };
 
+  const handleCloseProject = async (projectId: string) => {
+    try {
+      const updated = await closeProjectApi(projectId);
+      if (updated) {
+        setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, ...updated, approvalStatus: 'CLOSED', status: 'COMPLETED' } : p)));
+        setSelectedProject((prev) => (prev?.id === projectId ? { ...prev, ...updated, approvalStatus: 'CLOSED', status: 'COMPLETED' } : prev));
+      }
+      const apiProjects = await fetchProjectsFromApi();
+      if (apiProjects) {
+        setProjects(apiProjects);
+        const ref = apiProjects.find((p) => p.id === projectId);
+        if (ref) setSelectedProject((prev) => (prev?.id === projectId ? ref : prev));
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to close project.');
+    }
+  };
+
+  const handleRejectClosure = async (projectId: string, reason?: string) => {
+    try {
+      const updated = await rejectClosureApi(projectId, reason);
+      if (updated) {
+        setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, ...updated, approvalStatus: 'CLOSURE_REJECTED', status: 'ACTIVE', rejectionReason: reason } : p)));
+        setSelectedProject((prev) => (prev?.id === projectId ? { ...prev, ...updated, approvalStatus: 'CLOSURE_REJECTED', status: 'ACTIVE', rejectionReason: reason } : prev));
+      }
+      const apiProjects = await fetchProjectsFromApi();
+      if (apiProjects) {
+        setProjects(apiProjects);
+        const ref = apiProjects.find((p) => p.id === projectId);
+        if (ref) setSelectedProject((prev) => (prev?.id === projectId ? ref : prev));
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to reject closure request.');
+    }
+  };
+
+  const handleSubmitClosure = async (projectId: string) => {
+    try {
+      const updated = await submitClosureApi(projectId);
+      if (updated) {
+        setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, ...updated, approvalStatus: 'PENDING_CLOSURE' } : p)));
+        setSelectedProject((prev) => (prev?.id === projectId ? { ...prev, ...updated, approvalStatus: 'PENDING_CLOSURE' } : prev));
+      }
+      const apiProjects = await fetchProjectsFromApi();
+      if (apiProjects) {
+        setProjects(apiProjects);
+        const ref = apiProjects.find((p) => p.id === projectId);
+        if (ref) setSelectedProject((prev) => (prev?.id === projectId ? ref : prev));
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to submit project for closure.');
+    }
+  };
+
   const handleAssignTeamMember = async (projectId: string, userIds: string[]) => {
     try {
       const assignedMembers = await assignProjectTeamMembersApi(projectId, userIds.map(id => ({ userId: id })));
@@ -317,8 +373,16 @@ export default function App() {
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
 
   const accessibleProjects = useMemo(() => {
+    if (!currentUser) return [];
+    if (currentUser.role === 'EXECUTIVE_MANAGER') return projects;
+    if (currentUser.role === 'PROJECT_MANAGER') {
+      return projects.filter(p => p.owner === currentUser.email || p.owner === currentUser.name);
+    }
+    if (currentUser.role === 'TEAM_MEMBER') {
+      return projects;
+    }
     return projects;
-  }, [projects]);
+  }, [projects, currentUser]);
 
   // Collections
   const [users, setUsers] = useState<UserItem[]>([]);
@@ -488,9 +552,24 @@ export default function App() {
   }, [currentUser?.id]);
 
   // Handlers
-  const handleAddProject = (newProject: Project) => {
-    setProjects([newProject, ...projects]);
-    createProjectApi(newProject);
+  const handleAddProject = async (newProject: Project) => {
+    try {
+      const created = await createProjectApi(newProject);
+      if (created) {
+        // Refetch projects from real backend DB to guarantee database persistence state
+        const apiProjects = await fetchProjectsFromApi();
+        if (apiProjects) {
+          setProjects(apiProjects);
+        } else {
+          setProjects((prev) => [created, ...prev]);
+        }
+      } else {
+        alert('Failed to save project to database.');
+      }
+    } catch (err: any) {
+      console.error('Failed to create project:', err);
+      alert(err.message || 'Failed to save project to database.');
+    }
     const act: ActivityItem = {
       id: `a-${Date.now()}`,
       type: 'gate',
@@ -499,7 +578,7 @@ export default function App() {
       timestamp: 'Just now',
       badgeType: 'check'
     };
-    setActivities([act, ...activities]);
+    setActivities((prev) => [act, ...prev]);
   };
 
   const handleUpdateProject = (updated: Project) => {
@@ -900,6 +979,7 @@ export default function App() {
                 resources={resources}
                 onNavigate={(tab) => handleSelectTab(tab)}
                 onSelectProject={handleSelectProject}
+                currentPersona={currentPersona}
               />
             )}
 
@@ -921,6 +1001,9 @@ export default function App() {
                 currentPersona={currentPersona}
                 onApproveProject={handleApproveProject}
                 onRejectProject={handleRejectProject}
+                onCloseProject={handleCloseProject}
+                onRejectClosure={handleRejectClosure}
+                onSubmitClosure={handleSubmitClosure}
                 onRefreshProjects={handleRefreshProjects}
               />
             )}
@@ -1056,9 +1139,6 @@ export default function App() {
           </>
         )}
       </main>
-
-      {/* Floating AI Assistant */}
-      <AIAssistantModal />
 
       {/* New Project Modal */}
       <NewProjectModal

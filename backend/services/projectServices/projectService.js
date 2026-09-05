@@ -12,16 +12,17 @@ export const getAllProjectsService = async (user) => {
       const assignments = await ProjectTeam.findAll({ where: { userId: user.id } });
       const projectCodes = assignments.map(a => a.projectCode);
       const { Op } = await import('sequelize');
-      whereClause = { code: { [Op.in]: projectCodes } };
+      if (projectCodes.length > 0) {
+        whereClause = { code: { [Op.in]: projectCodes } };
+      } else {
+        whereClause = { id: null };
+      }
     } else if (user.role === 'PROJECT_MANAGER') {
-      const ProjectTeam = (await import('../../models/projectModel/ProjectTeam.js')).default;
-      const assignments = await ProjectTeam.findAll({ where: { userId: user.id } });
-      const projectCodes = assignments.map(a => a.projectCode);
       const { Op } = await import('sequelize');
       whereClause = {
         [Op.or]: [
           { owner: user.email },
-          { code: { [Op.in]: projectCodes } }
+          { owner: user.name }
         ]
       };
     }

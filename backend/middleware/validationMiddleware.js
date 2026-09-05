@@ -40,7 +40,7 @@ const baseProjectSchema = z.object({
   approvalStatus: z.string().optional(),
   assignedTeamMembers: z.array(z.object({
     userId: z.union([z.string(), z.number()]),
-    responsibility: z.string().min(1, "Responsibility is required for each team member")
+    responsibility: z.string().optional()
   })).optional()
 });
 
