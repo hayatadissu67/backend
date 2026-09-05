@@ -100,7 +100,8 @@ export const UsersView: React.FC<UsersViewProps> = ({
   const visibleUsers = isPM ? users.filter((u) => {
     if (!u) return false;
     if (typeof u.role === 'string') return u.role === 'TEAM_MEMBER';
-    return u.role && (u.role.code === 'TEAM_MEMBER' || u.role.name === 'TEAM_MEMBER');
+    const role = u.role as unknown as { code?: string; name?: string };
+    return role.code === 'TEAM_MEMBER' || role.name === 'TEAM_MEMBER';
   }) : users;
 
   const filteredUsers = visibleUsers.filter((u) => {
@@ -109,7 +110,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
       u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       u.department.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const userRoleCode = typeof u.role === 'string' ? u.role : (u.role?.code || u.role?.name || '');
+    const userRoleCode = typeof u.role === 'string' ? u.role : ((u.role as unknown as { code?: string; name?: string }).code || (u.role as unknown as { code?: string; name?: string }).name || '');
     const matchesRole = roleFilter === 'ALL' || userRoleCode === roleFilter;
     const matchesStatus = statusFilter === 'ALL' || u.status === statusFilter;
 

@@ -6,18 +6,35 @@ import {
   deleteProjectService,
 } from "../services/projectService.js";
 
+const isUuid = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
 export const createProject = async (req, res) => {
   try {
-    const project = await createProjectService(req.body);
+    const payload = { ...req.body };
+    const requiredFields = ['name', 'code', 'department', 'owner'];
+    const missingField = requiredFields.find((field) => !String(payload[field] || '').trim());
+    if (missingField) {
+      return res.status(400).json({
+        success: false,
+        message: `${missingField} is required`,
+      });
+    }
+
+    payload.name = String(payload.name).trim();
+    payload.code = String(payload.code).trim().toUpperCase();
+    payload.department = String(payload.department).trim();
+    payload.owner = String(payload.owner).trim();
+    const project = await createProjectService(payload);
     res.status(201).json({
       success: true,
       message: "Project created successfully",
       data: project,
     });
   } catch (error) {
-    res.status(500).json({
+    const isDuplicateCode = error.name === 'SequelizeUniqueConstraintError' || error.original?.code === 'ER_DUP_ENTRY';
+    res.status(isDuplicateCode ? 409 : 500).json({
       success: false,
-      message: error.message,
+      message: isDuplicateCode ? 'Project code already exists' : error.message,
     });
   }
 };
@@ -44,6 +61,9 @@ export const getAllProjects = async (req, res) => {
 
 export const getProjectById = async (req, res) => {
   try {
+    if (!isUuid(req.params.id)) {
+      return res.status(400).json({ success: false, message: "Invalid project ID" });
+    }
     const project = await getProjectByIdService(req.params.id);
     if (!project) {
       return res.status(404).json({
@@ -65,7 +85,20 @@ export const getProjectById = async (req, res) => {
 
 export const updateProject = async (req, res) => {
   try {
-    const project = await updateProjectService(req.params.id, req.body);
+    if (!isUuid(req.params.id)) {
+      return res.status(400).json({ success: false, message: "Invalid project ID" });
+    }
+    const payload = { ...req.body };
+    for (const field of ['name', 'code', 'department', 'owner']) {
+      if (field in payload) {
+        if (!String(payload[field] || '').trim()) {
+          return res.status(400).json({ success: false, message: `${field} is required` });
+        }
+        payload[field] = String(payload[field]).trim();
+      }
+    }
+    if (payload.code) payload.code = payload.code.toUpperCase();
+    const project = await updateProjectService(req.params.id, payload);
     if (!project) {
       return res.status(404).json({
         success: false,
@@ -78,15 +111,19 @@ export const updateProject = async (req, res) => {
       data: project,
     });
   } catch (error) {
-    res.status(500).json({
+    const isDuplicateCode = error.name === 'SequelizeUniqueConstraintError' || error.original?.code === 'ER_DUP_ENTRY';
+    res.status(isDuplicateCode ? 409 : 500).json({
       success: false,
-      message: error.message,
+      message: isDuplicateCode ? 'Project code already exists' : error.message,
     });
   }
 };
 
 export const deleteProject = async (req, res) => {
   try {
+    if (!isUuid(req.params.id)) {
+      return res.status(400).json({ success: false, message: "Invalid project ID" });
+    }
     const project = await deleteProjectService(req.params.id);
     if (!project) {
       return res.status(404).json({

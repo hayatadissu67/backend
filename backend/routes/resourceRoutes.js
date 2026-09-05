@@ -5,7 +5,7 @@ import { authorizePermission } from "../middleware/permissions.js";
 const router = express.Router();
 
 // Aggregated department loading (used by Overview & Directory tabs)
-router.get("/loading", authorizePermission("resources.view"), (req, res, next) =>
+router.get("/department-loading", authorizePermission("resources.view"), (req, res, next) =>
   resourceController.getDepartmentLoading(req, res, next)
 );
 

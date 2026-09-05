@@ -1,4 +1,5 @@
 import { ChangeRequest } from "../models/changeRequestModel.js";
+import { createAuditLog } from "../services/auditLogService.js";
 
 // ===============================
 // CREATE CHANGE REQUEST
@@ -33,6 +34,16 @@ export const createChangeRequest = async (req, res) => {
       projectId,
       requestedBy,
       status: "Pending",
+    });
+
+    await createAuditLog({
+      action: "CHANGE_REQUEST_CREATED",
+      entityType: "ChangeRequest",
+      entityId: String(changeRequest.id),
+      userId: String(requestedBy),
+      userName: req.user?.name || req.user?.email || "Unknown",
+      userRole: req.user?.role?.code || req.user?.role?.name || req.user?.role || "UNKNOWN",
+      details: `Change request created: ${title}`,
     });
 
     return res.status(201).json({
@@ -203,6 +214,16 @@ export const approveChangeRequest = async (req, res) => {
       rejectionReason: null,
     });
 
+    await createAuditLog({
+      action: "CHANGE_REQUEST_APPROVED",
+      entityType: "ChangeRequest",
+      entityId: String(changeRequest.id),
+      userId: String(approvedBy),
+      userName: req.user?.name || req.user?.email || "Unknown",
+      userRole: req.user?.role?.code || req.user?.role?.name || req.user?.role || "UNKNOWN",
+      details: `Change request approved: ${changeRequest.title}`,
+    });
+
     return res.status(200).json({
       success: true,
       message: "Change request approved successfully",
@@ -257,6 +278,16 @@ export const rejectChangeRequest = async (req, res) => {
       approvedBy,
       approvedAt: new Date(),
       rejectionReason,
+    });
+
+    await createAuditLog({
+      action: "CHANGE_REQUEST_REJECTED",
+      entityType: "ChangeRequest",
+      entityId: String(changeRequest.id),
+      userId: String(approvedBy),
+      userName: req.user?.name || req.user?.email || "Unknown",
+      userRole: req.user?.role?.code || req.user?.role?.name || req.user?.role || "UNKNOWN",
+      details: `Change request rejected: ${changeRequest.title}. Reason: ${rejectionReason}`,
     });
 
     return res.status(200).json({

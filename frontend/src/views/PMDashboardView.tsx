@@ -26,7 +26,8 @@ export const PMDashboardView: React.FC<PMDashboardViewProps> = ({
   const teamMembers = users.filter(u => {
     if (!u) return false;
     if (typeof u.role === 'string') return u.role === 'TEAM_MEMBER';
-    return u.role && (u.role.code === 'TEAM_MEMBER' || u.role.name === 'TEAM_MEMBER');
+    const role = u.role as unknown as { code?: string; name?: string };
+    return role.code === 'TEAM_MEMBER' || role.name === 'TEAM_MEMBER';
   });
 
   const activeProjects = myProjects.filter(p => p.status === 'ACTIVE').length;

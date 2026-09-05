@@ -140,7 +140,8 @@ export const AssignMemberModal: React.FC<AssignMemberModalProps> = ({
                     .filter(u => {
                       if (!u) return false;
                       if (typeof u.role === 'string') return u.role === 'TEAM_MEMBER';
-                      return u.role && (u.role.code === 'TEAM_MEMBER' || u.role.name === 'TEAM_MEMBER');
+                      const role = u.role as unknown as { code?: string; name?: string };
+                      return role.code === 'TEAM_MEMBER' || role.name === 'TEAM_MEMBER';
                     })
                     .map((u) => (
                     <option key={u.id} value={u.id}>

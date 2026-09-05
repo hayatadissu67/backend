@@ -1,64 +1,51 @@
 import { DataTypes } from "sequelize";
 import { sequelize } from "../config/db.js";
 
-const Template = sequelize.define("Template", {
+const AuditLog = sequelize.define("AuditLog", {
   id: {
     type: DataTypes.INTEGER,
     primaryKey: true,
     autoIncrement: true,
   },
-  templateCode: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    unique: true,
-  },
-  title: {
+  action: {
     type: DataTypes.STRING,
     allowNull: false,
   },
-  projectName: {
+  entityType: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  entityId: {
     type: DataTypes.STRING,
     allowNull: true,
   },
-  projectCode: {
+  userId: {
     type: DataTypes.STRING,
     allowNull: true,
   },
-  version: {
+  userName: {
     type: DataTypes.STRING,
-    defaultValue: "v1.0",
+    allowNull: true,
   },
-  category: {
+  userRole: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: true,
   },
-  description: {
+  details: {
     type: DataTypes.TEXT,
+    allowNull: true,
   },
-  requiredSignOff: {
-    type: DataTypes.STRING,
-    defaultValue: "Executive Sponsor",
-  },
-  requiredFields: {
-    type: DataTypes.INTEGER,
-    defaultValue: 2,
-  },
-  customField1Label: {
+  ipAddress: {
     type: DataTypes.STRING,
     allowNull: true,
   },
-  customField2Label: {
+  userAgent: {
     type: DataTypes.STRING,
     allowNull: true,
   },
-  fileUrl: {
-    type: DataTypes.STRING,
-    allowNull: true,
-  },
-  fileName: {
-    type: DataTypes.STRING,
-    allowNull: true,
-  },
-}, { timestamps: true });
+}, {
+  tableName: "audit_logs",
+  timestamps: true,
+});
 
-export default Template;
+export default AuditLog;

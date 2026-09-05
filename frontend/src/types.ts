@@ -41,6 +41,8 @@ export interface Project {
   progress: number;
   gate: string;
   targetDate: string;
+  startDate?: string;
+  endDate?: string;
   description?: string;
   techStack?: string[];
   liveUrl?: string;
@@ -70,6 +72,7 @@ export interface RiskItem {
   submittedBy?: string;
   category: 'Risk' | 'Issue';
   projectRef?: string;
+  projectCode?: string;
   milestoneRef?: string;
   status: 'OPEN' | 'IN_REVIEW' | 'MITIGATED' | 'REPORTED' | 'UNDER_REVIEW' | 'ESCALATED' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
   createdDate: string;
@@ -160,6 +163,8 @@ export interface ExecutiveTemplateField {
 export interface ExecutiveTemplate {
   id: string;
   title: string;
+  projectName?: string;
+  projectCode?: string;
   code: string;
   version?: string;
   category: 'Executive Charter' | 'Financial & Budget' | 'Stage-Gate Governance' | 'Security & Access' | 'Architecture Exception';
@@ -335,6 +340,8 @@ export interface TemplateVersion {
 export interface ReportTemplate {
   id: string;
   name: string;
+  projectName?: string;
+  projectCode?: string;
   description?: string;
   category?: string;
   version?: string;
@@ -362,17 +369,43 @@ export interface ReportVersion {
 export interface ReportItem {
   id: string;
   title: string;
+  format?: 'PDF' | 'Excel';
+  projectId?: string;
+  projectName?: string;
+  projectCode?: string;
+  templateId?: string;
+  portfolioName?: string;
+  ownerName?: string;
+  ownerTitle?: string;
+  reportDate?: string;
+  programStatus?: string;
+  percentCompleted?: number;
+  projectLead?: string;
+  projectPriority?: string;
+  projectStatus?: string;
+  overallProjectStatus?: string;
+  progress?: number;
+  budgetPlanned?: number;
+  budgetActual?: number;
+  budgetVariance?: number;
+  milestones?: string;
+  criticalRisks?: string;
+  tasks?: string;
+  pendingItems?: string;
+  summary?: string;
+  additionalNotes?: string;
   description?: string;
   category?: string;
   preparedBy?: string;
   period?: string;
+  startDate?: string;
+  endDate?: string;
   type?: string;
   status?: string;
   fileUrl?: string;
   fileName?: string;
   fileType?: string;
   fileData?: string;
-  templateId?: string;
   template?: ReportTemplate;
   versions?: ReportVersion[];
   createdAt: string;

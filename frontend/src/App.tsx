@@ -289,7 +289,7 @@ export default function App() {
     }
   };
 
-  const currentPersona: LoggedInPersona | null = currentUser ? {
+  const currentPersona: LoggedInPersona | undefined = currentUser ? {
     id: String(currentUser.id),
     name: currentUser.name,
     roleType: currentUser.role,
@@ -298,7 +298,7 @@ export default function App() {
     department: currentUser.department,
     avatar: currentUser.avatar || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150',
     assignedProjectCodes: currentUser.assignedProjectCodes || []
-  } : null;
+  } : undefined;
 
 
   const handleSelectProject = (projectOrIdentifier: Project | string | null) => {
@@ -386,6 +386,8 @@ export default function App() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [changeRequests, setChangeRequests] = useState<ChangeRequestItem[]>([]);
   const [reports, setReports] = useState<ReportItem[]>([]);
+  const [reportsLoading, setReportsLoading] = useState(true);
+  const [reportsError, setReportsError] = useState<string | null>(null);
   const [templates, setTemplates] = useState<ReportTemplate[]>([]);
 
   const handleAddChangeRequest = async (request: Partial<ChangeRequestItem>) => {
@@ -486,10 +488,33 @@ export default function App() {
         if (apiUsers) setUsers(apiUsers);
         if (apiProjects) setProjects(apiProjects);
         if (apiRisks) setRisks(apiRisks);
-        if (apiTasks) setTasks(apiTasks);
+        if (apiTasks && Array.isArray(apiTasks)) {
+          const normalizeStatus = (s: string) => {
+            const map: Record<string, string> = { TO_DO: 'Backlog', IN_PROGRESS: 'In Progress', BLOCKED: 'Blocked', IN_REVIEW: 'Review', COMPLETED: 'Done' };
+            return map[s] || s;
+          };
+          const normalizePriority = (p: string) => {
+            const map: Record<string, string> = { LOW: 'Low', MEDIUM: 'Medium', HIGH: 'High', CRITICAL: 'High' };
+            return map[p] || p;
+          };
+          const normalizedTasks = apiTasks.map((t: any) => ({
+            ...t,
+            projectCode: t.projectCode || t.targetProject || '',
+            dueDate: t.dueDate || t.completionDeadline || '',
+            estimatedHours: t.estimatedHours || t.estimatedWorkHours,
+            status: normalizeStatus(t.status),
+            priority: normalizePriority(t.priority),
+          }));
+          setTasks(normalizedTasks);
+        }
         if (apiBudgets) setBudgets(apiBudgets);
         if (apiCRs) setChangeRequests(apiCRs);
-        if (apiReports) setReports(apiReports);
+        if (apiReports) {
+          setReports(apiReports);
+          setReportsError(null);
+        } else {
+          setReportsError('Reports could not be loaded from the backend.');
+        }
         if (apiTemplates) setTemplates(apiTemplates);
         if (apiDiscussions) setDiscussions(apiDiscussions);
         if (apiMeetings) setMeetings(apiMeetings);
@@ -499,7 +524,10 @@ export default function App() {
           // Raw resource records are available via fetchResourcesFromApi() on demand.
         }
       } catch (err) {
+        setReportsError('Reports could not be loaded from the backend.');
         console.error('Failed to sync data with backend API:', err);
+      } finally {
+        setReportsLoading(false);
       }
     };
 
@@ -521,18 +549,22 @@ export default function App() {
   }, [currentUser?.id]);
 
   // Handlers
-  const handleAddProject = (newProject: Project) => {
-    setProjects([newProject, ...projects]);
-    createProjectApi(newProject);
+  const handleAddProject = async (newProject: Project) => {
+    const { id: _frontendId, ...projectPayload } = newProject;
+    const createdProject = await createProjectApi(projectPayload);
+    if (!createdProject) {
+      throw new Error('Project could not be created.');
+    }
+    setProjects((current) => [createdProject, ...current]);
     const act: ActivityItem = {
-      id: `a-${Date.now()}`,
+      id: `a-${createdProject.id}`,
       type: 'gate',
-      title: `Project Added: ${newProject.name}`,
+      title: `Project Added: ${createdProject.name}`,
       subtitle: `Charter registered by ${currentUser?.name || 'PMO User'} • Just now`,
       timestamp: 'Just now',
       badgeType: 'check'
     };
-    setActivities([act, ...activities]);
+    setActivities((current) => [act, ...current]);
   };
 
   const handleUpdateProject = (updated: Project) => {
@@ -831,7 +863,7 @@ export default function App() {
         {/* Role-based restriction check on every tab navigation */}
         {!isTabAllowedForRole(currentUser.role, currentTab) ? (
           <RestrictedAccessView
-            currentPersona={currentPersona}
+            currentPersona={currentPersona!}
             tabName={currentTab}
           />
         ) : (
@@ -938,7 +970,7 @@ export default function App() {
             {/* Projects View */}
             {(currentTab === 'projects' || currentTab === 'ai_project') && (
               <ProjectsView
-                projects={searchedProjects}
+                projects={projects}
                 risks={searchedRisks}
                 tasks={tasks}
                 users={users}
@@ -1059,7 +1091,7 @@ export default function App() {
             {/* Action Templates View */}
             {currentTab === 'templates' && (
               <TemplatesView
-                projects={searchedProjects}
+                projects={projects}
                 onNavigate={(tab) => setCurrentTab(tab)}
                 currentPersona={currentPersona}
               />
@@ -1068,9 +1100,14 @@ export default function App() {
             {/* Reports View */}
             {currentTab === 'reports' && (
               <ReportsView
-              projects={searchedProjects}
+              projects={projects}
               risks={searchedRisks}
+              tasks={tasks}
+              budgets={accessibleBudgets}
+              resources={resources}
               reports={reports}
+              reportsLoading={reportsLoading}
+              reportsError={reportsError}
               templates={templates}
               onReportsChange={setReports}
               onTemplatesChange={setTemplates}

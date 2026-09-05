@@ -4,7 +4,7 @@ import { Project, HealthStatus, LifecycleStage } from '../types';
 interface NewProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddProject: (newProject: Project) => void;
+  onAddProject: (newProject: Project) => void | Promise<void>;
   currentUserName?: string;
 }
 
@@ -15,18 +15,25 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
   currentUserName
 }) => {
   const [name, setName] = useState('');
+  const [code, setCode] = useState('');
   const [department, setDepartment] = useState('Engineering');
   const [owner, setOwner] = useState(currentUserName || 'Alex Rivers');
   const [budget, setBudget] = useState('');
   const [health, setHealth] = useState<HealthStatus>('GREEN');
   const [gate, setGate] = useState('Gate 1');
   const [targetDate, setTargetDate] = useState('2026-12-31');
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState('2026-12-31');
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+    if (!code.trim()) {
+      alert('Project code is required.');
+      return;
+    }
 
     const numBudget = parseFloat(budget);
     if (isNaN(numBudget) || numBudget <= 0) {
@@ -44,9 +51,9 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
     const stage = stageMap[gate] || 'Initiation';
 
     const newPrj: Project = {
-      id: `p-${Date.now()}`,
+      id: '',
       name,
-      code: `PRJ-${name.substring(0, 4).toUpperCase().replace(/[^A-Z0-9]/g, '') || 'PMO'}`,
+      code: code.trim().toUpperCase(),
       department,
       owner,
       status: 'PLANNING',
@@ -70,11 +77,17 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
           { id: 'c3', label: 'Security & Compliance Clearances', completed: false }
         ]
       },
-      targetDate
+      targetDate,
+      startDate,
+      endDate
     };
 
-    onAddProject(newPrj);
-    onClose();
+    try {
+      await onAddProject(newPrj);
+      onClose();
+    } catch (error: any) {
+      alert(error.message || 'Failed to create project.');
+    }
   };
 
   return (
@@ -111,6 +124,19 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
           </div>
 
           <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Project Code / Identifier *
+              </label>
+              <input
+                type="text"
+                required
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="e.g. PRJ-2026-001"
+                className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none"
+              />
+            </div>
             <div>
               <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
                 Department

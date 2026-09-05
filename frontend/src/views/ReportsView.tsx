@@ -1,23 +1,33 @@
 import React, { useState } from 'react';
-import { Project, RiskItem, ReportItem, ReportTemplate, LoggedInPersona } from '../types';
+import { Project, RiskItem, ReportItem, ReportTemplate, LoggedInPersona, TaskItem, BudgetItem, ResourceLoading } from '../types';
 import { createReportApi, updateReportApi, deleteReportApi, createTemplateApi, updateTemplateApi, deleteTemplateApi } from '../services/api';
 
 interface ReportsViewProps {
   projects?: Project[];
   risks?: RiskItem[];
+  tasks?: TaskItem[];
+  budgets?: BudgetItem[];
+  resources?: ResourceLoading[];
   reports?: ReportItem[];
+  reportsLoading?: boolean;
+  reportsError?: string | null;
   templates?: ReportTemplate[];
   onReportsChange?: (reports: ReportItem[]) => void;
   onTemplatesChange?: (templates: ReportTemplate[]) => void;
   currentPersona?: LoggedInPersona | null;
 }
 
-type ReportSubTab = 'All Reports' | 'Generate Report' | 'Templates' | 'Audit & Archives';
+type ReportSubTab = 'All Reports' | 'Submit Report' | 'Templates' | 'Report History';
 
 export const ReportsView: React.FC<ReportsViewProps> = ({
   projects = [],
   risks = [],
+  tasks = [],
+  budgets = [],
+  resources = [],
   reports = [],
+  reportsLoading = false,
+  reportsError = null,
   templates = [],
   onReportsChange,
   onTemplatesChange,
@@ -26,14 +36,31 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const [activeTab, setActiveTab] = useState<ReportSubTab>('All Reports');
   const [selectedReportCategory, setSelectedReportCategory] = useState<'All' | 'Executive' | 'Financial' | 'Governance' | 'Resource'>('All');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [viewingReport, setViewingReport] = useState<ReportItem | null>(null);
 
-  // Generate Report Form State
+  // Submit Report Form State
   const [newReportTitle, setNewReportTitle] = useState('');
   const [newReportDesc, setNewReportDesc] = useState('');
   const [newReportCat, setNewReportCat] = useState('Executive');
   const [newReportPreparedBy, setNewReportPreparedBy] = useState(currentPersona?.name || 'PMO Directorate');
-  const [newReportPeriod, setNewReportPeriod] = useState('Q3 2026');
+  const [newReportStartDate, setNewReportStartDate] = useState('');
+  const [newReportEndDate, setNewReportEndDate] = useState('');
   const [newReportType, setNewReportType] = useState('Executive Summary');
+  const [newReportProjectCode, setNewReportProjectCode] = useState('');
+  const [newReportTemplateId, setNewReportTemplateId] = useState('');
+  const [newOwnerName, setNewOwnerName] = useState('');
+  const [newOwnerTitle, setNewOwnerTitle] = useState('');
+  const [newProgramStatus, setNewProgramStatus] = useState('On Track');
+  const [newPercentCompleted, setNewPercentCompleted] = useState('0');
+  const [newProjectLead, setNewProjectLead] = useState('');
+  const [newProjectPriority, setNewProjectPriority] = useState('Medium');
+  const [newProjectStatus, setNewProjectStatus] = useState('Not Started');
+  const [newBudgetPlanned, setNewBudgetPlanned] = useState('0');
+  const [newBudgetActual, setNewBudgetActual] = useState('0');
+  const [newMilestones, setNewMilestones] = useState('');
+  const [newCriticalRisks, setNewCriticalRisks] = useState('');
+  const [newSummary, setNewSummary] = useState('');
+  const [newAdditionalNotes, setNewAdditionalNotes] = useState('');
   const [newReportFile, setNewReportFile] = useState<File | null>(null);
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
@@ -43,8 +70,24 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const [editDesc, setEditDesc] = useState('');
   const [editCat, setEditCat] = useState('Executive');
   const [editPreparedBy, setEditPreparedBy] = useState('');
-  const [editPeriod, setEditPeriod] = useState('');
+  const [editStartDate, setEditStartDate] = useState('');
+  const [editEndDate, setEditEndDate] = useState('');
   const [editType, setEditType] = useState('');
+  const [editProjectCode, setEditProjectCode] = useState('');
+  const [editReportTemplateId, setEditReportTemplateId] = useState('');
+  const [editOwnerName, setEditOwnerName] = useState('');
+  const [editOwnerTitle, setEditOwnerTitle] = useState('');
+  const [editProgramStatus, setEditProgramStatus] = useState('On Track');
+  const [editPercentCompleted, setEditPercentCompleted] = useState('0');
+  const [editProjectLead, setEditProjectLead] = useState('');
+  const [editProjectPriority, setEditProjectPriority] = useState('Medium');
+  const [editProjectStatus, setEditProjectStatus] = useState('Not Started');
+  const [editBudgetPlanned, setEditBudgetPlanned] = useState('0');
+  const [editBudgetActual, setEditBudgetActual] = useState('0');
+  const [editMilestones, setEditMilestones] = useState('');
+  const [editCriticalRisks, setEditCriticalRisks] = useState('');
+  const [editSummary, setEditSummary] = useState('');
+  const [editAdditionalNotes, setEditAdditionalNotes] = useState('');
   const [editStatus, setEditStatus] = useState('Published');
   const [editFile, setEditFile] = useState<File | null>(null);
   const [isUpdatingReport, setIsUpdatingReport] = useState(false);
@@ -56,6 +99,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const [tplDesc, setTplDesc] = useState('');
   const [tplCat, setTplCat] = useState('Executive');
   const [tplVersion, setTplVersion] = useState('1.0');
+  const [tplProjectCode, setTplProjectCode] = useState('');
   const [tplFile, setTplFile] = useState<File | null>(null);
   const [isSubmittingTemplate, setIsSubmittingTemplate] = useState(false);
 
@@ -71,6 +115,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     if (!versions || versions.length === 0) return null;
     return versions.reduce((prev, current) => (prev.versionNumber > current.versionNumber ? prev : current));
   };
+
+  const appendReportFields = (formData: FormData, values: Record<string, string>) => {
+    Object.entries(values).forEach(([key, value]) => formData.append(key, value));
+  };
+
+  const isUuid = (value: string | undefined) => Boolean(value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value));
 
   // ---- EXCEL DOWNLOAD GENERATOR ----
   const downloadReportAsExcel = (report: ReportItem) => {
@@ -92,7 +142,6 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       ['ENTERPRISE PMO REPORT & AUDIT RECORD'],
       ['Report Title:', report.title],
       ['Prepared By:', report.preparedBy || currentPersona?.name || 'PMO Directorate'],
-      ['Report Period:', report.period || 'Q3 2026'],
       ['Category:', report.category || 'Executive'],
       ['Status:', report.status || 'Published'],
       ['Generated At:', new Date().toLocaleString()],
@@ -128,7 +177,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   // ---- REPORT HANDLERS ----
   const handleGenerateReport = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newReportTitle.trim()) return showToast('Report title required');
+    const selectedProject = projects.find((project) => project.code === newReportProjectCode);
+    if (!newReportTitle.trim() || !newReportTemplateId || !selectedProject) {
+      return showToast('Template, project, and title are required');
+    }
+    const percentCompleted = Number(newPercentCompleted);
+    if (!Number.isFinite(percentCompleted) || percentCompleted < 0 || percentCompleted > 100) {
+      return showToast('Percent completed must be between 0 and 100');
+    }
 
     setIsSubmittingReport(true);
     const formData = new FormData();
@@ -136,9 +192,33 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     formData.append('description', newReportDesc);
     formData.append('category', newReportCat);
     formData.append('preparedBy', newReportPreparedBy);
-    formData.append('period', newReportPeriod);
+    formData.append('startDate', newReportStartDate);
+    formData.append('endDate', newReportEndDate);
     formData.append('type', newReportType);
+    formData.append('format', 'Excel');
+    if (isUuid(selectedProject.id)) formData.append('projectId', selectedProject.id);
+    formData.append('projectName', selectedProject.name);
+    formData.append('projectCode', selectedProject.code);
     formData.append('status', 'Published');
+    appendReportFields(formData, {
+      templateId: newReportTemplateId,
+      ownerName: newOwnerName,
+      ownerTitle: newOwnerTitle,
+      programStatus: newProgramStatus,
+      percentCompleted: newPercentCompleted,
+      projectLead: newProjectLead,
+      projectPriority: newProjectPriority,
+      projectStatus: newProjectStatus,
+      overallProjectStatus: newProjectStatus,
+      progress: newPercentCompleted,
+      budgetPlanned: newBudgetPlanned,
+      budgetActual: newBudgetActual,
+      budgetVariance: String(Number(newBudgetPlanned || 0) - Number(newBudgetActual || 0)),
+      milestones: newMilestones,
+      criticalRisks: newCriticalRisks,
+      summary: newSummary,
+      additionalNotes: newAdditionalNotes,
+    });
     if (newReportFile) formData.append('file', newReportFile);
 
     try {
@@ -149,10 +229,20 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         setNewReportTitle('');
         setNewReportDesc('');
         setNewReportFile(null);
+        setNewReportTemplateId('');
+        setNewOwnerName('');
+        setNewOwnerTitle('');
+        setNewProjectLead('');
+        setNewMilestones('');
+        setNewCriticalRisks('');
+        setNewSummary('');
+        setNewAdditionalNotes('');
         setActiveTab('All Reports');
+      } else {
+        showToast('❌ Report could not be submitted to the database');
       }
-    } catch (err) {
-      showToast('❌ Error generating report');
+    } catch (err: any) {
+      showToast(`❌ ${err.message || 'Error submitting report'}`);
     } finally {
       setIsSubmittingReport(false);
     }
@@ -164,15 +254,36 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     setEditDesc(report.description || '');
     setEditCat(report.category || 'Executive');
     setEditPreparedBy(report.preparedBy || 'PMO Directorate');
-    setEditPeriod(report.period || 'Q3 2026');
+    setEditStartDate(report.startDate || '');
+    setEditEndDate(report.endDate || '');
     setEditType(report.type || 'Executive Summary');
+    setEditProjectCode(report.projectCode || '');
+    setEditReportTemplateId(report.templateId || '');
+    setEditOwnerName(report.ownerName || '');
+    setEditOwnerTitle(report.ownerTitle || '');
+    setEditProgramStatus(report.programStatus || 'On Track');
+    setEditPercentCompleted(String(report.percentCompleted ?? report.progress ?? 0));
+    setEditProjectLead(report.projectLead || '');
+    setEditProjectPriority(report.projectPriority || 'Medium');
+    setEditProjectStatus(report.projectStatus || report.overallProjectStatus || 'Not Started');
+    setEditBudgetPlanned(String(report.budgetPlanned ?? 0));
+    setEditBudgetActual(String(report.budgetActual ?? 0));
+    setEditMilestones(report.milestones || '');
+    setEditCriticalRisks(report.criticalRisks || '');
+    setEditSummary(report.summary || '');
+    setEditAdditionalNotes(report.additionalNotes || '');
     setEditStatus(report.status || 'Published');
     setEditFile(null);
   };
 
   const handleSaveEditReport = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingReport) return;
+    if (!editingReport?.id) return showToast('Report ID is missing');
+    if (!editTitle.trim()) return showToast('Report title is required');
+    const editPercent = Number(editPercentCompleted);
+    if (!Number.isFinite(editPercent) || editPercent < 0 || editPercent > 100) {
+      return showToast('Percent completed must be between 0 and 100');
+    }
 
     setIsUpdatingReport(true);
     const formData = new FormData();
@@ -180,9 +291,44 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     formData.append('description', editDesc);
     formData.append('category', editCat);
     formData.append('preparedBy', editPreparedBy);
-    formData.append('period', editPeriod);
+    formData.append('startDate', editStartDate);
+    formData.append('endDate', editEndDate);
     formData.append('type', editType);
     formData.append('status', editStatus);
+    formData.append('format', 'Excel');
+    appendReportFields(formData, {
+      ownerName: editOwnerName,
+      ownerTitle: editOwnerTitle,
+      programStatus: editProgramStatus,
+      percentCompleted: editPercentCompleted,
+      projectLead: editProjectLead,
+      projectPriority: editProjectPriority,
+      projectStatus: editProjectStatus,
+      overallProjectStatus: editProjectStatus,
+      progress: editPercentCompleted,
+      budgetPlanned: editBudgetPlanned,
+      budgetActual: editBudgetActual,
+      budgetVariance: String(Number(editBudgetPlanned || 0) - Number(editBudgetActual || 0)),
+      milestones: editMilestones,
+      criticalRisks: editCriticalRisks,
+      summary: editSummary,
+      additionalNotes: editAdditionalNotes,
+    });
+    if (/^\d+$/.test(editReportTemplateId)) {
+      formData.append('templateId', editReportTemplateId);
+    } else if (editingReport.templateId) {
+      formData.append('templateId', editingReport.templateId);
+    }
+    const selectedProject = projects.find((project) => project.code === editProjectCode);
+    if (selectedProject) {
+      formData.append('projectId', selectedProject.id);
+      formData.append('projectName', selectedProject.name);
+      formData.append('projectCode', selectedProject.code);
+    } else if (editingReport.projectId && isUuid(editingReport.projectId)) {
+      formData.append('projectId', editingReport.projectId);
+      formData.append('projectName', editingReport.projectName || '');
+      formData.append('projectCode', editingReport.projectCode || '');
+    }
     if (editFile) formData.append('file', editFile);
 
     try {
@@ -192,8 +338,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         showToast('✓ Report updated successfully');
         setEditingReport(null);
       }
-    } catch (err) {
-      showToast('❌ Error updating report');
+    } catch (err: any) {
+      showToast(`❌ ${err.response?.data?.message || err.message || 'Error updating report'}`);
     } finally {
       setIsUpdatingReport(false);
     }
@@ -216,6 +362,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     setTplDesc('');
     setTplCat('Executive');
     setTplVersion('1.0');
+    setTplProjectCode('');
     setTplFile(null);
     setEditTemplateId(null);
     setShowTemplateForm(false);
@@ -226,6 +373,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     setTplDesc(tpl.description || '');
     setTplCat(tpl.category || 'Executive');
     setTplVersion(tpl.version || '1.0');
+    setTplProjectCode(tpl.projectCode || '');
     setTplFile(null);
     setEditTemplateId(tpl.id);
     setShowTemplateForm(true);
@@ -238,9 +386,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     setIsSubmittingTemplate(true);
     const formData = new FormData();
     formData.append('name', tplName);
+    formData.append('title', tplName);
+    formData.append('templateCode', templates.find((template) => template.id === editTemplateId)?.code || `TPL-${Date.now()}`);
     formData.append('description', tplDesc);
     formData.append('category', tplCat);
     formData.append('version', tplVersion);
+    const selectedProject = projects.find((project) => project.code === tplProjectCode);
+    if (selectedProject) {
+      formData.append('projectName', selectedProject.name);
+      formData.append('projectCode', selectedProject.code);
+    }
     if (tplFile) formData.append('file', tplFile);
 
     try {
@@ -249,12 +404,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         if (updated && onTemplatesChange) {
           onTemplatesChange(templates.map((t) => (t.id === updated.id ? updated : t)));
           showToast('✓ Template updated successfully');
+        } else {
+          showToast('❌ Template could not be saved to the database');
         }
       } else {
         const created = await createTemplateApi(formData);
         if (created && onTemplatesChange) {
           onTemplatesChange([created, ...templates]);
           showToast('✓ Template created successfully');
+        } else {
+          showToast('❌ Template could not be saved to the database');
         }
       }
       resetTemplateForm();
@@ -302,6 +461,56 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     return selectedReportCategory === 'All' || r.category === selectedReportCategory;
   });
 
+  const safeNumber = (value: unknown) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : 0;
+  };
+  const projectStatus = (project: Project) => {
+    if (project.status === 'COMPLETED') return 'Complete';
+    if (project.status === 'DELAYED' || project.health === 'RED') return 'Delayed';
+    if (project.status === 'PLANNING') return 'Not Started';
+    if (project.health === 'YELLOW') return 'At Risk';
+    return 'On Track';
+  };
+  const statusCounts = projects.reduce<Record<string, number>>((counts, project) => {
+    const status = projectStatus(project);
+    counts[status] = (counts[status] || 0) + 1;
+    return counts;
+  }, {});
+  const totalProjects = projects.length;
+  const onTrackProjects = statusCounts['On Track'] || 0;
+  const atRiskProjects = (statusCounts['At Risk'] || 0) + (statusCounts['Delayed'] || 0) + (statusCounts['Off Track'] || 0);
+  const onTrackPercentage = totalProjects ? Math.round((onTrackProjects / totalProjects) * 100) : 0;
+  const plannedBudget = budgets.length
+    ? budgets.reduce((total, budget) => total + safeNumber(budget.allocated), 0)
+    : projects.reduce((total, project) => total + safeNumber(project.budget), 0);
+  const actualBudget = budgets.length
+    ? budgets.reduce((total, budget) => total + safeNumber(budget.actualSpent), 0)
+    : projects.reduce((total, project) => total + safeNumber(project.spent), 0);
+  const budgetVariance = plannedBudget - actualBudget;
+  const statusColors: Record<string, string> = {
+    'On Track': '#16a34a',
+    'At Risk': '#d97706',
+    Delayed: '#dc2626',
+    Complete: '#2563eb',
+    'Not Started': '#94a3b8',
+    'Off Track': '#991b1b',
+  };
+  const statusGradient = totalProjects
+    ? Object.entries(statusCounts).reduce((segments, [status, count], index, entries) => {
+        const start = entries.slice(0, index).reduce((sum, [, previousCount]) => sum + (previousCount / totalProjects) * 100, 0);
+        const end = start + (count / totalProjects) * 100;
+        return `${segments}${index ? ', ' : ''}${statusColors[status] || '#64748b'} ${start}% ${end}%`;
+      }, '')
+    : '';
+  const resourceLoading = resources.length
+    ? Math.round(resources.reduce((total, resource) => total + safeNumber(resource.percentage), 0) / resources.length)
+    : 0;
+  const scheduledProjects = projects.filter((project) => {
+    const scheduleProject = project as Project & { startDate?: string; endDate?: string };
+    return Boolean(scheduleProject.startDate && scheduleProject.endDate);
+  });
+
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
       {toastMessage && (
@@ -320,12 +529,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             <span className="text-[#00174b]">REPORTS &amp; ANALYTICS MODULE</span>
           </nav>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-            Portfolio Intelligence &amp; Reports
+            PMO Report and Submit Report
           </h1>
         </div>
 
         <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
-          {(['All Reports', 'Generate Report', 'Templates', 'Audit & Archives'] as ReportSubTab[]).map((tab) => (
+          {(['All Reports', 'Submit Report', 'Templates', 'Report History'] as ReportSubTab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -344,39 +553,118 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       {/* SUBTAB 1: ALL REPORTS */}
       {activeTab === 'All Reports' && (
         <div className="space-y-6 animate-fadeIn">
-          {/* Top Telemetry Metric Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-white border border-slate-200/80 p-5 rounded-xl shadow-2xs space-y-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Total Portfolio Budget</span>
-              <p className="text-2xl font-black text-slate-900">
-                ${(totalBudget / 1000000).toFixed(2)}M
-              </p>
-              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                <div className="bg-[#2563eb] h-full" style={{ width: `${utilization}%` }} />
+          <section className="space-y-4">
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-600">PMO portfolio control center</span>
+              <h2 className="text-xl font-black text-slate-900">Project Management Office</h2>
+              <p className="text-xs text-slate-500">Live delivery, financial, risk, task, and resource signals from the PMO data set.</p>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {[
+                ['Total Projects', totalProjects, 'bg-slate-900 text-white'],
+                ['On Track', onTrackProjects, 'bg-emerald-50 text-emerald-800'],
+                ['On Track %', `${onTrackPercentage}%`, 'bg-blue-50 text-blue-800'],
+                ['At Risk', atRiskProjects, 'bg-amber-50 text-amber-800'],
+              ].map(([label, value, className]) => (
+                <div key={label as string} className={`rounded-xl border border-slate-200/80 p-4 shadow-2xs ${className}`}>
+                  <span className="block text-[10px] font-bold uppercase tracking-wider opacity-70">{label as string}</span>
+                  <strong className="mt-2 block text-2xl font-black">{value as string | number}</strong>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+              <div className="xl:col-span-2 bg-white rounded-xl border border-slate-200/80 p-5 shadow-2xs">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="font-black text-slate-900">Project Schedule</h3>
+                    <p className="text-[11px] text-slate-500">Timeline rendered from stored project start and end dates.</p>
+                  </div>
+                  <span className="text-[10px] font-bold uppercase text-slate-400">{scheduledProjects.length} scheduled</span>
+                </div>
+                {scheduledProjects.length ? (
+                  <div className="space-y-3">
+                    {scheduledProjects.map((project) => {
+                      const scheduleProject = project as Project & { startDate?: string; endDate?: string };
+                      const start = new Date(scheduleProject.startDate as string).getTime();
+                      const end = new Date(scheduleProject.endDate as string).getTime();
+                      const duration = Math.max(end - start, 1);
+                      const progress = Math.min(100, Math.max(0, safeNumber(project.progress)));
+                      return (
+                        <div key={project.id} className="grid grid-cols-[minmax(110px,1fr)_2fr_52px] items-center gap-3 text-[11px]">
+                          <div className="min-w-0">
+                            <p className="truncate font-bold text-slate-800">{project.name || '-'}</p>
+                            <p className="text-[10px] text-slate-400">{scheduleProject.startDate} to {scheduleProject.endDate}</p>
+                          </div>
+                          <div className="h-3 rounded-full bg-slate-100 overflow-hidden">
+                            <div className="h-full rounded-full bg-blue-600" style={{ width: `${Math.max(progress, 8)}%` }} title={`${progress}% complete`} />
+                          </div>
+                          <span className="text-right font-bold text-slate-600">{Math.round((duration / 86400000))}d</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500">No project schedule dates available.</div>
+                )}
               </div>
-              <p className="text-[10px] text-slate-500 font-medium">
-                Spent: ${(totalSpent / 1000000).toFixed(2)}M ({utilization}% Utilized)
-              </p>
-            </div>
-            <div className="bg-white border border-slate-200/80 p-5 rounded-xl shadow-2xs space-y-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Gate Pass Efficiency</span>
-              <p className="text-2xl font-black text-emerald-600">94.2%</p>
-              <p className="text-xs text-slate-500">{projects.length} active programs.</p>
-            </div>
-            <div className="bg-white border border-slate-200/80 p-5 rounded-xl shadow-2xs space-y-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Portfolio Health</span>
-              <div className="flex items-center gap-1.5 pt-1 font-bold text-xs">
-                <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md">{greenProjects} G</span>
-                <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md">{yellowProjects} A</span>
-                <span className="bg-red-100 text-red-800 px-2 py-0.5 rounded-md">{redProjects} R</span>
+
+              <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-2xs">
+                <h3 className="font-black text-slate-900">Resources</h3>
+                <p className="text-[11px] text-slate-500 mb-4">Actual department loading from the resource service.</p>
+                {resources.length ? (
+                  <div className="flex items-center gap-5">
+                    <div className="h-28 w-28 shrink-0 rounded-full" style={{ background: `conic-gradient(#2563eb ${resourceLoading}%, #e2e8f0 ${resourceLoading}% 100%)` }}>
+                      <div className="m-3 flex h-20 w-20 items-center justify-center rounded-full bg-white text-lg font-black text-slate-900">{resourceLoading}%</div>
+                    </div>
+                    <div className="space-y-2 text-xs">
+                      <p><span className="font-bold text-blue-700">{resources.reduce((total, resource) => total + safeNumber(resource.headcount), 0)}</span> loaded headcount</p>
+                      <p className="text-slate-500">Available: -</p>
+                      <p className="text-slate-500">Overallocated: -</p>
+                    </div>
+                  </div>
+                ) : <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500">No resource data available.</div>}
               </div>
             </div>
-            <div className="bg-white border border-slate-200/80 p-5 rounded-xl shadow-2xs space-y-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Critical Risk Density</span>
-              <p className="text-2xl font-black text-amber-600">{totalRisks > 0 ? (totalRisks / (projects.length || 1)).toFixed(2) : '0.00'}</p>
-              <p className="text-xs text-slate-500">{highRisks} Critical/High risks.</p>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-2xs">
+                <h3 className="font-black text-slate-900">Project Status</h3>
+                <p className="text-[11px] text-slate-500 mb-4">Distribution calculated from current project status and health.</p>
+                {totalProjects ? <div className="flex items-center gap-5">
+                  <div className="h-28 w-28 shrink-0 rounded-full" style={{ background: `conic-gradient(${statusGradient})` }}>
+                    <div className="m-3 flex h-20 w-20 items-center justify-center rounded-full bg-white text-lg font-black text-slate-900">{totalProjects}</div>
+                  </div>
+                  <div className="space-y-1.5 text-[11px]">
+                    {Object.entries(statusCounts).map(([status, count]) => <p key={status} className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: statusColors[status] || '#64748b' }} />{status}: <b>{count}</b></p>)}
+                  </div>
+                </div> : <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500">No project status data available.</div>}
+              </div>
+
+              <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-2xs">
+                <h3 className="font-black text-slate-900">Budget</h3>
+                <p className="text-[11px] text-slate-500 mb-4">Planned and actual values from budgets or project records.</p>
+                {(plannedBudget || actualBudget) ? <div className="space-y-3 text-xs">
+                  <p className="flex justify-between"><span className="text-slate-500">Planned</span><b>${plannedBudget.toLocaleString()}</b></p>
+                  <p className="flex justify-between"><span className="text-slate-500">Actual</span><b>${actualBudget.toLocaleString()}</b></p>
+                  <p className={`flex justify-between border-t border-slate-100 pt-3 ${budgetVariance < 0 ? 'text-red-600' : 'text-emerald-700'}`}><span>Variance</span><b>${budgetVariance.toLocaleString()}</b></p>
+                  <p className="flex justify-between font-bold"><span>Total Budget</span><span>${plannedBudget.toLocaleString()}</span></p>
+                </div> : <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500">No budget data available.</div>}
+              </div>
+
+              <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-2xs">
+                <h3 className="font-black text-slate-900">Risks</h3>
+                <p className="text-[11px] text-slate-500 mb-3">Current risks from the risk module.</p>
+                {risks.length ? <div className="max-h-36 space-y-2 overflow-y-auto">{risks.slice(0, 6).map((risk) => <div key={risk.id} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 text-xs"><span className="truncate font-semibold text-slate-700">{risk.subject || '-'}</span><span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">{risk.severity || '-'}</span></div>)}</div> : <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500">No risk data available.</div>}
+              </div>
             </div>
-          </div>
+
+            <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-2xs">
+              <div className="mb-3 flex items-center justify-between"><div><h3 className="font-black text-slate-900">Tasks</h3><p className="text-[11px] text-slate-500">Live delivery tasks across the accessible project set.</p></div><span className="text-[10px] font-bold uppercase text-slate-400">{tasks.length} total</span></div>
+              {tasks.length ? <div className="overflow-x-auto"><table className="w-full min-w-155 text-left text-xs"><thead className="border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-400"><tr><th className="pb-2">Task</th><th className="pb-2">Assignee</th><th className="pb-2">Due Date</th><th className="pb-2">Status</th></tr></thead><tbody className="divide-y divide-slate-100">{tasks.slice(0, 8).map((task) => <tr key={task.id}><td className="py-2 font-semibold text-slate-700">{task.title || '-'}</td><td className="py-2 text-slate-600">{task.assignee || '-'}</td><td className="py-2 text-slate-500">{task.dueDate || '-'}</td><td className="py-2 font-bold text-blue-700">{task.status || '-'}</td></tr>)}</tbody></table></div> : <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500">No task data available.</div>}
+            </div>
+          </section>
 
           <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
@@ -397,7 +685,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             </div>
 
             <button
-              onClick={() => setActiveTab('Generate Report')}
+              onClick={() => setActiveTab('Submit Report')}
               className="px-4 py-2 bg-[#00174b] hover:bg-indigo-950 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors"
             >
               <span className="material-symbols-outlined text-sm">add_circle</span>
@@ -407,7 +695,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
           {/* Report Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredReports.map((report) => {
+            {reportsLoading ? (
+              <div className="col-span-full py-12 text-center text-sm text-slate-500 bg-white rounded-xl border border-slate-200">Loading saved reports...</div>
+            ) : reportsError ? (
+              <div className="col-span-full py-12 text-center text-sm text-red-600 bg-red-50 rounded-xl border border-red-200">{reportsError}</div>
+            ) : filteredReports.map((report) => {
               const latestVersion = getLatestVersion(report.versions || []);
               return (
                 <div
@@ -428,6 +720,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                         >
                           <span className="material-symbols-outlined text-[16px]">edit</span>
                         </button>
+                        <button
+                          onClick={() => setViewingReport(report)}
+                          className="text-blue-600 hover:bg-blue-50 p-1.5 rounded-md transition-colors cursor-pointer"
+                          title="View Report"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">visibility</span>
+                        </button>
                         {/* DELETE REPORT BUTTON */}
                         <button
                           onClick={() => handleDeleteReport(report.id)}
@@ -440,6 +739,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                     </div>
 
                     <h3 className="font-extrabold text-slate-900 text-sm leading-snug">{report.title}</h3>
+                    <p className="text-[11px] font-bold text-blue-700">Project: {report.projectName || 'All projects'}</p>
                     <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">{report.description || 'No description provided.'}</p>
 
                     <div className="bg-slate-50 border border-slate-200/80 rounded-lg p-2.5 space-y-1 text-[11px]">
@@ -450,7 +750,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       </div>
                       <div className="flex justify-between items-center text-slate-700">
                         <span className="text-slate-400 font-bold uppercase text-[9px]">Period:</span>
-                        <span className="font-semibold text-slate-800">{report.period || 'Q3 2026'}</span>
+                        <span className="font-semibold text-slate-800">{report.period || '-'}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-slate-700">
+                        <span className="text-slate-400 font-bold uppercase text-[9px]">Date Range:</span>
+                        <span className="font-semibold text-slate-800">
+                          {report.startDate || 'Not set'} - {report.endDate || 'Not set'}
+                        </span>
                       </div>
                       <div className="flex justify-between items-center text-slate-700">
                         <span className="text-slate-400 font-bold uppercase text-[9px]">Type &amp; Status:</span>
@@ -480,7 +786,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               );
             })}
 
-            {filteredReports.length === 0 && (
+            {!reportsLoading && !reportsError && filteredReports.length === 0 && (
               <div className="col-span-full py-12 text-center text-slate-500 text-sm bg-white rounded-xl border border-slate-200">
                 No reports found in this category. Click &quot;New Report&quot; to generate or upload an Excel report.
               </div>
@@ -490,7 +796,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       )}
 
       {/* SUBTAB 2: GENERATE / UPLOAD REPORT */}
-      {activeTab === 'Generate Report' && (
+      {activeTab === 'Submit Report' && (
         <div className="bg-white p-6 rounded-xl border border-slate-200/80 shadow-2xs max-w-2xl mx-auto space-y-5 animate-fadeIn text-xs">
           <div className="border-b border-slate-100 pb-3">
             <h2 className="text-lg font-bold text-slate-900">Generate &amp; Upload Report</h2>
@@ -516,6 +822,23 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
             <div className="grid grid-cols-2 gap-4">
               <div>
+                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Template</label>
+                <select value={newReportTemplateId} onChange={(e) => setNewReportTemplateId(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-xs text-slate-900">
+                  <option value="">No template selected</option>
+                  {templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Project Name</label>
+                <select value={newReportProjectCode} onChange={(e) => setNewReportProjectCode(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-xs text-slate-900 font-medium">
+                  <option value="">All projects</option>
+                  {projects.map((project) => <option key={project.id} value={project.code}>{project.name} ({project.code})</option>)}
+                </select>
+              </div>
+              <div>
                 <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Prepared By *
                 </label>
@@ -529,15 +852,64 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 />
               </div>
 
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Reporting Period
-                </label>
+                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Owner Name</label>
+                <input value={newOwnerName} onChange={(e) => setNewOwnerName(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-xs" />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Owner Title</label>
+                <input value={newOwnerTitle} onChange={(e) => setNewOwnerTitle(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-xs" />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Project Status</label>
+                <select value={newProjectStatus} onChange={(e) => setNewProjectStatus(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-xs">
+                  {['Not Started', 'On Track', 'Complete', 'Delayed', 'At Risk', 'Off Track'].map((status) => <option key={status}>{status}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Priority</label>
+                <select value={newProjectPriority} onChange={(e) => setNewProjectPriority(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-xs">
+                  {['Low', 'Medium', 'High'].map((priority) => <option key={priority}>{priority}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Percent Completed</label>
+                <input type="number" min="0" max="100" value={newPercentCompleted} onChange={(e) => setNewPercentCompleted(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-xs" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Planned Budget</label>
+                <input type="number" min="0" step="0.01" value={newBudgetPlanned} onChange={(e) => setNewBudgetPlanned(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-xs" />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Actual Budget</label>
+                <input type="number" min="0" step="0.01" value={newBudgetActual} onChange={(e) => setNewBudgetActual(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-xs" />
+                <span className="text-[10px] text-slate-500">Variance: {(Number(newBudgetPlanned || 0) - Number(newBudgetActual || 0)).toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Start Date</label>
                 <input
-                  type="text"
-                  value={newReportPeriod}
-                  onChange={(e) => setNewReportPeriod(e.target.value)}
-                  placeholder="e.g. Q3 2026 / August 2026"
+                  type="date"
+                  value={newReportStartDate}
+                  onChange={(e) => setNewReportStartDate(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg p-2.5 text-xs text-slate-900 outline-none focus:border-blue-600 font-medium"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">End Date</label>
+                <input
+                  type="date"
+                  value={newReportEndDate}
+                  min={newReportStartDate || undefined}
+                  onChange={(e) => setNewReportEndDate(e.target.value)}
                   className="w-full border border-slate-300 rounded-lg p-2.5 text-xs text-slate-900 outline-none focus:border-blue-600 font-medium"
                 />
               </div>
@@ -591,6 +963,28 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               />
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                ['Critical Risks and Roadblocks', newCriticalRisks, setNewCriticalRisks],
+              ].map(([label, value, setter]) => (
+                <div key={label as string}>
+                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">{label as string}</label>
+                  <textarea rows={2} value={value as string} onChange={(e) => (setter as React.Dispatch<React.SetStateAction<string>>)(e.target.value)} placeholder="Enter one item per line" className="w-full border border-slate-300 rounded-lg p-2.5 text-xs" />
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Summary</label>
+                <textarea rows={3} value={newSummary} onChange={(e) => setNewSummary(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-xs" />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Additional Notes</label>
+                <textarea rows={3} value={newAdditionalNotes} onChange={(e) => setNewAdditionalNotes(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-xs" />
+              </div>
+            </div>
+
             <div>
               <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
                 Attach Excel (.xlsx / .csv) or Document File
@@ -619,10 +1013,45 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 disabled={isSubmittingReport}
                 className="px-5 py-2 bg-[#00174b] text-white font-bold rounded-lg uppercase tracking-wider hover:bg-indigo-950 disabled:opacity-60 flex items-center gap-2"
               >
-                {isSubmittingReport ? 'Generating Report...' : 'Publish Report'}
+                {isSubmittingReport ? 'Submitting Report...' : 'Submit Report'}
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {activeTab === 'Report History' && (
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-x-auto animate-fadeIn">
+          <div className="p-5 border-b border-slate-100">
+            <h2 className="text-base font-bold text-slate-900">Report History</h2>
+            <p className="text-xs text-slate-500 mt-1">Previously submitted reports from the PMO database.</p>
+          </div>
+          {filteredReports.length > 0 ? (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-500">
+                <tr>
+                  <th className="px-5 py-3">Report</th>
+                  <th className="px-5 py-3">Project</th>
+                  <th className="px-5 py-3">Format</th>
+                  <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3">Submitted</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredReports.map((report) => (
+                  <tr key={report.id} className="hover:bg-slate-50">
+                    <td className="px-5 py-3 font-bold text-slate-900">{report.title}</td>
+                    <td className="px-5 py-3 text-slate-700">{report.projectName || 'All projects'}</td>
+                    <td className="px-5 py-3 font-mono text-slate-600">{report.format || 'Excel'}</td>
+                    <td className="px-5 py-3 text-emerald-700 font-semibold">{report.status || 'Published'}</td>
+                    <td className="px-5 py-3 text-slate-500">{report.createdAt ? new Date(report.createdAt).toLocaleDateString() : 'Not available'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="p-12 text-center text-sm text-slate-500">No submitted reports found.</div>
+          )}
         </div>
       )}
 
@@ -671,6 +1100,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Project Name</label>
+                      <select value={tplProjectCode} onChange={(e) => setTplProjectCode(e.target.value)} className="w-full border p-2 rounded-lg text-xs font-medium">
+                        <option value="">All projects</option>
+                        {projects.map((project) => <option key={project.id} value={project.code}>{project.name} ({project.code})</option>)}
+                      </select>
+                    </div>
                     <div>
                       <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Category</label>
                       <select
@@ -753,6 +1189,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       <span className="px-2.5 py-0.5 rounded-md font-bold text-[10px] uppercase bg-purple-50 text-purple-900 border border-purple-200">
                         {tpl.category || 'Executive'}
                       </span>
+                        <span className="text-[11px] font-bold text-blue-700">Project: {tpl.projectName || 'All projects'}</span>
                       <div className="flex items-center gap-1">
                         {/* EDIT TEMPLATE BUTTON */}
                         <button
@@ -824,6 +1261,38 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         </div>
       )}
 
+      {viewingReport && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 rounded-xl border border-slate-300 shadow-2xl space-y-4 text-xs">
+            <div className="flex justify-between items-start border-b border-slate-200 pb-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-blue-600">Saved PMO Report</p>
+                <h3 className="font-black text-slate-900 text-lg">{viewingReport.title || '-'}</h3>
+                <p className="text-slate-500">{viewingReport.projectName || 'Project unavailable'}</p>
+              </div>
+              <button onClick={() => setViewingReport(null)} className="text-slate-400 hover:text-slate-700 text-sm">✕</button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                ['Program Status', viewingReport.programStatus],
+                ['Percent Complete', viewingReport.percentCompleted == null ? '-' : `${viewingReport.percentCompleted}%`],
+                ['Project Status', viewingReport.projectStatus || viewingReport.overallProjectStatus],
+                ['Owner', viewingReport.ownerName],
+              ].map(([label, value]) => <div key={label as string} className="rounded-lg bg-slate-50 border border-slate-200 p-3"><span className="block text-[9px] uppercase font-bold text-slate-400">{label as string}</span><strong className="block mt-1 text-slate-800">{value || '-'}</strong></div>)}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div><h4 className="font-bold text-slate-800 mb-1">Summary</h4><p className="whitespace-pre-wrap text-slate-600">{viewingReport.summary || viewingReport.description || 'No summary provided.'}</p></div>
+              <div><h4 className="font-bold text-slate-800 mb-1">Additional Notes</h4><p className="whitespace-pre-wrap text-slate-600">{viewingReport.additionalNotes || 'No additional notes.'}</p></div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div><h4 className="font-bold text-slate-800 mb-1">Budget</h4><p className="text-slate-600">Planned: ${safeNumber(viewingReport.budgetPlanned).toLocaleString()} • Actual: ${safeNumber(viewingReport.budgetActual).toLocaleString()} • Variance: ${safeNumber(viewingReport.budgetVariance).toLocaleString()}</p></div>
+              <div><h4 className="font-bold text-slate-800 mb-1">Risks and Roadblocks</h4><p className="whitespace-pre-wrap text-slate-600">{viewingReport.criticalRisks || 'No risks recorded.'}</p></div>
+            </div>
+            <div className="flex justify-end border-t border-slate-100 pt-3"><button onClick={() => setViewingReport(null)} className="px-4 py-2 bg-[#00174b] text-white font-bold rounded-lg">Close</button></div>
+          </div>
+        </div>
+      )}
+
       {/* EDIT REPORT MODAL */}
       {editingReport && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fadeIn">
@@ -857,12 +1326,25 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                   />
                 </div>
 
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Period</label>
+                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Start Date</label>
                   <input
-                    type="text"
-                    value={editPeriod}
-                    onChange={(e) => setEditPeriod(e.target.value)}
+                    type="date"
+                    value={editStartDate}
+                    onChange={(e) => setEditStartDate(e.target.value)}
+                    className="w-full border p-2 rounded-lg text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">End Date</label>
+                  <input
+                    type="date"
+                    value={editEndDate}
+                    min={editStartDate || undefined}
+                    onChange={(e) => setEditEndDate(e.target.value)}
                     className="w-full border p-2 rounded-lg text-xs"
                   />
                 </div>

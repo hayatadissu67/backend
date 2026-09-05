@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ExecutiveTemplate,
   ExecutiveTemplateRequest,
@@ -6,6 +6,7 @@ import {
   NavigationTab,
   LoggedInPersona
 } from '../types';
+import { createTemplateApi, deleteTemplateApi, fetchTemplatesApi, updateTemplateApi, fetchPendingExecutiveRequestsApi, fetchExecutiveAuditLogApi, createExecutiveRequestApi, approveExecutiveRequestApi, rejectExecutiveRequestApi } from '../services/api';
 
 interface TemplatesViewProps {
   projects?: Project[];
@@ -13,11 +14,46 @@ interface TemplatesViewProps {
   currentPersona?: LoggedInPersona | null;
 }
 
-export const TemplatesView: React.FC<TemplatesViewProps> = ({ currentPersona }) => {
+export const TemplatesView: React.FC<TemplatesViewProps> = ({ projects = [], currentPersona }) => {
   const [activeSubTab, setActiveSubTab] = useState<'Library' | 'Requests' | 'Audit Log'>('Library');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const mapApiTemplate = (template: any): ExecutiveTemplate => ({
+    id: String(template.id),
+    title: template.title || template.name,
+    code: template.code || template.templateCode,
+    version: template.version || '1.0',
+    category: template.category || 'Executive Charter',
+    description: template.description || '',
+    requiredApproverRole: template.requiredApproverRole || template.requiredSignOff || 'Executive Sponsor',
+    icon: template.icon || 'verified_user',
+    isExecutiveOnly: true,
+    projectName: template.projectName,
+    projectCode: template.projectCode,
+    createdAt: template.createdAt || new Date().toISOString(),
+    versions: template.versions || [],
+    fields: template.fields || []
+  });
+
+  useEffect(() => {
+    const loadTemplates = async () => {
+      const apiTemplates = await fetchTemplatesApi();
+      if (apiTemplates) setTemplates(apiTemplates.map(mapApiTemplate));
+    };
+    loadTemplates();
+  }, []);
+
+  useEffect(() => {
+    const loadRequests = async () => {
+      const apiRequests = await fetchPendingExecutiveRequestsApi();
+      if (Array.isArray(apiRequests)) {
+        setRequests(apiRequests);
+      }
+    };
+    loadRequests();
+  }, []);
 
   // Default Executive Templates State
   const [templates, setTemplates] = useState<ExecutiveTemplate[]>([
@@ -111,7 +147,14 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ currentPersona }) 
   ]);
 
   // Request Submissions State
-  const [requests] = useState<ExecutiveTemplateRequest[]>([]);
+  const [requests, setRequests] = useState<ExecutiveTemplateRequest[]>([]);
+
+  // New Request Form State
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+  const [newRequestTemplateId, setNewRequestTemplateId] = useState('');
+  const [newRequestProjectCode, setNewRequestProjectCode] = useState('');
+  const [newRequestApproverRole, setNewRequestApproverRole] = useState('Executive Sponsor');
+  const [newRequestFieldValues, setNewRequestFieldValues] = useState<Record<string, string | boolean>>({});
 
   // Modals & Action States
   const [isCreatingNewTemplate, setIsCreatingNewTemplate] = useState(false);
@@ -128,6 +171,7 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ currentPersona }) 
   const [formDescription, setFormDescription] = useState('');
   const [formApprover, setFormApprover] = useState<ExecutiveTemplate['requiredApproverRole']>('Executive Sponsor');
   const [formVersion, setFormVersion] = useState('1.0');
+  const [formProjectCode, setFormProjectCode] = useState('');
 
   // Version Bump State
   const [bumpVersionNumber, setBumpVersionNumber] = useState('');
@@ -145,11 +189,12 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ currentPersona }) 
   // ---- CRUD HANDLERS ----
   const handleOpenCreateModal = () => {
     setFormTitle('');
-    setFormCode(`EXEC-TPL-00${templates.length + 1}`);
+    setFormCode(`EXEC-TPL-${Date.now()}`);
     setFormCategory('Executive Charter');
     setFormDescription('');
     setFormApprover('Executive Sponsor');
     setFormVersion('1.0');
+    setFormProjectCode('');
     setIsCreatingNewTemplate(true);
   };
 
@@ -161,9 +206,10 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ currentPersona }) 
     setFormDescription(tpl.description);
     setFormApprover(tpl.requiredApproverRole);
     setFormVersion(tpl.version || '1.0');
+    setFormProjectCode(tpl.projectCode || '');
   };
 
-  const handleSaveTemplateForm = (e: React.FormEvent) => {
+  const handleSaveTemplateForm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formTitle.trim()) return;
 
@@ -178,44 +224,68 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ currentPersona }) 
             category: formCategory,
             description: formDescription,
             requiredApproverRole: formApprover,
+            projectName: projects.find((project) => project.code === formProjectCode)?.name,
+            projectCode: formProjectCode || undefined,
             version: formVersion,
           };
         }
         return t;
       });
-      setTemplates(updatedList);
+      const formData = new FormData();
+      formData.append('title', formTitle);
+      formData.append('templateCode', formCode);
+      formData.append('category', formCategory);
+      formData.append('description', formDescription);
+      formData.append('requiredSignOff', formApprover);
+      formData.append('requiredFields', String(editingTemplate.fields?.length || 2));
+      formData.append('version', formVersion);
+      if (formProjectCode) {
+        formData.append('projectCode', formProjectCode);
+        formData.append('projectName', projects.find((project) => project.code === formProjectCode)?.name || '');
+      }
+      const updated = await updateTemplateApi(editingTemplate.id, formData);
+      if (!updated) {
+        showToast('Failed to save template to the database.');
+        return;
+      }
+      setTemplates((current) => current.map((template) => template.id === editingTemplate.id ? mapApiTemplate(updated) : template));
       setEditingTemplate(null);
       showToast(`✓ Template "${formTitle}" updated successfully!`);
     } else {
-      // Create Template
-      const newTpl: ExecutiveTemplate = {
-        id: `tpl-${Date.now()}`,
-        title: formTitle,
-        code: formCode || `EXEC-TPL-00${templates.length + 1}`,
-        category: formCategory,
-        version: formVersion || '1.0',
-        description: formDescription || 'Custom executive governance template created by PMO Admin.',
-        requiredApproverRole: formApprover,
-        icon: 'verified',
-        isExecutiveOnly: true,
-        createdAt: new Date().toISOString().split('T')[0],
-        versions: [
-          { id: `v-${Date.now()}`, versionNumber: 1, fileUrl: '', uploadedBy: currentPersona?.name || 'Admin', createdAt: new Date().toISOString().split('T')[0] }
-        ],
-        fields: [
-          { id: `custom-f1-${Date.now()}`, label: 'Action Rationale & Justification', fieldType: 'textarea', required: true },
-          { id: `custom-f2-${Date.now()}`, label: 'Scope / Budget Impact ($)', fieldType: 'text', required: true }
-        ]
-      };
-      setTemplates([newTpl, ...templates]);
+      // Create Template; the database generates the numeric ID.
+      const templateCode = formCode || `EXEC-TPL-${Date.now()}`;
+      const templateDescription = formDescription || 'Custom executive governance template created by PMO Admin.';
+      const formData = new FormData();
+      formData.append('title', formTitle);
+      formData.append('templateCode', templateCode);
+      formData.append('category', formCategory);
+      formData.append('description', templateDescription);
+      formData.append('requiredSignOff', formApprover);
+      formData.append('requiredFields', '2');
+      formData.append('version', formVersion || '1.0');
+      if (formProjectCode) {
+        formData.append('projectCode', formProjectCode);
+        formData.append('projectName', projects.find((project) => project.code === formProjectCode)?.name || '');
+      }
+      const created = await createTemplateApi(formData);
+      if (!created) {
+        showToast('Failed to save template to the database.');
+        return;
+      }
+      setTemplates((current) => [mapApiTemplate(created), ...current]);
       setIsCreatingNewTemplate(false);
-      showToast(`✓ New Executive Action Template "${newTpl.title}" created!`);
+      showToast(`✓ New Executive Action Template "${formTitle}" created!`);
     }
   };
 
-  const handleDeleteTemplate = () => {
+  const handleDeleteTemplate = async () => {
     if (!templateToDelete) return;
-    setTemplates(templates.filter((t) => t.id !== templateToDelete.id));
+    const deleted = await deleteTemplateApi(templateToDelete.id);
+    if (!deleted) {
+      showToast('Failed to delete template from the database.');
+      return;
+    }
+    setTemplates((current) => current.filter((template) => template.id !== templateToDelete.id));
     showToast(`✓ Template "${templateToDelete.title}" deleted.`);
     setTemplateToDelete(null);
   };
@@ -306,6 +376,69 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ currentPersona }) 
     setUploadingTemplate(null);
     setUploadedFile(null);
     showToast(`✓ Document "${uploadedFile.name}" attached to template!`);
+  };
+
+  // ---- EXECUTIVE REQUEST HANDLERS ----
+  const handleSubmitRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newRequestTemplateId) return showToast('Template is required');
+    if (!newRequestApproverRole) return showToast('Approver role is required');
+
+    setIsSubmittingRequest(true);
+    try {
+      const selectedTemplate = templates.find((t) => t.id === newRequestTemplateId);
+      const selectedProject = projects.find((p) => p.code === newRequestProjectCode);
+      const created = await createExecutiveRequestApi({
+        templateId: newRequestTemplateId,
+        templateTitle: selectedTemplate?.title || '',
+        category: selectedTemplate?.category || 'Executive Charter',
+        projectId: selectedProject?.id,
+        projectCode: selectedProject?.code,
+        projectName: selectedProject?.name,
+        approverRole: newRequestApproverRole,
+        fieldValues: newRequestFieldValues,
+      });
+      if (created && created.id) {
+        setRequests((current) => [created, ...current]);
+        showToast('✓ Executive request submitted for approval');
+        setNewRequestTemplateId('');
+        setNewRequestProjectCode('');
+        setNewRequestApproverRole('Executive Sponsor');
+        setNewRequestFieldValues({});
+      } else {
+        showToast('❌ Failed to submit executive request');
+      }
+    } catch (err: any) {
+      showToast(`❌ ${err.message || 'Error submitting request'}`);
+    } finally {
+      setIsSubmittingRequest(false);
+    }
+  };
+
+  const handleApproveRequest = async (id: string) => {
+    try {
+      const updated = await approveExecutiveRequestApi(id);
+      if (updated && updated.id) {
+        setRequests((current) => current.map((r) => (String(r.id) === String(id) ? updated : r)));
+        showToast('✓ Request approved');
+      }
+    } catch (err: any) {
+      showToast(`❌ ${err.message || 'Error approving request'}`);
+    }
+  };
+
+  const handleRejectRequest = async (id: string) => {
+    const reason = window.prompt('Enter rejection reason:');
+    if (!reason) return;
+    try {
+      const updated = await rejectExecutiveRequestApi(id, reason);
+      if (updated && updated.id) {
+        setRequests((current) => current.map((r) => (String(r.id) === String(id) ? updated : r)));
+        showToast('✓ Request rejected');
+      }
+    } catch (err: any) {
+      showToast(`❌ ${err.message || 'Error rejecting request'}`);
+    }
   };
 
   // Filter templates
@@ -504,6 +637,7 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ currentPersona }) 
                     <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
                       <span className="material-symbols-outlined text-indigo-900 text-[20px]">{tpl.icon || 'description'}</span>
                       {tpl.title}
+                      <span className="block text-[11px] font-bold text-blue-700 mt-1">Project: {tpl.projectName || 'All projects'}</span>
                     </h4>
                     <p className="text-xs text-slate-500 mt-1 leading-relaxed line-clamp-2">{tpl.description}</p>
                   </div>
@@ -581,6 +715,20 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ currentPersona }) 
                   placeholder="e.g. Executive Charter & Capital Release"
                   className="w-full border p-2 rounded-lg text-xs"
                 />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Project Name</label>
+                <select
+                  value={formProjectCode}
+                  onChange={(e) => setFormProjectCode(e.target.value)}
+                  className="w-full border p-2 rounded-lg text-xs font-medium"
+                >
+                  <option value="">All projects</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.code}>{project.name} ({project.code})</option>
+                  ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -863,6 +1011,131 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ currentPersona }) 
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* SUB-TAB 2: PENDING EXECUTIVE QUEUE */}
+      {activeSubTab === 'Requests' && (
+        <div className="space-y-6 animate-fadeIn">
+          <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-2xs">
+            <h3 className="font-black text-slate-900 text-lg mb-1">Submit Executive Template Request</h3>
+            <p className="text-xs text-slate-500 mb-4">Request executive approval to use a governance template for a specific project or initiative.</p>
+            <form onSubmit={handleSubmitRequest} className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Template *</label>
+                <select value={newRequestTemplateId} onChange={(e) => setNewRequestTemplateId(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-xs">
+                  <option value="">Select template</option>
+                  {templates.map((tpl) => <option key={tpl.id} value={tpl.id}>{tpl.title} ({tpl.code})</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Project</label>
+                <select value={newRequestProjectCode} onChange={(e) => setNewRequestProjectCode(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-xs">
+                  <option value="">All projects</option>
+                  {projects.map((project) => <option key={project.id} value={project.code}>{project.name} ({project.code})</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Approver Role *</label>
+                <select value={newRequestApproverRole} onChange={(e) => setNewRequestApproverRole(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-xs">
+                  <option value="Executive Sponsor">Executive Sponsor</option>
+                  <option value="CFO / Financial Controller">CFO / Financial Controller</option>
+                  <option value="CTO / Chief Architect">CTO / Chief Architect</option>
+                  <option value="PMO Director">PMO Director</option>
+                  <option value="Steering Committee">Steering Committee</option>
+                </select>
+              </div>
+              <div className="md:col-span-3">
+                <button type="submit" disabled={isSubmittingRequest} className="px-5 py-2 bg-[#00174b] text-white font-bold rounded-lg uppercase tracking-wider hover:bg-indigo-950 disabled:opacity-60">
+                  {isSubmittingRequest ? 'Submitting...' : 'Submit Request'}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-x-auto">
+            <div className="p-5 border-b border-slate-100">
+              <h3 className="font-black text-slate-900">Pending Executive Queue</h3>
+              <p className="text-[11px] text-slate-500 mt-1">Template usage requests awaiting executive approval.</p>
+            </div>
+            {requests.filter((r) => r.status === 'Pending').length === 0 ? (
+              <div className="p-8 text-center text-sm text-slate-500">No pending executive requests.</div>
+            ) : (
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th className="px-5 py-3">Template</th>
+                    <th className="px-5 py-3">Project</th>
+                    <th className="px-5 py-3">Requested By</th>
+                    <th className="px-5 py-3">Requested</th>
+                    <th className="px-5 py-3">Approver Role</th>
+                    <th className="px-5 py-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {requests.filter((r) => r.status === 'Pending').map((req) => (
+                    <tr key={req.id} className="hover:bg-slate-50">
+                      <td className="px-5 py-3 font-bold text-slate-900">{req.templateTitle}</td>
+                      <td className="px-5 py-3 text-slate-700">{req.projectName || req.projectCode || 'All projects'}</td>
+                      <td className="px-5 py-3 text-slate-600">{req.requestedBy} <span className="text-[10px] text-slate-400">({req.requestedByRole})</span></td>
+                      <td className="px-5 py-3 text-slate-500">{new Date(req.requestedDate).toLocaleDateString()}</td>
+                      <td className="px-5 py-3 text-slate-600">{req.approverRole}</td>
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => handleApproveRequest(req.id)} className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded font-bold text-[11px]">Approve</button>
+                          <button onClick={() => handleRejectRequest(req.id)} className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 rounded font-bold text-[11px]">Reject</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* SUB-TAB 3: EXECUTIVE AUDIT LOG */}
+      {activeSubTab === 'Audit Log' && (
+        <div className="space-y-6 animate-fadeIn">
+          <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-x-auto">
+            <div className="p-5 border-b border-slate-100">
+              <h3 className="font-black text-slate-900">Executive Audit Log</h3>
+              <p className="text-[11px] text-slate-500 mt-1">Record of executive approvals, rejections, and governance actions.</p>
+            </div>
+            {requests.filter((r) => r.status !== 'Pending').length === 0 ? (
+              <div className="p-8 text-center text-sm text-slate-500">No audit records yet.</div>
+            ) : (
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th className="px-5 py-3">Template</th>
+                    <th className="px-5 py-3">Project</th>
+                    <th className="px-5 py-3">Status</th>
+                    <th className="px-5 py-3">Decision By</th>
+                    <th className="px-5 py-3">Decision Date</th>
+                    <th className="px-5 py-3">Reason</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {requests.filter((r) => r.status !== 'Pending').map((req) => (
+                    <tr key={req.id} className="hover:bg-slate-50">
+                      <td className="px-5 py-3 font-bold text-slate-900">{req.templateTitle}</td>
+                      <td className="px-5 py-3 text-slate-700">{req.projectName || req.projectCode || 'All projects'}</td>
+                      <td className="px-5 py-3">
+                        <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${req.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                          {req.status}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-slate-600">{req.approverName || '-'}</td>
+                      <td className="px-5 py-3 text-slate-500">{req.decisionDate ? new Date(req.decisionDate).toLocaleDateString() : '-'}</td>
+                      <td className="px-5 py-3 text-slate-600">{req.rejectionReason || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       )}

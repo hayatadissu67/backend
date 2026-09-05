@@ -31,8 +31,8 @@ export const permissions = {
 
   // Reports
   'reports.view': ['EXECUTIVE_MANAGER', 'PROJECT_MANAGER', 'RISK_MANAGER', 'TEAM_MEMBER'],
-  'reports.create': ['PROJECT_MANAGER', 'TEAM_MEMBER'],
-  'reports.update': ['PROJECT_MANAGER'],
+  'reports.create': ['EXECUTIVE_MANAGER', 'PROJECT_MANAGER', 'TEAM_MEMBER'],
+  'reports.update': ['EXECUTIVE_MANAGER', 'PROJECT_MANAGER', 'TEAM_MEMBER'],
   'reports.delete': ['EXECUTIVE_MANAGER'],
 
   // Budgets

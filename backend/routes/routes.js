@@ -11,6 +11,8 @@ import taskRoutes from "./taskRoutes.js";
 import reportRoutes from "./reportRoutes.js";
 import templateRoutes from "./templateRoutes.js";
 import resourceRoutes from "./resourceRoutes.js";
+import executiveRequestRoutes from "./executiveRequestRoutes.js";
+import auditLogRoutes from "./auditLogRoutes.js";
 
 const router = express.Router();
 
@@ -22,6 +24,8 @@ router.use("/users", protect, userRoutes);
 router.use("/tasks", protect, taskRoutes);
 router.use("/reports", protect, reportRoutes);
 router.use("/templates", protect, templateRoutes);
+router.use("/executive-requests", protect, executiveRequestRoutes);
+router.use("/audit-logs", protect, auditLogRoutes);
 router.use("/budgets", protect, budgetRoutes);
 router.use("/change-requests", protect, changeRequestRoutes);
 router.use("/projects", protect, projectRoutes);
