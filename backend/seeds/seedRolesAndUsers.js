@@ -5,11 +5,37 @@ import Role from '../models/roleModel.js';
 import User from '../models/userModel.js';
 import { roles } from '../config/rbac.js';
 
-const defaultUsers = [
-  { name: 'Executive Manager', email: 'executive@pmo.com', password: 'Executive@123', roleCode: 'EXECUTIVE_MANAGER' },
-  { name: 'Project Manager', email: 'pm@pmo.com', password: 'Project@123', roleCode: 'PROJECT_MANAGER' },
-  { name: 'Risk Manager', email: 'risk@pmo.com', password: 'Risk@123', roleCode: 'RISK_MANAGER' },
-  { name: 'Team Member', email: 'team@pmo.com', password: 'Team@123', roleCode: 'TEAM_MEMBER' },
+  const defaultUsers = [
+  {
+    name: "Administrator",
+    email: "admin@pmo.com",
+    password: "admin123",
+    roleCode: "ADMIN",
+  },
+  {
+    name: "Executive Manager",
+    email: "executive@pmo.com",
+    password: "Executive@123",
+    roleCode: "EXECUTIVE_MANAGER",
+  },
+  {
+    name: "Project Manager",
+    email: "pm@pmo.com",
+    password: "Project@123",
+    roleCode: "PROJECT_MANAGER",
+  },
+  {
+    name: "Risk Manager",
+    email: "risk@pmo.com",
+    password: "Risk@123",
+    roleCode: "RISK_MANAGER",
+  },
+  {
+    name: "Team Member",
+    email: "team@pmo.com",
+    password: "Team@123",
+    roleCode: "TEAM_MEMBER",
+  },
 ];
 
 const seed = async () => {
@@ -44,8 +70,7 @@ const seed = async () => {
         email: u.email,
         password: hashed,
         roleId: role ? role.id : null,
-        department: 'PMO',
-        status: 'Active',
+        status: 'active',
       });
 
       console.log(`Created user: ${u.email} (role: ${u.roleCode})`);

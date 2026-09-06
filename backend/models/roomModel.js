@@ -1,8 +1,8 @@
 import { DataTypes } from "sequelize";
 import { sequelize } from "../config/db.js";
 
-const User = sequelize.define(
-  "User",
+const Room = sequelize.define(
+  "Room",
   {
     id: {
       type: DataTypes.INTEGER,
@@ -15,42 +15,38 @@ const User = sequelize.define(
       allowNull: false,
     },
 
-    email: {
-      type: DataTypes.STRING,
+    type: {
+      type: DataTypes.ENUM("public", "private"),
       allowNull: false,
-      unique: true,
+      defaultValue: "public",
     },
 
-    password: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
-
-    roleId: {
+    projectId: {
       type: DataTypes.UUID,
       allowNull: true,
       references: {
-        model: "roles",
+        model: "projects",
         key: "id",
       },
       onUpdate: "CASCADE",
       onDelete: "SET NULL",
     },
 
-    status: {
-      type: DataTypes.STRING,
-      defaultValue: "Active",
-    },
-
-    avatar: {
-      type: DataTypes.STRING,
-      allowNull: true,
+    createdBy: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: "users",
+        key: "id",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "RESTRICT",
     },
   },
   {
-    tableName: "users",
+    tableName: "rooms",
     timestamps: true,
   }
 );
 
-export default User;
+export default Room;

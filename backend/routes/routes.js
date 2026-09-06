@@ -11,6 +11,7 @@ import taskRoutes from "./taskRoutes.js";
 import reportRoutes from "./reportRoutes.js";
 import templateRoutes from "./templateRoutes.js";
 import resourceRoutes from "./resourceRoutes.js";
+import chatRoutes from "./chatRoutes.js";
 
 const router = express.Router();
 
@@ -27,5 +28,6 @@ router.use("/change-requests", protect, changeRequestRoutes);
 router.use("/projects", protect, projectRoutes);
 router.use("/risks", protect, riskRoutes);
 router.use("/resources", protect, resourceRoutes);
+router.use("/chat", protect, chatRoutes);
 
 export default router;

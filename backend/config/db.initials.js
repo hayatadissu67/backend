@@ -165,6 +165,8 @@ const initDB = async () => {
 
     await ensureTaskSchema();
     console.log("✅ Task schema columns ensured");
+            await sequelize.query('SET FOREIGN_KEY_CHECKS = 0');
+
 
     // The shared `users` table has a pre-existing FK constraint conflict
     // (ER_FK_COLUMN_NOT_NULL on roleId) that blocks ALTER TABLE.
@@ -185,6 +187,7 @@ const initDB = async () => {
           "ER_FK_INCOMPATIBLE_COLUMNS",
           "ER_FK_COLUMN_NOT_NULL",
         ];
+  
 
         if (knownAlterErrors.includes(errCode)) {
           console.warn(
@@ -197,12 +200,15 @@ const initDB = async () => {
         }
       }
     }
+    await sequelize.query('SET FOREIGN_KEY_CHECKS = 1');
+
     console.log("✅ All models synced successfully");
 
     await backfillResourceRelationships();
   } catch (error) {
     console.error("❌ Error initializing database:", error);
   }
+        
 };
 
 export default initDB;
