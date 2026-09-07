@@ -3,6 +3,8 @@ import { UserItem } from '../types';
 
 const api = axios.create({
 	baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api',
+	timeout: 20000,
+	withCredentials: false,
 });
 
 api.interceptors.request.use((config) => {
@@ -10,6 +12,16 @@ api.interceptors.request.use((config) => {
 	if (token) config.headers.Authorization = `Bearer ${token}`;
 	return config;
 });
+
+api.interceptors.response.use(
+	(response) => response,
+	(error) => {
+		if (!error.response && error.message) {
+			error.message = `Network error: cannot reach ${api.defaults.baseURL}. Verify the backend is running on port 5000.`;
+		}
+		return Promise.reject(error);
+	}
+);
 
 const data = (response: any) => response.data?.data ?? response.data;
 const get = async (path: string) => data(await api.get(path));

@@ -33,6 +33,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   onTemplatesChange,
   currentPersona,
 }) => {
+  const canCreateReports = currentPersona?.roleType === 'PROJECT_MANAGER' || currentPersona?.roleType === 'TEAM_MEMBER';
   const [activeTab, setActiveTab] = useState<ReportSubTab>('All Reports');
   const [selectedReportCategory, setSelectedReportCategory] = useState<'All' | 'Executive' | 'Financial' | 'Governance' | 'Resource'>('All');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -42,7 +43,6 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const [newReportTitle, setNewReportTitle] = useState('');
   const [newReportDesc, setNewReportDesc] = useState('');
   const [newReportCat, setNewReportCat] = useState('Executive');
-  const [newReportPreparedBy, setNewReportPreparedBy] = useState(currentPersona?.name || 'PMO Directorate');
   const [newReportStartDate, setNewReportStartDate] = useState('');
   const [newReportEndDate, setNewReportEndDate] = useState('');
   const [newReportType, setNewReportType] = useState('Executive Summary');
@@ -55,12 +55,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const [newProjectLead, setNewProjectLead] = useState('');
   const [newProjectPriority, setNewProjectPriority] = useState('Medium');
   const [newProjectStatus, setNewProjectStatus] = useState('Not Started');
-  const [newBudgetPlanned, setNewBudgetPlanned] = useState('0');
   const [newBudgetActual, setNewBudgetActual] = useState('0');
   const [newMilestones, setNewMilestones] = useState('');
-  const [newCriticalRisks, setNewCriticalRisks] = useState('');
   const [newSummary, setNewSummary] = useState('');
-  const [newAdditionalNotes, setNewAdditionalNotes] = useState('');
   const [newReportFile, setNewReportFile] = useState<File | null>(null);
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
@@ -191,7 +188,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     formData.append('title', newReportTitle);
     formData.append('description', newReportDesc);
     formData.append('category', newReportCat);
-    formData.append('preparedBy', newReportPreparedBy);
+    formData.append('preparedBy', currentPersona?.name || 'PMO Directorate');
     formData.append('startDate', newReportStartDate);
     formData.append('endDate', newReportEndDate);
     formData.append('type', newReportType);
@@ -211,13 +208,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       projectStatus: newProjectStatus,
       overallProjectStatus: newProjectStatus,
       progress: newPercentCompleted,
-      budgetPlanned: newBudgetPlanned,
       budgetActual: newBudgetActual,
-      budgetVariance: String(Number(newBudgetPlanned || 0) - Number(newBudgetActual || 0)),
       milestones: newMilestones,
-      criticalRisks: newCriticalRisks,
       summary: newSummary,
-      additionalNotes: newAdditionalNotes,
     });
     if (newReportFile) formData.append('file', newReportFile);
 
@@ -234,9 +227,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         setNewOwnerTitle('');
         setNewProjectLead('');
         setNewMilestones('');
-        setNewCriticalRisks('');
         setNewSummary('');
-        setNewAdditionalNotes('');
         setActiveTab('All Reports');
       } else {
         showToast('❌ Report could not be submitted to the database');
@@ -447,17 +438,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const totalRisks = risks.length;
   const highRisks = risks.filter((r) => r.severity === 'CRITICAL' || r.severity === 'HIGH').length;
 
-  // If team member, only show reports related to their assigned projects or prepared by them
-  const visibleReports = currentPersona?.roleType === 'TEAM_MEMBER'
-    ? reports.filter(r => {
-        const assigned = currentPersona?.assignedProjectCodes || [];
-        // report may include projectCode or relatedProject fields
-        const projectCode = (r as any).projectCode || (r as any).relatedProject || '';
-        return assigned.includes(projectCode) || r.preparedBy === currentPersona?.name || r.preparedBy === currentPersona?.email;
-      })
-    : reports;
-
-  const filteredReports = visibleReports.filter((r) => {
+  // All authorized users see every submitted report (persisted in the database).
+  const filteredReports = reports.filter((r) => {
     return selectedReportCategory === 'All' || r.category === selectedReportCategory;
   });
 
@@ -534,7 +516,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
-          {(['All Reports', 'Submit Report', 'Templates', 'Report History'] as ReportSubTab[]).map((tab) => (
+          {(['All Reports', ...(canCreateReports ? ['Submit Report' as const] : []), 'Templates', 'Report History'] as ReportSubTab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -684,13 +666,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               ))}
             </div>
 
-            <button
-              onClick={() => setActiveTab('Submit Report')}
-              className="px-4 py-2 bg-[#00174b] hover:bg-indigo-950 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors"
-            >
-              <span className="material-symbols-outlined text-sm">add_circle</span>
-              New Report
-            </button>
+            {canCreateReports && (
+              <button
+                onClick={() => setActiveTab('Submit Report')}
+                className="px-4 py-2 bg-[#00174b] hover:bg-indigo-950 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors"
+              >
+                <span className="material-symbols-outlined text-sm">add_circle</span>
+                New Report
+              </button>
+            )}
           </div>
 
           {/* Report Cards Grid */}
@@ -840,16 +824,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               </div>
               <div>
                 <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Prepared By *
+                  Prepared By
                 </label>
                 <input
                   type="text"
-                  required
-                  value={newReportPreparedBy}
-                  onChange={(e) => setNewReportPreparedBy(e.target.value)}
-                  placeholder="e.g. Sarah Jenkins (PMO Director)"
-                  className="w-full border border-slate-300 rounded-lg p-2.5 text-xs text-slate-900 outline-none focus:border-blue-600 font-medium"
+                  readOnly
+                  value={currentPersona?.name || 'PMO Directorate'}
+                  className="w-full border border-slate-200 bg-slate-50 rounded-lg p-2.5 text-xs text-slate-700 outline-none font-medium"
                 />
+                <p className="text-[10px] text-slate-500 mt-1">Auto-filled from the logged-in PMO/Project Manager/Team Member account.</p>
               </div>
 
             </div>
@@ -883,13 +866,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Planned Budget</label>
-                <input type="number" min="0" step="0.01" value={newBudgetPlanned} onChange={(e) => setNewBudgetPlanned(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-xs" />
-              </div>
-              <div>
                 <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Actual Budget</label>
                 <input type="number" min="0" step="0.01" value={newBudgetActual} onChange={(e) => setNewBudgetActual(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-xs" />
-                <span className="text-[10px] text-slate-500">Variance: {(Number(newBudgetPlanned || 0) - Number(newBudgetActual || 0)).toFixed(2)}</span>
               </div>
             </div>
 
@@ -963,26 +941,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              {[
-                ['Critical Risks and Roadblocks', newCriticalRisks, setNewCriticalRisks],
-              ].map(([label, value, setter]) => (
-                <div key={label as string}>
-                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">{label as string}</label>
-                  <textarea rows={2} value={value as string} onChange={(e) => (setter as React.Dispatch<React.SetStateAction<string>>)(e.target.value)} placeholder="Enter one item per line" className="w-full border border-slate-300 rounded-lg p-2.5 text-xs" />
-                </div>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Summary</label>
-                <textarea rows={3} value={newSummary} onChange={(e) => setNewSummary(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-xs" />
-              </div>
-              <div>
-                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Additional Notes</label>
-                <textarea rows={3} value={newAdditionalNotes} onChange={(e) => setNewAdditionalNotes(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-xs" />
-              </div>
+            <div>
+              <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">Summary</label>
+              <textarea rows={3} value={newSummary} onChange={(e) => setNewSummary(e.target.value)} className="w-full border border-slate-300 rounded-lg p-2.5 text-xs" />
             </div>
 
             <div>

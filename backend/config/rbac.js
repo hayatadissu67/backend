@@ -28,10 +28,11 @@ export const permissions = {
   'templates.create': ['EXECUTIVE_MANAGER', 'PROJECT_MANAGER'],
   'templates.update': ['EXECUTIVE_MANAGER', 'PROJECT_MANAGER'],
   'templates.delete': ['EXECUTIVE_MANAGER'],
+  'templates.approve': ['EXECUTIVE_MANAGER'],
 
   // Reports
   'reports.view': ['EXECUTIVE_MANAGER', 'PROJECT_MANAGER', 'RISK_MANAGER', 'TEAM_MEMBER'],
-  'reports.create': ['EXECUTIVE_MANAGER', 'PROJECT_MANAGER', 'TEAM_MEMBER'],
+  'reports.create': ['PROJECT_MANAGER', 'TEAM_MEMBER'],
   'reports.update': ['EXECUTIVE_MANAGER', 'PROJECT_MANAGER', 'TEAM_MEMBER'],
   'reports.delete': ['EXECUTIVE_MANAGER'],
 

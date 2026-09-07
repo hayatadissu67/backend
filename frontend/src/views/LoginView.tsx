@@ -55,13 +55,25 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         throw new Error(data?.message || 'Login failed. Please check credentials.');
       }
 
+      if (!data.token || !data.user) {
+        throw new Error('Authentication response was malformed. Contact administrator.');
+      }
+
       onLoginSuccess(data.token, data.user);
     } catch (err: any) {
-      const message =
+      let message =
         err.response?.data?.message ||
         err.message ||
         'Unable to connect to PMO authentication service. Please check network connection.';
+
+      if (err.code === 'ERR_NETWORK' || /network error/i.test(err.message || '')) {
+        message = 'Cannot reach the backend at http://localhost:5000. Make sure the backend server is running and CORS is enabled.';
+      } else if (err.code === 'ECONNABORTED') {
+        message = 'Authentication request timed out. Try again in a moment.';
+      }
+
       setError(message);
+      console.error('Login attempt failed:', err);
     } finally {
       setIsLoading(false);
     }

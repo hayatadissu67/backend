@@ -39,112 +39,55 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ projects = [], cur
 
   useEffect(() => {
     const loadTemplates = async () => {
-      const apiTemplates = await fetchTemplatesApi();
-      if (apiTemplates) setTemplates(apiTemplates.map(mapApiTemplate));
+      try {
+        const apiTemplates = await fetchTemplatesApi();
+        if (Array.isArray(apiTemplates)) {
+          setTemplates(apiTemplates.map(mapApiTemplate));
+        } else {
+          setTemplates([]);
+        }
+      } catch (err) {
+        console.error('Failed to load templates from backend:', err);
+        showToast('Failed to load templates from the database.');
+      }
     };
     loadTemplates();
   }, []);
 
   useEffect(() => {
     const loadRequests = async () => {
-      const apiRequests = await fetchPendingExecutiveRequestsApi();
-      if (Array.isArray(apiRequests)) {
-        setRequests(apiRequests);
+      try {
+        const apiRequests = await fetchPendingExecutiveRequestsApi();
+        if (Array.isArray(apiRequests)) {
+          setRequests(apiRequests);
+        } else {
+          setRequests([]);
+        }
+      } catch (err) {
+        console.error('Failed to load pending requests:', err);
       }
     };
     loadRequests();
   }, []);
 
-  // Default Executive Templates State
-  const [templates, setTemplates] = useState<ExecutiveTemplate[]>([
-    {
-      id: 'tpl-1',
-      title: 'Executive Project Charter & Capital Release',
-      code: 'EXEC-TPL-001',
-      version: '1.0',
-      category: 'Executive Charter',
-      description: 'Mandatory executive sign-off template required to approve project charters, unlock Gate 1 capital allocation, and assign PMO leadership.',
-      requiredApproverRole: 'Executive Sponsor',
-      icon: 'verified_user',
-      isExecutiveOnly: true,
-      createdAt: '2026-01-15',
-      versions: [
-        { id: 'v-1', versionNumber: 1, fileUrl: '', uploadedBy: 'Sarah Jenkins (PMO Director)', createdAt: '2026-01-15' }
-      ],
-      fields: [
-        { id: 'f1', label: 'Project Name & Code', fieldType: 'text', required: true, defaultValue: 'PRJ-2026-001' },
-        { id: 'f2', label: 'Strategic Alignment Pillar', fieldType: 'select', required: true, options: ['Cloud Modernization', 'Zero Trust Security', 'AI & Intelligence', 'Digital Portal'] },
-        { id: 'f3', label: 'Authorized Initial Capex ($)', fieldType: 'number', required: true, defaultValue: '150000' },
-        { id: 'f4', label: 'Executive Sponsor Name', fieldType: 'text', required: true, defaultValue: 'Dr. Sarah Jenkins (SVP)' },
-        { id: 'f5', label: 'Strategic Business Justification', fieldType: 'textarea', required: true, defaultValue: 'Core infrastructure transformation required for Q4 scalability targets.' }
-      ]
-    },
-    {
-      id: 'tpl-2',
-      title: 'Budget Variance & Emergency Cap Allocation',
-      code: 'EXEC-TPL-002',
-      version: '1.2',
-      category: 'Financial & Budget',
-      description: 'Required for budget adjustment requests exceeding +10% or >$50k capital variance. Requires CFO digital authorization signature.',
-      requiredApproverRole: 'CFO / Financial Controller',
-      icon: 'payments',
-      isExecutiveOnly: true,
-      createdAt: '2026-02-01',
-      versions: [
-        { id: 'v-2-1', versionNumber: 1, fileUrl: '', uploadedBy: 'Sarah Jenkins', createdAt: '2026-02-01' },
-        { id: 'v-2-2', versionNumber: 2, fileUrl: '', uploadedBy: 'Alex Rivers', createdAt: '2026-02-15' }
-      ],
-      fields: [
-        { id: 'f6', label: 'Project Code', fieldType: 'text', required: true, defaultValue: 'PRJ-2026-003' },
-        { id: 'f7', label: 'Requested Additional Capital ($)', fieldType: 'number', required: true, defaultValue: '75000' },
-        { id: 'f8', label: 'Root Cause of Cost Variance', fieldType: 'select', required: true, options: ['Scope Expansion', 'Vendor Price Increase', 'Unforeseen Technical Debt', 'Regulatory Mandate'] },
-        { id: 'f9', label: 'Financial Mitigation Plan', fieldType: 'textarea', required: true, defaultValue: 'Offsetting costs against Q4 contingency reserves.' }
-      ]
-    },
-    {
-      id: 'tpl-3',
-      title: 'Stage-Gate Fast-Track Promotion Waiver',
-      code: 'EXEC-TPL-003',
-      version: '1.0',
-      category: 'Stage-Gate Governance',
-      description: 'Executive waiver allowing high-priority projects to advance through stage gates ahead of schedule with mandatory PMO Director audit.',
-      requiredApproverRole: 'PMO Director',
-      icon: 'alt_route',
-      isExecutiveOnly: true,
-      createdAt: '2026-02-10',
-      versions: [
-        { id: 'v-3-1', versionNumber: 1, fileUrl: '', uploadedBy: 'Sarah Jenkins', createdAt: '2026-02-10' }
-      ],
-      fields: [
-        { id: 'f10', label: 'Project Code', fieldType: 'text', required: true, defaultValue: 'PRJ-2026-002' },
-        { id: 'f11', label: 'Current Gate Stage', fieldType: 'select', required: true, options: ['Gate 1 (Initiation)', 'Gate 2 (Planning)', 'Gate 3 (Execution)', 'Gate 4 (Governance)'] },
-        { id: 'f12', label: 'Target Gate Stage', fieldType: 'select', required: true, options: ['Gate 2 (Planning)', 'Gate 3 (Execution)', 'Gate 4 (Governance)', 'Gate 5 (Closure)'] },
-        { id: 'f13', label: 'Emergency Business Rationale', fieldType: 'textarea', required: true, defaultValue: 'Urgent compliance deadline requires accelerated UAT and deployment.' }
-      ]
-    },
-    {
-      id: 'tpl-4',
-      title: 'High-Severity Security Risk Exemption Sign-off',
-      code: 'EXEC-TPL-004',
-      version: '2.0',
-      category: 'Security & Access',
-      description: 'Formal risk acceptance sign-off for critical security findings or temporary compliance exceptions approved by CTO / CISO.',
-      requiredApproverRole: 'CTO / Chief Architect',
-      icon: 'gavel',
-      isExecutiveOnly: true,
-      createdAt: '2026-03-05',
-      versions: [
-        { id: 'v-4-1', versionNumber: 1, fileUrl: '', uploadedBy: 'Marcus Vance', createdAt: '2026-03-05' },
-        { id: 'v-4-2', versionNumber: 2, fileUrl: '', uploadedBy: 'Marcus Vance', createdAt: '2026-03-20' }
-      ],
-      fields: [
-        { id: 'f14', label: 'Risk Reference ID', fieldType: 'text', required: true, defaultValue: 'RSK-9021' },
-        { id: 'f15', label: 'Vulnerability Severity Score', fieldType: 'select', required: true, options: ['CRITICAL (9.0+)', 'HIGH (7.0-8.9)', 'MEDIUM (4.0-6.9)'] },
-        { id: 'f16', label: 'Compensating Control Measures', fieldType: 'textarea', required: true, defaultValue: 'Air-gapped network isolation and 24/7 SIEM monitoring applied.' },
-        { id: 'f17', label: 'Exemption Expiry Date', fieldType: 'text', required: true, defaultValue: '2026-12-31' }
-      ]
-    }
-  ]);
+  useEffect(() => {
+    const loadAuditLog = async () => {
+      try {
+        const apiAudit = await fetchExecutiveAuditLogApi();
+        if (Array.isArray(apiAudit)) {
+          setAuditLogs(apiAudit);
+        } else {
+          setAuditLogs([]);
+        }
+      } catch (err) {
+        console.error('Failed to load executive audit log:', err);
+      }
+    };
+    loadAuditLog();
+  }, []);
+
+  const [templates, setTemplates] = useState<ExecutiveTemplate[]>([]);
+  const [auditLogs, setAuditLogs] = useState<ExecutiveTemplateRequest[]>([]);
 
   // Request Submissions State
   const [requests, setRequests] = useState<ExecutiveTemplateRequest[]>([]);
@@ -415,12 +358,18 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ projects = [], cur
     }
   };
 
+  const refreshAuditLog = async () => {
+    const apiAudit = await fetchExecutiveAuditLogApi();
+    if (Array.isArray(apiAudit)) setAuditLogs(apiAudit);
+  };
+
   const handleApproveRequest = async (id: string) => {
     try {
       const updated = await approveExecutiveRequestApi(id);
       if (updated && updated.id) {
         setRequests((current) => current.map((r) => (String(r.id) === String(id) ? updated : r)));
         showToast('✓ Request approved');
+        await refreshAuditLog();
       }
     } catch (err: any) {
       showToast(`❌ ${err.message || 'Error approving request'}`);
@@ -435,6 +384,7 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ projects = [], cur
       if (updated && updated.id) {
         setRequests((current) => current.map((r) => (String(r.id) === String(id) ? updated : r)));
         showToast('✓ Request rejected');
+        await refreshAuditLog();
       }
     } catch (err: any) {
       showToast(`❌ ${err.message || 'Error rejecting request'}`);
@@ -516,7 +466,7 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ projects = [], cur
               {[
                 { key: 'Library', label: 'Action Templates Library', icon: 'collections_bookmark', badge: templates.length },
                 { key: 'Requests', label: 'Pending Executive Queue', icon: 'pending_actions', badge: pendingRequestsCount },
-                { key: 'Audit Log', label: 'Executive Audit Log', icon: 'verified', badge: requests.filter((r) => r.status !== 'Pending').length }
+                { key: 'Audit Log', label: 'Executive Audit Log', icon: 'verified', badge: auditLogs.length }
               ].map((tab) => (
                 <button
                   key={tab.key}
@@ -1104,7 +1054,7 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ projects = [], cur
               <h3 className="font-black text-slate-900">Executive Audit Log</h3>
               <p className="text-[11px] text-slate-500 mt-1">Record of executive approvals, rejections, and governance actions.</p>
             </div>
-            {requests.filter((r) => r.status !== 'Pending').length === 0 ? (
+            {auditLogs.length === 0 ? (
               <div className="p-8 text-center text-sm text-slate-500">No audit records yet.</div>
             ) : (
               <table className="w-full text-left text-xs">
@@ -1119,7 +1069,7 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ projects = [], cur
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {requests.filter((r) => r.status !== 'Pending').map((req) => (
+                  {auditLogs.map((req) => (
                     <tr key={req.id} className="hover:bg-slate-50">
                       <td className="px-5 py-3 font-bold text-slate-900">{req.templateTitle}</td>
                       <td className="px-5 py-3 text-slate-700">{req.projectName || req.projectCode || 'All projects'}</td>

@@ -14,20 +14,9 @@ const normalizeReportPayload = (payload) => {
 
 export const getReports = async (req, res) => {
   try {
-    let data = await service.getReportsService();
-
-    // Team Member should only see reports related to their assigned projects or prepared by them
-    const roleCode = req.user && (req.user.role?.code || req.user.role || req.user.role?.name);
-    if (String(roleCode).toUpperCase() === 'TEAM_MEMBER') {
-      const assigned = req.user.assignedProjectCodes || [];
-      data = data.filter(r => {
-        const projectCode = r.projectCode || r.relatedProject || '';
-        if (projectCode && assigned.includes(projectCode)) return true;
-        if (r.preparedBy && (r.preparedBy === req.user.name || r.preparedBy === req.user.email)) return true;
-        return false;
-      });
-    }
-
+    const data = await service.getReportsService();
+    // All authorized roles can view all reports. Filtering by user identity
+    // is intentionally not applied so that reports persist across role views.
     res.json({ success: true, data });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
