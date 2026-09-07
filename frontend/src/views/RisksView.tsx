@@ -164,11 +164,8 @@ export const RisksView: React.FC<RisksViewProps> = ({
     const updated: RiskItem = {
       ...escalatingRisk,
       status: 'ESCALATED',
-<<<<<<< HEAD:frontend/src/views/RisksView.tsx
       assignedRiskManager: 'Risk Manager',
       escalatedAt: new Date().toISOString(),
-=======
->>>>>>> enkumariam:frontend/src/components/views/RisksView.tsx
       escalationNotes: escalationNotesInput || 'Escalated by Project Manager to Risk Manager for enterprise governance review.'
     };
     onUpdateRisk(updated);
@@ -195,11 +192,6 @@ export const RisksView: React.FC<RisksViewProps> = ({
   const visibleRisks = currentPersona?.roleType === 'TEAM_MEMBER'
     ? risks.filter(r => (currentPersona.assignedProjectCodes || []).includes(r.projectRef))
     : risks;
-
-    onUpdateRisk(updated);
-    setDelegatingRisk(null);
-    setQuickNotes('');
-  };
 
   const filteredRisks = risks.filter((r) => {
     const isTeamMember = currentPersona?.roleType === 'TEAM_MEMBER';

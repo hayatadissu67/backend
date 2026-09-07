@@ -1,23 +1,55 @@
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import User from "../models/userModel.js";
 import Role from "../models/roleModel.js";
 
 const SAFE_USER_ATTRS = { exclude: ["password"] };
 
-// Helper: serialize a Sequelize user instance into a plain object
-// that the frontend can consume (id as string, role as plain string code).
 const serializeUser = (userInstance) => {
   if (!userInstance) return null;
   const json = userInstance.toJSON ? userInstance.toJSON() : { ...userInstance };
   const { password, ...safe } = json;
-  if (safe.role && typeof safe.role === "object") {
-    safe.role = safe.role.code || safe.role.name;
-  }
   return {
     ...safe,
     id: String(safe.id),
     roleId: safe.roleId ? String(safe.roleId) : null,
   };
+};
+
+const enrichWithRole = async (userJson) => {
+  if (!userJson || !userJson.roleId) return { ...userJson, role: null };
+  const role = await Role.findByPk(userJson.roleId, {
+    attributes: ["id", "code", "name"],
+  });
+  return { ...userJson, role: role ? role.code : null };
+};
+
+const enrichUsersWithRole = async (users) => {
+  const uniqueRoleIds = [
+    ...new Set(
+      users
+        .map((u) => (u.toJSON ? u.toJSON().roleId : u.roleId))
+        .filter(Boolean)
+    ),
+  ];
+  const roles = await Role.findAll({
+    where: { id: uniqueRoleIds },
+    attributes: ["id", "code", "name"],
+  });
+  const roleMap = new Map(roles.map((r) => [String(r.id), r.code]));
+
+  return users.map((u) => {
+    const json = u.toJSON ? u.toJSON() : { ...u };
+    const { password, ...safe } = json;
+    return {
+      ...safe,
+      id: String(safe.id),
+      role: roleMap.get(String(safe.roleId)) || null,
+      roleId: safe.roleId ? String(safe.roleId) : null,
+      mustChangePassword: !!safe.mustChangePassword,
+      assignedProjectCodes: safe.assignedProjectCodes || [],
+    };
+  });
 };
 
 // Add user (admin action)
@@ -36,8 +68,8 @@ export const addUser = async (req, res) => {
       mustChangePassword,
     } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ message: "Email and password are required" });
+    if (!email || !name) {
+      return res.status(400).json({ success: false, message: "Name and email are required" });
     }
 
     const existingUser = await User.findOne({ where: { email } });
@@ -47,7 +79,6 @@ export const addUser = async (req, res) => {
         .json({ success: false, message: "User already exists" });
     }
 
-    // Allow supplying either a roleId (UUID) or a role code (string like PROJECT_MANAGER)
     let resolvedRole = null;
     if (roleId) {
       resolvedRole = await Role.findByPk(roleId);
@@ -81,10 +112,15 @@ export const addUser = async (req, res) => {
         avatar ||
         "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
       status: status || "Active",
-      mustChangePassword: generatedTemp || mustChangePassword === true,
+      mustChangePassword: !!mustChangePassword,
     });
 
-    res.status(201).json({ success: true, message: "User added successfully", data: user });
+    const safe = await enrichWithRole(serializeUser(user));
+    return res.status(201).json({
+      success: true,
+      message: "User added successfully",
+      data: safe,
+    });
   } catch (error) {
     console.error("addUser error:", error);
     return res
@@ -98,26 +134,9 @@ export const getUsers = async (req, res) => {
   try {
     const users = await User.findAll({
       attributes: SAFE_USER_ATTRS,
-      include: { model: Role, as: "role", attributes: ["id", "code", "name"] },
       order: [["createdAt", "DESC"]],
     });
-    const safeUsers = users.map((u) => {
-      const j = u.toJSON();
-      // Normalize role: prefer the code string the frontend expects.
-      const roleCode = j.role ? j.role.code : null;
-      return {
-        id: String(j.id),
-        name: j.name,
-        email: j.email,
-        department: j.department || "Unassigned",
-        avatar: j.avatar,
-        status: j.status || "Active",
-        role: roleCode,
-        roleId: j.roleId ? String(j.roleId) : null,
-        mustChangePassword: !!j.mustChangePassword,
-        assignedProjectCodes: j.assignedProjectCodes || [],
-      };
-    });
+    const safeUsers = await enrichUsersWithRole(users);
     return res.status(200).json({ success: true, data: safeUsers });
   } catch (error) {
     console.error("getUsers error:", error);
@@ -127,9 +146,7 @@ export const getUsers = async (req, res) => {
   }
 };
 
-// List only TEAM_MEMBER users. Accessible to any authenticated user.
-// Used by the PM dashboard / "assign member" flow so PMs can see the
-// full pool of team members without needing full user-management rights.
+// List only TEAM_MEMBER users
 export const getTeamMembers = async (req, res) => {
   try {
     const teamRole = await Role.findOne({ where: { code: "TEAM_MEMBER" } });
@@ -141,24 +158,9 @@ export const getTeamMembers = async (req, res) => {
     const users = await User.findAll({
       attributes: SAFE_USER_ATTRS,
       where: { roleId: teamRole.id },
-      include: { model: Role, as: "role", attributes: ["id", "code", "name"] },
       order: [["name", "ASC"]],
     });
-    const safeUsers = users.map((u) => {
-      const j = u.toJSON();
-      return {
-        id: String(j.id),
-        name: j.name,
-        email: j.email,
-        department: j.department || "Unassigned",
-        avatar: j.avatar,
-        status: j.status || "Active",
-        role: j.role ? j.role.code : "TEAM_MEMBER",
-        roleId: j.roleId ? String(j.roleId) : null,
-        mustChangePassword: !!j.mustChangePassword,
-        assignedProjectCodes: j.assignedProjectCodes || [],
-      };
-    });
+    const safeUsers = await enrichUsersWithRole(users);
     return res.status(200).json({ success: true, data: safeUsers });
   } catch (error) {
     console.error("getTeamMembers error:", error);
@@ -172,7 +174,7 @@ export const getTeamMembers = async (req, res) => {
 export const updateUser = async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id, {
-      include: { model: Role, as: "role", attributes: ["id", "code", "name"] },
+      attributes: SAFE_USER_ATTRS,
     });
     if (!user) {
       return res
@@ -208,25 +210,10 @@ export const updateUser = async (req, res) => {
 
     await user.save();
 
-    // Reload with role joined
-    const fresh = await User.findByPk(user.id, {
-      include: { model: Role, as: "role", attributes: ["id", "code", "name"] },
-    });
-    const j = fresh.toJSON();
+    const safe = await enrichWithRole(serializeUser(user));
     return res.status(200).json({
       success: true,
-      data: {
-        id: String(j.id),
-        name: j.name,
-        email: j.email,
-        department: j.department || "Unassigned",
-        avatar: j.avatar,
-        status: j.status || "Active",
-        role: j.role ? j.role.code : null,
-        roleId: j.roleId ? String(j.roleId) : null,
-        mustChangePassword: !!j.mustChangePassword,
-        assignedProjectCodes: j.assignedProjectCodes || [],
-      },
+      data: safe,
     });
   } catch (error) {
     console.error("updateUser error:", error);

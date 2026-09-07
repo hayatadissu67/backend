@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import User from '../models/userModel.js';
 import Role from '../models/roleModel.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-in-production';
+const JWT_SECRET = () => process.env.JWT_SECRET || 'pmo-dev-secret-change-me-in-production';
 const JWT_EXPIRE = process.env.JWT_EXPIRE || '7d';
 
 async function registerUser({ email, password, name, role }) {
@@ -37,8 +37,16 @@ async function registerUser({ email, password, name, role }) {
     mustChangePassword: false,
   });
 
-  const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: JWT_EXPIRE });
-  return { user, token };
+  const token = jwt.sign({ id: user.id }, JWT_SECRET(), { expiresIn: JWT_EXPIRE });
+
+  const userJson = user.toJSON ? user.toJSON() : { ...user };
+  const safeUser = {
+    ...userJson,
+    role: resolvedRole.code,
+  };
+  delete safeUser.password;
+
+  return { user: safeUser, token };
 }
 
 async function loginUser({ email, password }) {
@@ -62,8 +70,19 @@ async function loginUser({ email, password }) {
     throw error;
   }
 
-  const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: JWT_EXPIRE });
-  return { user, token };
+  const token = jwt.sign({ id: user.id }, JWT_SECRET(), { expiresIn: JWT_EXPIRE });
+
+  const userJson = user.toJSON ? user.toJSON() : { ...user };
+  const role = userJson.roleId
+    ? await Role.findByPk(userJson.roleId, { attributes: ['id', 'code', 'name'] })
+    : null;
+  const safeUser = {
+    ...userJson,
+    role: role ? role.code : null,
+  };
+  delete safeUser.password;
+
+  return { user: safeUser, token };
 }
 
 export { registerUser, loginUser };

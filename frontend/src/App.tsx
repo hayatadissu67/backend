@@ -1028,19 +1028,18 @@ export default function App() {
                   projects={searchedProjects}
                   risks={searchedRisks}
                   activities={activities}
-                  milestones={milestones}
                   resources={resources}
                   approvals={combinedApprovals}
-                tasks={accessibleTasks}
-                budgets={accessibleBudgets}
-                meetings={meetings}
-                onNavigate={(tab) => handleSelectTab(tab)}
-                onOpenNewProject={() => setIsNewProjectOpen(true)}
-                onOpenExportPDF={() => setIsExportPDFOpen(true)}
-                onApprovalAction={handleApprovalAction}
-                onUpdateRiskStatus={handleUpdateRisk}
-                onSelectProject={handleSelectProject}
-              />
+                  tasks={accessibleTasks}
+                  budgets={accessibleBudgets}
+                  meetings={meetings}
+                  onNavigate={(tab) => handleSelectTab(tab)}
+                  onOpenNewProject={() => setIsNewProjectOpen(true)}
+                  onOpenExportPDF={() => setIsExportPDFOpen(true)}
+                  onApprovalAction={handleApprovalAction}
+                  onUpdateRiskStatus={handleUpdateRisk}
+                  onSelectProject={handleSelectProject}
+                />
             )}
 
             {/* Users Views */}

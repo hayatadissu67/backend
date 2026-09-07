@@ -61,7 +61,7 @@ export const loginApi = async (email: string, password: string) => {
 export const getCurrentUserApi = async (): Promise<UserItem | null> => {
   try {
     const res = await api.get('/auth/me');
-    return res.data?.success ? res.data.data : null;
+    return res.data?.success ? (res.data.user || res.data.data) : null;
   } catch (err) {
     console.warn('Failed to fetch current user profile:', err);
     return null;

@@ -22,17 +22,30 @@ export const protect = async (req, res, next) => {
     }
 
     // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const secret = process.env.JWT_SECRET || "pmo-dev-secret-change-me-in-production";
+    const decoded = jwt.verify(token, secret);
 
-    // Find user from token (include role so middleware can check permissions)
-    req.user = await User.findByPk(decoded.id, { include: { model: Role, as: 'role', attributes: ['id', 'code', 'name'] } });
+    // Find user from token
+    const user = await User.findByPk(decoded.id, {
+      attributes: { exclude: ["password"] },
+    });
 
-    if (!req.user) {
+    if (!user) {
       return res.status(401).json({
         success: false,
         message: "User not found",
       });
     }
+
+    // Load role separately to avoid eager-loading association issues
+    const role = user.roleId
+      ? await Role.findByPk(user.roleId, { attributes: ["id", "code", "name"] })
+      : null;
+
+    req.user = {
+      ...user.toJSON(),
+      role: role ? role.code : null,
+    };
 
     next();
   } catch (error) {
