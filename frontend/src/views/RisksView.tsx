@@ -26,10 +26,12 @@ export const RisksView: React.FC<RisksViewProps> = ({
   // New Risk state
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
-  const owner = currentPersona?.name || 'PMO User';
-  const [assignedRiskManager, setAssignedRiskManager] = useState('');
-  const flaggedBy = currentPersona?.roleType === 'TEAM_MEMBER' ? 'Team Member' : 'Project Manager';
-  const [projectRef, setProjectRef] = useState(projects[0]?.code || 'PMO-101');
+  const [owner, setOwner] = useState('Alex Rivers (Project Manager)');
+  const [assignedRiskManager, setAssignedRiskManager] = useState('Marcus Vance (Risk Manager)');
+  const [flaggedBy, setFlaggedBy] = useState<'Project Manager' | 'Team Member' | 'Executive Director'>(
+    currentPersona?.roleType === 'TEAM_MEMBER' ? 'Team Member' : 'Project Manager'
+  );
+  const [projectRef, setProjectRef] = useState(projects[0]?.code || '');
   const [milestoneRef, setMilestoneRef] = useState('Gate 2 Security Audit');
   const [delegationNotes, setDelegationNotes] = useState('');
   const [severity, setSeverity] = useState<Severity>('HIGH');
@@ -111,7 +113,7 @@ export const RisksView: React.FC<RisksViewProps> = ({
     setEditDescription(risk.description || '');
     setEditOwner(risk.owner);
     setEditAssignedRiskManager(risk.assignedRiskManager || risk.owner);
-    setEditProjectRef(risk.projectRef || 'PMO-101');
+    setEditProjectRef(risk.projectRef || '');
     setEditMilestoneRef(risk.milestoneRef || '');
     setEditDelegationNotes(risk.delegationNotes || '');
     setEditSeverity(risk.severity);
@@ -148,9 +150,7 @@ export const RisksView: React.FC<RisksViewProps> = ({
     const updated: RiskItem = {
       ...resolvingRisk,
       status: 'RESOLVED',
-      resolvedBy: currentPersona?.name || 'PMO User',
-      resolvedAt: new Date().toISOString(),
-      resolutionNotes: resolutionNotesInput || 'Issue resolved and verified by Project Manager.'
+      resolutionNotes: resolutionNotesInput || 'Issue resolved.'
     };
     onUpdateRisk(updated);
     setResolvingRisk(null);
@@ -164,8 +164,11 @@ export const RisksView: React.FC<RisksViewProps> = ({
     const updated: RiskItem = {
       ...escalatingRisk,
       status: 'ESCALATED',
+<<<<<<< HEAD:frontend/src/views/RisksView.tsx
       assignedRiskManager: 'Risk Manager',
       escalatedAt: new Date().toISOString(),
+=======
+>>>>>>> enkumariam:frontend/src/components/views/RisksView.tsx
       escalationNotes: escalationNotesInput || 'Escalated by Project Manager to Risk Manager for enterprise governance review.'
     };
     onUpdateRisk(updated);
@@ -180,9 +183,7 @@ export const RisksView: React.FC<RisksViewProps> = ({
     const updated: RiskItem = {
       ...mitigatingRisk,
       status: 'MITIGATED',
-      resolvedBy: currentPersona?.name || 'PMO User',
-      resolvedAt: new Date().toISOString(),
-      resolutionNotes: mitigationNotesInput || 'Mitigation controls applied and approved by Risk Manager.'
+      resolutionNotes: mitigationNotesInput || 'Mitigation controls applied.'
     };
     onUpdateRisk(updated);
     setMitigatingRisk(null);
@@ -195,21 +196,32 @@ export const RisksView: React.FC<RisksViewProps> = ({
     ? risks.filter(r => (currentPersona.assignedProjectCodes || []).includes(r.projectRef))
     : risks;
 
-  const filteredRisks = visibleRisks.filter((r) => {
+    onUpdateRisk(updated);
+    setDelegatingRisk(null);
+    setQuickNotes('');
+  };
+
+  const filteredRisks = risks.filter((r) => {
+    const isTeamMember = currentPersona?.roleType === 'TEAM_MEMBER';
+    const isPM = currentPersona?.roleType === 'PROJECT_MANAGER';
+    const isRM = currentPersona?.roleType === 'RISK_MANAGER';
+    const userEmail = currentPersona?.email || '';
+
     if (activeTab === 'Team Escalations') {
-      return (
-        r.status === 'REPORTED' ||
-        r.status === 'ESCALATED' ||
-        r.status === 'RESOLVED' ||
-        r.flaggedBy?.toLowerCase().includes('team') ||
-        !!r.submittedBy
-      );
+      if (isRM) {
+        // RM only sees ESCALATED risks or risks they resolved
+        return r.status === 'ESCALATED' || r.status === 'MITIGATED' || r.assignedRiskManager === userEmail;
+      }
+      if (isPM) {
+        // PM sees REPORTED risks sent to them, or ESCALATED risks they own
+        return (r.status === 'REPORTED' || r.status === 'ESCALATED' || r.status === 'RESOLVED') && (r.owner === userEmail || r.submittedBy === userEmail);
+      }
+      return r.status === 'REPORTED' || r.status === 'ESCALATED' || r.status === 'RESOLVED';
     }
+
     if (activeTab === 'My Risks') {
-      const myName = currentPersona?.name?.toLowerCase() || '';
-      const isOwner = r.owner?.toLowerCase().includes(myName);
-      const isAssignee = r.assignedRiskManager?.toLowerCase().includes(myName);
-      if (!myName || (!isOwner && !isAssignee)) {
+      // Show risks owned by or submitted by the current user
+      if (r.owner !== userEmail && r.submittedBy !== userEmail && r.assignedRiskManager !== userEmail) {
         return false;
       }
     }
@@ -428,14 +440,14 @@ export const RisksView: React.FC<RisksViewProps> = ({
                         {/* Resolution Notes Badge */}
                         {r.resolutionNotes && (
                           <div className="mt-1.5 text-[10px] text-emerald-900 bg-emerald-50 p-1.5 rounded-md border border-emerald-200 font-mono">
-                            <span className="font-bold block">✓ Solved by {r.resolvedByRole || 'Admin'}:</span> {r.resolutionNotes}
+                            <span className="font-bold block">✓ Solved by {r.Resolver?.name ? `${r.Resolver.name} (${r.resolvedByRole})` : r.resolvedByRole || 'Admin'}:</span> {r.resolutionNotes}
                           </div>
                         )}
                       </td>
 
                       <td className="px-5 py-4 font-mono text-[11px]">
                         <span className="font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md block w-max">
-                          {r.projectRef || 'PMO-101'}
+                          {r.projectRef || 'None'}
                         </span>
                       </td>
 
@@ -466,7 +478,7 @@ export const RisksView: React.FC<RisksViewProps> = ({
                         {r.status === 'RESOLVED' || r.status === 'MITIGATED' ? (
                           <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded-md uppercase font-mono flex items-center gap-1 w-max">
                             <span className="material-symbols-outlined text-[13px]">check_circle</span>
-                            Solved by {r.resolvedByRole || 'Admin'}
+                            Solved by {r.Resolver?.name ? `${r.Resolver.name} (${r.resolvedByRole})` : r.resolvedByRole || 'Admin'}
                           </span>
                         ) : r.status === 'ESCALATED' ? (
                           <span className="px-2.5 py-1 bg-purple-100 text-purple-900 font-bold text-[10px] rounded-md uppercase font-mono flex items-center gap-1 w-max">
@@ -624,7 +636,6 @@ export const RisksView: React.FC<RisksViewProps> = ({
                       {p.code} - {p.name}
                     </option>
                   ))}
-                  <option value="PMO-101">PMO-101 - Phoenix Cloud Modernization</option>
                 </select>
               </div>
 
@@ -872,7 +883,7 @@ export const RisksView: React.FC<RisksViewProps> = ({
 
               <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200 text-emerald-950 space-y-1.5">
                 <div className="flex justify-between items-center text-[10px] font-bold uppercase text-emerald-800 border-b border-emerald-200 pb-1">
-                  <span>Solved by {viewingResolutionRisk.resolvedByRole || 'Admin'}</span>
+                  <span>Solved by {viewingResolutionRisk.Resolver?.name ? `${viewingResolutionRisk.Resolver.name} (${viewingResolutionRisk.resolvedByRole})` : viewingResolutionRisk.resolvedByRole || 'Admin'}</span>
                   <span>{viewingResolutionRisk.resolvedAt ? new Date(viewingResolutionRisk.resolvedAt).toLocaleDateString() : 'Resolved'}</span>
                 </div>
                 <div>

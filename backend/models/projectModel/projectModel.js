@@ -1,5 +1,5 @@
 import { DataTypes } from 'sequelize';
-import { sequelize } from "../config/db.js";
+import { sequelize } from "../../config/db.js";
 
 const Project = sequelize.define('Project', {
   id: {
@@ -8,7 +8,7 @@ const Project = sequelize.define('Project', {
     primaryKey: true,
   },
   name: { type: DataTypes.STRING, allowNull: false },
-  code: { type: DataTypes.STRING, allowNull: false, unique: true },
+  code: { type: DataTypes.STRING, allowNull: false },
   department: { type: DataTypes.STRING, allowNull: false },
   owner: { type: DataTypes.STRING, allowNull: false },
   status: { type: DataTypes.ENUM('ACTIVE', 'COMPLETED', 'DELAYED', 'PLANNING'), defaultValue: 'PLANNING' },
@@ -18,13 +18,13 @@ const Project = sequelize.define('Project', {
   progress: { type: DataTypes.INTEGER, defaultValue: 0, validate: { min: 0, max: 100 } },
   gate: { type: DataTypes.STRING },
   targetDate: { type: DataTypes.DATEONLY },
+  startDate: { type: DataTypes.DATEONLY },
   description: { type: DataTypes.TEXT },
   priority: { type: DataTypes.ENUM('CRITICAL', 'HIGH', 'MEDIUM', 'LOW'), defaultValue: 'MEDIUM' },
   lifecycleStage: { type: DataTypes.STRING },
-  approvalStatus: { type: DataTypes.ENUM('PENDING', 'APPROVED', 'REJECTED'), defaultValue: 'PENDING' },
+  approvalStatus: { type: DataTypes.STRING },
   approvedBy: { type: DataTypes.STRING },
-  rejectionReason: { type: DataTypes.TEXT },
-  team: { type: DataTypes.JSON }
+  rejectionReason: { type: DataTypes.TEXT }
 }, {
   timestamps: true,
   tableName: 'projects',

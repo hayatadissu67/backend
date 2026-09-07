@@ -6,13 +6,15 @@ interface NewProjectModalProps {
   onClose: () => void;
   onAddProject: (newProject: Project) => void;
   currentUserName?: string;
+  users?: any[];
 }
 
 export const NewProjectModal: React.FC<NewProjectModalProps> = ({
   isOpen,
   onClose,
   onAddProject,
-  currentUserName
+  currentUserName,
+  users = []
 }) => {
   const [name, setName] = useState('');
   const [department, setDepartment] = useState('Engineering');
@@ -20,19 +22,47 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
   const [budget, setBudget] = useState('');
   const [health, setHealth] = useState<HealthStatus>('GREEN');
   const [gate, setGate] = useState('Gate 1');
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [targetDate, setTargetDate] = useState('2026-12-31');
+  const [description, setDescription] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  
+  // Get available team members from users
+  const availableTeamMembers = users.filter(u => u.role === 'TEAM_MEMBER');
+  const [selectedTeamMembers, setSelectedTeamMembers] = useState<{userId: string, responsibility: string}[]>([]);
+  const [tempUserId, setTempUserId] = useState('');
+  const [tempResp, setTempResp] = useState('');
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    
+    // Validation
+    const newErrors: Record<string, string> = {};
+    if (!name.trim()) newErrors.name = 'Project name is required';
+    else if (name.length > 100) newErrors.name = 'Project name must be under 100 characters';
+    
+    if (!owner.trim()) newErrors.owner = 'Project Manager/Owner is required';
+    
+    if (description && description.length > 2000) newErrors.description = 'Description is too long';
 
     const numBudget = parseFloat(budget);
-    if (isNaN(numBudget) || numBudget <= 0) {
-      alert('Please enter a valid project budget allocation.');
+    if (budget === '' || isNaN(numBudget) || numBudget < 0) {
+      newErrors.budget = 'Budget must be a valid non-negative number';
+    }
+
+    if (!startDate || isNaN(Date.parse(startDate))) newErrors.startDate = 'Invalid start date';
+    if (!targetDate || isNaN(Date.parse(targetDate))) newErrors.targetDate = 'Invalid target date';
+    if (startDate && targetDate && new Date(targetDate) < new Date(startDate)) {
+      newErrors.targetDate = 'End date must be after start date';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
       return;
     }
+    setErrors({});
 
     const stageMap: Record<string, LifecycleStage> = {
       'Gate 1': 'Initiation',
@@ -43,10 +73,11 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
     };
     const stage = stageMap[gate] || 'Initiation';
 
+    const cleanCodePart = name.substring(0, 4).toUpperCase().replace(/[^A-Z0-9]/g, '') || 'PMO';
     const newPrj: Project = {
       id: `p-${Date.now()}`,
       name,
-      code: `PRJ-${name.substring(0, 4).toUpperCase().replace(/[^A-Z0-9]/g, '') || 'PMO'}`,
+      code: `PRJ-${cleanCodePart}-${Math.floor(100 + Math.random() * 900)}`,
       department,
       owner,
       status: 'PLANNING',
@@ -70,7 +101,10 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
           { id: 'c3', label: 'Security & Compliance Clearances', completed: false }
         ]
       },
-      targetDate
+      startDate,
+      targetDate,
+      description,
+      assignedTeamMembers: selectedTeamMembers.map(m => ({ userId: Number(m.userId), responsibility: m.responsibility }))
     };
 
     onAddProject(newPrj);
@@ -106,8 +140,9 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. NextGen Payment Engine"
-              className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none"
+              className={`w-full border rounded-sm p-2 text-xs outline-none ${errors.name ? 'border-red-500 bg-red-50 focus:border-red-600' : 'border-slate-300 focus:border-blue-600'}`}
             />
+            {errors.name && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span>{errors.name}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -139,8 +174,114 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
                 required
                 value={owner}
                 onChange={(e) => setOwner(e.target.value)}
-                className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none"
+                className={`w-full border rounded-sm p-2 text-xs outline-none ${errors.owner ? 'border-red-500 bg-red-50 focus:border-red-600' : 'border-slate-300 focus:border-blue-600'}`}
               />
+              {errors.owner && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span>{errors.owner}</p>}
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+              Project Description
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe the project..."
+              className={`w-full border rounded-sm p-2 text-xs outline-none h-16 resize-none ${errors.description ? 'border-red-500 bg-red-50 focus:border-red-600' : 'border-slate-300 focus:border-blue-600'}`}
+            />
+            {errors.description && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span>{errors.description}</p>}
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+              Assign Initial Team Members
+            </label>
+            <div className="border border-slate-300 rounded-sm p-3 bg-slate-50 space-y-3">
+              <div className="flex items-center gap-2">
+                <select
+                  value={tempUserId}
+                  onChange={(e) => setTempUserId(e.target.value)}
+                  className="flex-1 border border-slate-300 rounded-sm p-1.5 text-xs focus:border-blue-600 outline-none"
+                >
+                  <option value="">Select Member...</option>
+                  {availableTeamMembers.filter(tm => !selectedTeamMembers.find(s => s.userId === String(tm.id))).map(tm => (
+                    <option key={tm.id} value={tm.id}>{tm.name} ({tm.email})</option>
+                  ))}
+                </select>
+                <select
+                  value={tempResp}
+                  onChange={(e) => setTempResp(e.target.value)}
+                  className="flex-1 border border-slate-300 rounded-sm p-1.5 text-xs focus:border-blue-600 outline-none"
+                >
+                  <option value="">Select Responsibility...</option>
+                  <option value="Frontend Developer">Frontend Developer</option>
+                  <option value="Backend Developer">Backend Developer</option>
+                  <option value="Full Stack Developer">Full Stack Developer</option>
+                  <option value="Database Developer">Database Developer</option>
+                  <option value="UI/UX Designer">UI/UX Designer</option>
+                  <option value="QA/Tester">QA/Tester</option>
+                  <option value="DevOps">DevOps</option>
+                  <option value="Business Analyst">Business Analyst</option>
+                  <option value="General Member">General Member</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (tempUserId && tempResp) {
+                      // Check for duplicates
+                      if (selectedTeamMembers.some(m => m.userId === tempUserId)) {
+                        setErrors({...errors, team: 'This team member is already assigned'});
+                        return;
+                      }
+                      setSelectedTeamMembers([...selectedTeamMembers, { userId: tempUserId, responsibility: tempResp }]);
+                      setTempUserId('');
+                      setTempResp('');
+                      setErrors(prev => { const { team, ...rest } = prev; return rest; }); // clear error
+                    } else {
+                      setErrors({...errors, team: 'Please select both a Team Member and a Responsibility'});
+                    }
+                  }}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xs shrink-0"
+                >
+                  + Add
+                </button>
+              </div>
+
+              {selectedTeamMembers.length > 0 && (
+                <div className="border border-slate-200 rounded-xs overflow-hidden">
+                  <table className="w-full text-left text-xs bg-white">
+                    <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold">
+                      <tr>
+                        <th className="p-2 border-b">Member Name</th>
+                        <th className="p-2 border-b">Responsibility</th>
+                        <th className="p-2 border-b w-12 text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {selectedTeamMembers.map((m, idx) => {
+                        const usr = users.find(u => String(u.id) === m.userId);
+                        return (
+                          <tr key={idx}>
+                            <td className="p-2 font-bold text-slate-800">{usr?.name || 'Unknown'}</td>
+                            <td className="p-2 font-mono text-indigo-700">{m.responsibility}</td>
+                            <td className="p-2 text-center">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedTeamMembers(selectedTeamMembers.filter(sm => sm.userId !== m.userId))}
+                                className="text-rose-600 hover:text-rose-800 font-bold"
+                              >
+                                ✕
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {errors.team && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span>{errors.team}</p>}
             </div>
           </div>
 
@@ -150,15 +291,19 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
                 Project Budget ($) *
               </label>
               <input
-                type="number"
+                type="text"
                 required
-                min="1000"
-                step="1000"
                 value={budget}
-                onChange={(e) => setBudget(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '' || /^\d+(\.\d*)?$/.test(val)) {
+                    setBudget(val);
+                  }
+                }}
                 placeholder="e.g. 750000"
-                className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none font-mono font-bold"
+                className={`w-full border rounded-sm p-2 text-xs outline-none font-mono font-bold ${errors.budget ? 'border-red-500 bg-red-50 focus:border-red-600' : 'border-slate-300 focus:border-blue-600'}`}
               />
+              {errors.budget && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1 leading-tight"><span className="material-symbols-outlined text-[12px]">warning</span>{errors.budget}</p>}
               <span className="text-[10px] text-slate-500 block mt-0.5">Read-only after creation</span>
             </div>
 
@@ -180,16 +325,31 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
 
             <div>
               <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Target Launch
+                Start Date
               </label>
               <input
                 type="date"
                 required
-                min={new Date().toISOString().split('T')[0]}
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className={`w-full border rounded-sm p-2 text-xs outline-none font-mono ${errors.startDate ? 'border-red-500 bg-red-50 focus:border-red-600' : 'border-slate-300 focus:border-blue-600'}`}
+              />
+              {errors.startDate && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span>{errors.startDate}</p>}
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Target Launch (End)
+              </label>
+              <input
+                type="date"
+                required
+                min={startDate || new Date().toISOString().split('T')[0]}
                 value={targetDate}
                 onChange={(e) => setTargetDate(e.target.value)}
-                className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none font-mono"
+                className={`w-full border rounded-sm p-2 text-xs outline-none font-mono ${errors.targetDate ? 'border-red-500 bg-red-50 focus:border-red-600' : 'border-slate-300 focus:border-blue-600'}`}
               />
+              {errors.targetDate && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span>{errors.targetDate}</p>}
             </div>
           </div>
 

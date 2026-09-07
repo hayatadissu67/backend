@@ -5,6 +5,9 @@ import {
   updateProjectApi,
   approveProjectApi,
   rejectProjectApi,
+  closeProjectApi,
+  rejectClosureApi,
+  submitClosureApi,
   fetchRisksFromApi,
   createRiskApi,
   updateRiskApi,
@@ -59,7 +62,6 @@ import { RestrictedAccessView } from "./views/RestrictedAccessView";
 
 import { SidebarNav } from './components/SidebarNav';
 import { TopHeader } from './components/TopHeader';
-import { AIAssistantModal } from './components/AIAssistantModal';
 import { NewProjectModal } from './components/NewProjectModal';
 import { ExportPDFModal } from './components/ExportPDFModal';
 import { UserProfileModal } from './components/UserProfileModal';
@@ -223,7 +225,7 @@ export default function App() {
     } else if (user.role === 'TEAM_MEMBER') {
       targetTab = 'tasks';
     } else if (user.role === 'PROJECT_MANAGER') {
-      targetTab = 'dashboard';
+      targetTab = 'projects';
     } else {
       targetTab = 'dashboard';
     }
@@ -244,7 +246,7 @@ export default function App() {
     if (role === 'EXECUTIVE_MANAGER') return true;
 
     if (role === 'PROJECT_MANAGER') {
-      const restrictedForPM: NavigationTab[] = ['admin', 'approvals'];
+      const restrictedForPM: NavigationTab[] = ['admin', 'approvals', 'dashboard'];
       return !restrictedForPM.includes(tab);
     }
 
@@ -293,7 +295,14 @@ export default function App() {
     try {
       const updated = await approveProjectApi(projectId);
       if (updated) {
-        setProjects((prev) => prev.map((p) => (p.id === projectId ? updated : p)));
+        setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, ...updated, approvalStatus: 'APPROVED', status: 'ACTIVE' } : p)));
+        setSelectedProject((prev) => (prev?.id === projectId ? { ...prev, ...updated, approvalStatus: 'APPROVED', status: 'ACTIVE' } : prev));
+      }
+      const apiProjects = await fetchProjectsFromApi();
+      if (apiProjects) {
+        setProjects(apiProjects);
+        const ref = apiProjects.find((p) => p.id === projectId);
+        if (ref) setSelectedProject((prev) => (prev?.id === projectId ? ref : prev));
       }
     } catch (err: any) {
       alert(err.message || 'Failed to approve project.');
@@ -304,22 +313,82 @@ export default function App() {
     try {
       const updated = await rejectProjectApi(projectId, reason);
       if (updated) {
-        setProjects((prev) => prev.map((p) => (p.id === projectId ? updated : p)));
+        setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, ...updated, approvalStatus: 'REJECTED', status: 'DELAYED', rejectionReason: reason } : p)));
+        setSelectedProject((prev) => (prev?.id === projectId ? { ...prev, ...updated, approvalStatus: 'REJECTED', status: 'DELAYED', rejectionReason: reason } : prev));
+      }
+      const apiProjects = await fetchProjectsFromApi();
+      if (apiProjects) {
+        setProjects(apiProjects);
+        const ref = apiProjects.find((p) => p.id === projectId);
+        if (ref) setSelectedProject((prev) => (prev?.id === projectId ? ref : prev));
       }
     } catch (err: any) {
       alert(err.message || 'Failed to reject project.');
     }
   };
 
+  const handleCloseProject = async (projectId: string) => {
+    try {
+      const updated = await closeProjectApi(projectId);
+      if (updated) {
+        setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, ...updated, approvalStatus: 'CLOSED', status: 'COMPLETED' } : p)));
+        setSelectedProject((prev) => (prev?.id === projectId ? { ...prev, ...updated, approvalStatus: 'CLOSED', status: 'COMPLETED' } : prev));
+      }
+      const apiProjects = await fetchProjectsFromApi();
+      if (apiProjects) {
+        setProjects(apiProjects);
+        const ref = apiProjects.find((p) => p.id === projectId);
+        if (ref) setSelectedProject((prev) => (prev?.id === projectId ? ref : prev));
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to close project.');
+    }
+  };
+
+  const handleRejectClosure = async (projectId: string, reason?: string) => {
+    try {
+      const updated = await rejectClosureApi(projectId, reason);
+      if (updated) {
+        setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, ...updated, approvalStatus: 'CLOSURE_REJECTED', status: 'ACTIVE', rejectionReason: reason } : p)));
+        setSelectedProject((prev) => (prev?.id === projectId ? { ...prev, ...updated, approvalStatus: 'CLOSURE_REJECTED', status: 'ACTIVE', rejectionReason: reason } : prev));
+      }
+      const apiProjects = await fetchProjectsFromApi();
+      if (apiProjects) {
+        setProjects(apiProjects);
+        const ref = apiProjects.find((p) => p.id === projectId);
+        if (ref) setSelectedProject((prev) => (prev?.id === projectId ? ref : prev));
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to reject closure request.');
+    }
+  };
+
+  const handleSubmitClosure = async (projectId: string) => {
+    try {
+      const updated = await submitClosureApi(projectId);
+      if (updated) {
+        setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, ...updated, approvalStatus: 'PENDING_CLOSURE' } : p)));
+        setSelectedProject((prev) => (prev?.id === projectId ? { ...prev, ...updated, approvalStatus: 'PENDING_CLOSURE' } : prev));
+      }
+      const apiProjects = await fetchProjectsFromApi();
+      if (apiProjects) {
+        setProjects(apiProjects);
+        const ref = apiProjects.find((p) => p.id === projectId);
+        if (ref) setSelectedProject((prev) => (prev?.id === projectId ? ref : prev));
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to submit project for closure.');
+    }
+  };
+
   const handleAssignTeamMember = async (projectId: string, userIds: string[]) => {
     try {
-      const assignedMembers = await assignProjectTeamMembersApi(projectId, userIds);
-      if (assignedMembers) {
-        // Optimistically, we could just alert success,
-        // but let's re-fetch the users to ensure the UI updates if necessary.
-        const isExec = currentUser?.role === 'EXECUTIVE_MANAGER';
-        const apiUsers = isExec ? await fetchUsersFromApi() : await fetchTeamMembersFromApi();
-        if (apiUsers) setUsers(apiUsers);
+      const assignedMembers = await assignProjectTeamMembersApi(projectId, userIds.map(id => ({ userId: id })));
+      if (assignedMembers || true) {
+        // Refresh projects to get updated relationships/team members if the backend attaches them
+        const apiProjects = await fetchProjectsFromApi();
+        if (apiProjects) setProjects(apiProjects);
+        alert('Team members successfully assigned.');
       }
     } catch (err: any) {
       throw err;
@@ -400,8 +469,16 @@ export default function App() {
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
 
   const accessibleProjects = useMemo(() => {
+    if (!currentUser) return [];
+    if (currentUser.role === 'EXECUTIVE_MANAGER') return projects;
+    if (currentUser.role === 'PROJECT_MANAGER') {
+      return projects.filter(p => p.owner === currentUser.email || p.owner === currentUser.name);
+    }
+    if (currentUser.role === 'TEAM_MEMBER') {
+      return projects;
+    }
     return projects;
-  }, [projects]);
+  }, [projects, currentUser]);
 
   // Collections
   const [users, setUsers] = useState<UserItem[]>([]);
@@ -421,6 +498,20 @@ export default function App() {
     if (currentUser.role === 'EXECUTIVE_MANAGER') return budgets;
     return budgets.filter((b) => currentUser.assignedProjectCodes?.includes(b.projectCode));
   }, [budgets, currentUser]);
+
+  const combinedApprovals = useMemo(() => {
+    const pendingProjectDeletions: ApprovalRequest[] = projects
+      .filter((p) => p.approvalStatus === 'PENDING_DELETION')
+      .map((p) => ({
+        id: p.id,
+        project: p.code,
+        requestType: 'Project Deletion',
+        requestedBy: p.owner,
+        date: 'Just now',
+        status: 'Pending'
+      }));
+    return [...approvals, ...pendingProjectDeletions];
+  }, [projects, approvals]);
   const [meetings, setMeetings] = useState<MeetingItem[]>([]);
   const [discussions, setDiscussions] = useState<DiscussionItem[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -549,20 +640,29 @@ export default function App() {
     try {
       const created = await createProjectApi(newProject);
       if (created) {
-        setProjects([created, ...projects]);
-        const act: ActivityItem = {
-          id: `a-${Date.now()}`,
-          type: 'gate',
-          title: `Project Added: ${created.name}`,
-          subtitle: `Charter registered by ${currentUser?.name || 'PMO User'} • Just now`,
-          timestamp: 'Just now',
-          badgeType: 'check'
-        };
-        setActivities([act, ...activities]);
+        // Refetch projects from real backend DB to guarantee database persistence state
+        const apiProjects = await fetchProjectsFromApi();
+        if (apiProjects) {
+          setProjects(apiProjects);
+        } else {
+          setProjects((prev) => [created, ...prev]);
+        }
+      } else {
+        alert('Failed to save project to database.');
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to create project.');
+      console.error('Failed to create project:', err);
+      alert(err.message || 'Failed to save project to database.');
     }
+    const act: ActivityItem = {
+      id: `a-${Date.now()}`,
+      type: 'gate',
+      title: `Project Added: ${newProject.name}`,
+      subtitle: `Charter registered by ${currentUser?.name || 'PMO User'} • Just now`,
+      timestamp: 'Just now',
+      badgeType: 'check'
+    };
+    setActivities((prev) => [act, ...prev]);
   };
 
   const handleUpdateProject = async (updated: Project) => {
@@ -573,6 +673,15 @@ export default function App() {
       }
     } catch (err: any) {
       alert(err.message || 'Failed to update project.');
+    }
+  };
+
+  const handleRefreshProjects = async () => {
+    try {
+      const apiProjects = await fetchProjectsFromApi();
+      if (apiProjects) setProjects(apiProjects);
+    } catch (err) {
+      console.error('Failed to refresh projects:', err);
     }
   };
 
@@ -627,17 +736,18 @@ export default function App() {
     setTasks(tasks.filter((t) => t.id !== taskId));
   };
 
-  const handleAddRisk = async (newRisk: RiskItem) => {
+  const handleAddRisk = async (newRisk: RiskItem): Promise<boolean> => {
     try {
       const created = await createRiskApi(newRisk);
       if (created) {
         setRisks([created, ...risks]);
+        
         const assignee = created.assignedRiskManager || created.owner || 'Risk Manager';
         const notif: NotificationItem = {
           id: `notif-risk-${Date.now()}`,
-          title: `Risk Delegated: ${created.ref}`,
-          message: `Risk "${created.subject}" linked to ${created.projectRef || 'PMO Project'} delegated to ${assignee}.`,
-          type: created.severity === 'CRITICAL' || created.severity === 'HIGH' ? 'alert' : 'warning',
+          title: `New Risk Reported: ${created.ref}`,
+          message: `Risk "${created.subject}" requires attention. Delegated to ${assignee}.`,
+          type: 'alert',
           timestamp: 'Just now',
           isRead: false
         };
@@ -652,31 +762,39 @@ export default function App() {
           badgeType: 'warning'
         };
         setActivities((prev) => [act, ...prev]);
+        return true;
       }
+      return false;
     } catch (err: any) {
-      alert(err.message || 'Failed to create risk.');
+      alert(err.message || "Failed to create risk");
+      return false;
     }
   };
 
   const handleUpdateRisk = async (updated: RiskItem) => {
     try {
-      const result = await updateRiskApi(updated.id, updated);
-      if (result) {
-        setRisks(risks.map((r) => (r.id === result.id ? result : r)));
-        const assignee = result.assignedRiskManager || result.owner || 'Risk Manager';
+      const saved = await updateRiskApi(updated.id, updated);
+      if (saved) {
+        setRisks((prev) => prev.map((r) => (r.id === saved.id ? saved : r)));
+        
+        const assignee = saved.assignedRiskManager || saved.owner || 'Risk Manager';
         const notif: NotificationItem = {
           id: `notif-risk-up-${Date.now()}`,
-          title: `Risk ${result.ref} Updated`,
-          message: `Risk "${result.subject}" status set to ${result.status}. Delegated Manager: ${assignee}.`,
-          type: result.status === 'MITIGATED' ? 'success' : 'info',
+          title: `Risk ${saved.ref} Updated`,
+          message: `Risk "${saved.subject}" status set to ${saved.status}. Delegated Manager: ${assignee}.`,
+          type: saved.status === 'MITIGATED' ? 'success' : 'info',
           timestamp: 'Just now',
           isRead: false
         };
         setNotifications((prev) => [notif, ...prev]);
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to update risk.');
+      alert(err.message || "Failed to update risk");
     }
+  };
+
+  const handleUpdateResource = (dept: string, newPct: number) => {
+    setResources(resources.map((r) => (r.department === dept ? { ...r, percentage: newPct } : r)));
   };
 
   const handleAddMeeting = (newMeeting: MeetingItem) => {
@@ -906,64 +1024,30 @@ export default function App() {
           <>
             {/* Render Tab Views */}
             {currentTab === 'dashboard' && (
-              currentUser.role === 'EXECUTIVE_MANAGER' ? (
-                <ExecutiveDashboardView
+              <ExecutiveDashboardView
                   projects={searchedProjects}
                   risks={searchedRisks}
                   activities={activities}
+                  milestones={milestones}
                   resources={resources}
-                  approvals={approvals}
-                  tasks={accessibleTasks}
-                  budgets={accessibleBudgets}
-                  meetings={meetings}
-                  onNavigate={(tab) => handleSelectTab(tab)}
-                  onOpenNewProject={() => setIsNewProjectOpen(true)}
-                  onOpenExportPDF={() => setIsExportPDFOpen(true)}
-                  onApprovalAction={handleApprovalAction}
-                  onUpdateRiskStatus={handleUpdateRisk}
-                  onSelectProject={handleSelectProject}
-                />
-              ) : currentUser.role === 'PROJECT_MANAGER' ? (
-                <PMDashboardView
-                  projects={searchedProjects}
-                  tasks={tasks}
-                  users={users}
-                  resources={resources}
-                  currentPersona={currentPersona}
-                  onNavigate={(tab) => handleSelectTab(tab)}
-                  onOpenAssignMemberModal={() => setIsAssignMemberModalOpen(true)}
-                />
-              ) : currentUser.role === 'TEAM_MEMBER' ? (
-                <TeamMemberDashboardView
-                  projects={searchedProjects}
-                  tasks={tasks}
-                  risks={risks}
-                  currentPersona={currentPersona}
-                  onNavigate={(tab) => handleSelectTab(tab)}
-                />
-              ) : (
-                <ProjectsView
-                  projects={searchedProjects}
-                  risks={searchedRisks}
-                  tasks={tasks}
-                  users={users}
-                  selectedProject={selectedProject}
-                  onSelectProject={handleSelectProject}
-                  onOpenNewProject={() => setIsNewProjectOpen(true)}
-                  onUpdateProject={handleUpdateProject}
-                  onAddProject={handleAddProject}
-                  onOpenAssignMemberModal={() => setIsAssignMemberModalOpen(true)}
-                  currentPersona={currentPersona}
-                  onApproveProject={handleApproveProject}
-                  onRejectProject={handleRejectProject}
-                />
-              )
+                  approvals={combinedApprovals}
+                tasks={accessibleTasks}
+                budgets={accessibleBudgets}
+                meetings={meetings}
+                onNavigate={(tab) => handleSelectTab(tab)}
+                onOpenNewProject={() => setIsNewProjectOpen(true)}
+                onOpenExportPDF={() => setIsExportPDFOpen(true)}
+                onApprovalAction={handleApprovalAction}
+                onUpdateRiskStatus={handleUpdateRisk}
+                onSelectProject={handleSelectProject}
+              />
             )}
 
             {/* Users Views */}
             {(currentTab === 'users' || currentTab === 'users_add') && (
               <UsersView
                 users={users}
+                projects={projects}
                 onAddUser={handleAddUser}
                 onDeleteUser={handleDeleteUser}
                 onToggleUserStatus={handleToggleUserStatus}
@@ -994,12 +1078,14 @@ export default function App() {
             {/* Portfolio View */}
             {currentTab === 'portfolio' && (
               <PortfolioView
-              projects={searchedProjects}
-              risks={searchedRisks}
-              resources={resources}
-              onNavigate={handleSelectTab}
-              onSelectProject={handleSelectProject}
-            />
+                projects={searchedProjects}
+                budgets={budgets}
+                risks={searchedRisks}
+                resources={resources}
+                onNavigate={(tab) => handleSelectTab(tab)}
+                onSelectProject={handleSelectProject}
+                currentPersona={currentPersona}
+              />
             )}
 
             {/* Projects View */}
@@ -1018,6 +1104,10 @@ export default function App() {
                 currentPersona={currentPersona}
                 onApproveProject={handleApproveProject}
                 onRejectProject={handleRejectProject}
+                onCloseProject={handleCloseProject}
+                onRejectClosure={handleRejectClosure}
+                onSubmitClosure={handleSubmitClosure}
+                onRefreshProjects={handleRefreshProjects}
               />
             )}
 
@@ -1120,7 +1210,7 @@ export default function App() {
             {/* Approvals View */}
             {currentTab === 'approvals' && (
               <ApprovalsView
-                approvals={approvals}
+                approvals={combinedApprovals}
                 onAction={handleApprovalAction}
                 onApproveMemberAssignment={handleApproveMemberAssignment}
                 onNavigate={(tab) => handleSelectTab(tab)}
@@ -1161,14 +1251,12 @@ export default function App() {
         )}
       </main>
 
-      {/* Floating AI Assistant */}
-      <AIAssistantModal />
-
       {/* New Project Modal */}
       <NewProjectModal
         isOpen={isNewProjectOpen}
         onClose={() => setIsNewProjectOpen(false)}
         onAddProject={handleAddProject}
+        users={users}
       />
 
       {/* PDF Export Modal */}

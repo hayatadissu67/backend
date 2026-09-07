@@ -24,6 +24,9 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
 }) => {
   const [rejectingProjectId, setRejectingProjectId] = useState<string | null>(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
+  
+  // Project Details Modal State
+  const [detailsProject, setDetailsProject] = useState<Project | null>(null);
 
   // Provision Modal State for Executive
   const [provisioningRequest, setProvisioningRequest] = useState<ApprovalRequest | null>(null);
@@ -76,6 +79,11 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const isPendingProject = (p: Project) => {
+    const s = (p.approvalStatus || '').toUpperCase().trim();
+    return s !== 'APPROVED' && s !== 'REJECTED' && s !== 'ARCHIVED';
   };
 
   return (
@@ -152,7 +160,7 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-amber-100 font-sans">
-                {projects.filter(p => p.approvalStatus === 'PENDING' || !p.approvalStatus).map((p) => (
+                {projects.filter(isPendingProject).map((p) => (
                   <tr key={p.id} className="hover:bg-amber-50/40 transition-colors">
                     <td className="px-5 py-4">
                       <span className="font-mono font-bold text-slate-900 block">{p.code}</span>
@@ -166,6 +174,14 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                     <td className="px-5 py-4 font-mono text-indigo-900 font-bold">{p.gate || 'Gate 1'}</td>
                     <td className="px-5 py-4 font-mono text-slate-600">{p.targetDate}</td>
                     <td className="px-5 py-4 text-right space-x-1.5 whitespace-nowrap">
+                      <button
+                        onClick={() => setDetailsProject(p)}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] uppercase rounded-xs shadow-2xs cursor-pointer inline-flex items-center gap-1 transition-colors"
+                        title="View Project Details"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">info</span>
+                        Details
+                      </button>
                       <button
                         onClick={() => onApproveProject && onApproveProject(p.id)}
                         className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] uppercase rounded-xs shadow-2xs cursor-pointer inline-flex items-center gap-1 transition-colors"
@@ -506,6 +522,15 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* EXECUTIVE PROJECT DETAILS MODAL */}
+      <ExecutiveProjectDetailsModal 
+        isOpen={!!detailsProject}
+        onClose={() => setDetailsProject(null)}
+        project={detailsProject}
+        onApprove={onApproveProject}
+        onReject={onRejectProject}
+      />
     </div>
   );
 };

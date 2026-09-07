@@ -1,160 +1,25 @@
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import User from "../models/userModel.js";
-import Role from "../models/roleModel.js";
+import { registerUser, loginUser } from '../services/authService.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || "pmo-dev-secret-change-me-in-production";
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "1d";
+async function register(req, res) {
+  try {
+    const { user, token } = await registerUser(req.body);
+    return res.status(201).json({ user, token });
+  } catch (error) {
+    return res.status(error.status || 500).json({ error: error.message });
+  }
+}
 
-export const login = async (req, res) => {
-    try {
-        const { email, password } = req.body;
+async function login(req, res) {
+  try {
+    const { user, token } = await loginUser(req.body);
+    return res.json({ user, token });
+  } catch (error) {
+    return res.status(error.status || 500).json({ error: error.message });
+  }
+}
 
-        // Validate input
-        if (!email || !password) {
-            return res.status(400).json({
-                success: false,
-                message: "Email and password are required."
-            });
-        }
+async function getCurrentUser(req, res) {
+  return res.json(req.user);
+}
 
-        // Find user
-        const user = await User.findOne({
-            where: { email },
-            include: ['role']
-        });
-
-        if (!user) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid email or password."
-            });
-        }
-
-        // Check account status
-        if (user.get("status") !== "Active") {
-            return res.status(403).json({
-                success: false,
-                message: "Your account is not active."
-            });
-        }
-
-        // Compare password
-        const passwordMatch = await bcrypt.compare(
-            password,
-            user.get("password")
-        );
-
-        if (!passwordMatch) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid email or password."
-            });
-        }
-
-        // JWT secret
-        const roleCode = (user.role && user.role.code) ? user.role.code : "TEAM_MEMBER";
-
-        // Create token
-        const token = jwt.sign(
-            {
-                id: user.get("id"),
-                email: user.get("email"),
-                role: roleCode
-            },
-            JWT_SECRET,
-            {
-                expiresIn: JWT_EXPIRES_IN
-            }
-        );
-
-        return res.status(200).json({
-            success: true,
-            message: "Login successful.",
-            token,
-            user: {
-                id: user.get("id"),
-                name: user.get("name"),
-                email: user.get("email"),
-                role: roleCode,
-                department: user.get("department"),
-                status: user.get("status"),
-                avatar: user.get("avatar"),
-                assignedProjectCodes: user.get("assignedProjectCodes") || [],
-                mustChangePassword: !!user.get("mustChangePassword"),
-            }
-        });
-
-    } catch (error) {
-        console.error("Login error:", error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Server error during login."
-        });
-    }
-};
-
-export const register = async (req, res) => {
-    try {
-        const { name, email, password, roleId, department } = req.body;
-
-        if (!email || !password) {
-            return res.status(400).json({ status: "failed", message: "Email and password are required" });
-        }
-
-        // If roleId provided, ensure it exists
-        if (roleId) {
-            const role = await Role.findByPk(roleId);
-            if (!role) return res.status(400).json({ status: "failed", message: "Invalid roleId" });
-        }
-
-        // Hash password
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        const user = await User.create({
-            name,
-            email,
-            password: hashedPassword,
-            roleId: roleId || null,
-            department,
-        });
-
-        // Remove password before returning
-        const userSafe = user.toJSON();
-        delete userSafe.password;
-
-        return res.status(201).json({ status: "success", message: "User registered successfully", data: userSafe });
-    } catch (error) {
-        console.error("Error registering user:", error.message || error);
-        return res.status(500).json({ status: "failed", message: "Server Error" });
-    }
-};
-
-export const getMe = async (req, res) => {
-    try {
-        if (!req.user) {
-            return res.status(401).json({ success: false, message: 'Not authenticated' });
-        }
-
-        const user = req.user;
-        const roleCode = (user.role && (user.role.code || user.role.name)) ? (user.role.code || user.role.name) : 'TEAM_MEMBER';
-
-        return res.status(200).json({
-            success: true,
-            data: {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                role: roleCode,
-                department: user.department,
-                status: user.status,
-                avatar: user.avatar,
-                assignedProjectCodes: user.assignedProjectCodes || []
-            }
-        });
-    } catch (error) {
-        console.error('getMe error:', error);
-        return res.status(500).json({ success: false, message: 'Server error' });
-    }
-};
+export { register, login, getCurrentUser };

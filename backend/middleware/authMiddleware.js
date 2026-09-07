@@ -2,11 +2,11 @@ import jwt from "jsonwebtoken";
 import User from "../models/userModel.js";
 import Role from "../models/roleModel.js";
 
-const JWT_SECRET = process.env.JWT_SECRET || "pmo-dev-secret-change-me-in-production";
-
 export const protect = async (req, res, next) => {
   let token;
+
   try {
+    // Check Authorization header
     if (
       req.headers.authorization &&
       req.headers.authorization.startsWith("Bearer ")
@@ -15,55 +15,51 @@ export const protect = async (req, res, next) => {
     }
 
     if (!token) {
-      return res.status(401).json({ success: false, message: "Not authorized, no token provided" });
-    }
-
-    const decoded = jwt.verify(token, JWT_SECRET);
-
-    // Load user including their role — fall back to plain lookup if FK join fails
-    let user;
-    try {
-      user = await User.findByPk(decoded.id, {
-        attributes: { exclude: ["password"] },
-        include: [{ model: Role, as: "role", attributes: ["id", "code", "name"] }],
-      });
-    } catch (joinErr) {
-      // FK schema conflict on the shared DB can cause the JOIN to fail.
-      // Fall back to loading the user without the role join.
-      user = await User.findByPk(decoded.id, {
-        attributes: { exclude: ["password"] },
+      return res.status(401).json({
+        success: false,
+        message: "Not authorized, no token provided",
       });
     }
 
-    if (!user) {
-      return res.status(401).json({ success: false, message: "User not found" });
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Find user from token (include role so middleware can check permissions)
+    req.user = await User.findByPk(decoded.id, { include: { model: Role, as: 'role', attributes: ['id', 'code', 'name'] } });
+
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "User not found",
+      });
     }
 
-    req.user = user;
     next();
   } catch (error) {
-    console.error("Auth middleware error:", error.message || error);
-    return res.status(401).json({ success: false, message: "Not authorized, invalid token" });
+    console.error("Auth middleware error:", error);
+
+    return res.status(401).json({
+      success: false,
+      message: "Not authorized, invalid token",
+    });
   }
 };
 
-export const authorizeRoles = (...allowedRoles) => {
+// Grant access to specific roles
+export const authorize = (...roles) => {
   return (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({ success: false, message: "Not authenticated" });
+    if (!req.user || !req.user.role) {
+      return res.status(403).json({
+        success: false,
+        message: "User role not found",
+      });
     }
-
-    const userRoleCode = req.user.role && (req.user.role.code || req.user.role.name);
-
-    if (!userRoleCode) {
-      return res.status(403).json({ success: false, message: "Access denied: no role assigned" });
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: `User role ${req.user.role} is not authorized to access this route`,
+      });
     }
-
-    const allowed = allowedRoles.map((r) => r.toString().toLowerCase());
-    if (!allowed.includes(String(userRoleCode).toLowerCase())) {
-      return res.status(403).json({ success: false, message: "Access denied: insufficient permissions" });
-    }
-
     next();
   };
 };

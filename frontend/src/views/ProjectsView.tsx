@@ -11,6 +11,7 @@ import {
   LifecyclePhaseCriterion
 } from '../types';
 import { AssignTeamModal } from "../components/AssignTeamModal";
+import { getProjectTeamApi } from '@/services/api';
 
 interface ProjectsViewProps {
   projects: Project[];
@@ -27,6 +28,10 @@ interface ProjectsViewProps {
   currentPersona?: any;
   onApproveProject?: (id: string) => void;
   onRejectProject?: (id: string, reason: string) => void;
+  onCloseProject?: (id: string) => void;
+  onRejectClosure?: (id: string, reason?: string) => void;
+  onSubmitClosure?: (id: string) => void;
+  onRefreshProjects?: () => Promise<void>;
 }
 
 export const ProjectsView: React.FC<ProjectsViewProps> = ({
@@ -43,11 +48,15 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   currentPersona,
   onApproveProject,
   onRejectProject,
+  onCloseProject,
+  onRejectClosure,
+  onSubmitClosure,
+  onRefreshProjects,
 }) => {
 
   // Navigation sub-tabs inside Projects View
   const [activeSubTab, setActiveSubTab] = useState<
-    'Directory' | 'Project Lifecycle' | 'Web Requirements' | 'Gate Roadmap' | 'Kanban Pipeline'
+    'Directory' | 'Project Lifecycle' | 'Web Requirements' | 'Gate Roadmap' | 'Kanban Pipeline' | 'Archived Projects'
   >('Directory');
 
   // Directory layout toggle: Grid or Table
@@ -76,14 +85,35 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   const [inspectStage, setInspectStage] = useState<LifecycleStage>('Initiation');
   const [isEditing, setIsEditing] = useState(false);
   const [editedProject, setEditedProject] = useState<Project | null>(null);
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [rejectingProjectId, setRejectingProjectId] = useState<string | null>(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
+  const [projectTeamMembers, setProjectTeamMembers] = useState<UserItem[]>([]);
+  const [loadingTeam, setLoadingTeam] = useState(false);
+  const [deleteConfirmProject, setDeleteConfirmProject] = useState<Project | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
 
     setSelectedProject(propsSelectedProject);
     if (propsSelectedProject) {
       setInspectStage(getProjectStage(propsSelectedProject));
+
+      // Fetch project team members when a project is selected
+      const loadTeam = async () => {
+        setLoadingTeam(true);
+        try {
+          const team = await getProjectTeamApi(propsSelectedProject.id);
+          if (team) {
+            setProjectTeamMembers(team);
+          }
+        } catch (error) {
+          console.error("Failed to load project team in ProjectsView", error);
+        } finally {
+          setLoadingTeam(false);
+        }
+      };
+      loadTeam();
     }
   }, [propsSelectedProject]);
 
@@ -122,7 +152,6 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
   const [newDeliverableTitle, setNewDeliverableTitle] = useState('');
   const [newDeliverableAssignee, setNewDeliverableAssignee] = useState('');
-
 
 
   // PROJECT LIFECYCLE HELPER FUNCTIONS
@@ -321,8 +350,11 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     );
   };
 
+  const isTeamMember = currentPersona?.roleType === 'TEAM_MEMBER';
+
   // Filtering & Sorting logic
   const filteredProjects = projects.filter((p) => {
+    if (p.approvalStatus === 'ARCHIVED') return false; // Hide archived projects from main view
     if (filterDept !== 'ALL' && p.department !== filterDept) return false;
     if (filterHealth !== 'ALL' && p.health !== filterHealth) return false;
     if (filterStatus !== 'ALL' && p.status !== filterStatus) return false;
@@ -345,16 +377,18 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     return a.name.localeCompare(b.name);
   });
 
+  const archivedProjects = projects.filter((p) => p.approvalStatus === 'ARCHIVED');
+
   // KPI Computations
-  const totalProjectsCount = projects.length;
-  const activeCount = projects.filter((p) => p.status === 'ACTIVE').length;
-  const greenCount = projects.filter((p) => p.health === 'GREEN').length;
-  const yellowCount = projects.filter((p) => p.health === 'YELLOW').length;
-  const redCount = projects.filter((p) => p.health === 'RED').length;
-  const totalBudget = projects.reduce((acc, p) => acc + (p.budget || 0), 0);
-  const totalSpent = projects.reduce((acc, p) => acc + (p.spent || 0), 0);
+  const totalProjectsCount = filteredProjects.length;
+  const activeCount = filteredProjects.filter((p) => p.status === 'ACTIVE').length;
+  const greenCount = filteredProjects.filter((p) => p.health === 'GREEN').length;
+  const yellowCount = filteredProjects.filter((p) => p.health === 'YELLOW').length;
+  const redCount = filteredProjects.filter((p) => p.health === 'RED').length;
+  const totalBudget = filteredProjects.reduce((acc, p) => acc + (p.budget || 0), 0);
+  const totalSpent = filteredProjects.reduce((acc, p) => acc + (p.spent || 0), 0);
   const avgProgress = totalProjectsCount > 0
-    ? Math.round(projects.reduce((acc, p) => acc + (p.progress || 0), 0) / totalProjectsCount)
+    ? Math.round(filteredProjects.reduce((acc, p) => acc + (p.progress || 0), 0) / totalProjectsCount)
     : 0;
 
   // Handle Health Badge
@@ -383,9 +417,31 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     }
   };
 
+  const isExecutiveUser = Boolean(
+    currentPersona?.roleType === 'EXECUTIVE_MANAGER' ||
+    currentPersona?.role === 'EXECUTIVE_MANAGER' ||
+    currentPersona?.roleType === 'EXECUTIVE' ||
+    (typeof currentPersona?.roleTitle === 'string' && currentPersona.roleTitle.toUpperCase().includes('EXECUTIVE')) ||
+    (typeof currentPersona?.role === 'string' && currentPersona.role.toUpperCase().includes('EXECUTIVE'))
+  );
+
+  const isProjectManagerUser = Boolean(
+    currentPersona?.roleType === 'PROJECT_MANAGER' ||
+    currentPersona?.role === 'PROJECT_MANAGER' ||
+    (typeof currentPersona?.roleTitle === 'string' && currentPersona.roleTitle.toUpperCase().includes('PROJECT MANAGER')) ||
+    (typeof currentPersona?.role === 'string' && currentPersona.role.toUpperCase().includes('PROJECT_MANAGER'))
+  );
+
+  const isPendingApprovalStatus = (status?: string) => {
+    if (!status) return true;
+    const s = status.toUpperCase().trim();
+    if (s === 'PENDING' || s === 'PENDING_APPROVAL') return true;
+    return false;
+  };
+
   // Handle Approval Status Badge
   const renderApprovalBadge = (p: Project) => {
-    const approval = p.approvalStatus || 'PENDING';
+    const approval = (p.approvalStatus || 'PENDING').toUpperCase().trim();
     if (approval === 'APPROVED') {
       return (
         <span className="px-2 py-0.5 bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold text-[9px] rounded-xs uppercase tracking-wider inline-flex items-center gap-1">
@@ -394,11 +450,43 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
         </span>
       );
     }
+    if (approval === 'PENDING_CLOSURE') {
+      return (
+        <span className="px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[9px] rounded-xs uppercase tracking-wider inline-flex items-center gap-1">
+          <span className="material-symbols-outlined text-[12px]">hourglass_top</span>
+          Pending Closure
+        </span>
+      );
+    }
+    if (approval === 'CLOSED') {
+      return (
+        <span className="px-2 py-0.5 bg-slate-200 text-slate-900 border border-slate-400 font-bold text-[9px] rounded-xs uppercase tracking-wider inline-flex items-center gap-1">
+          <span className="material-symbols-outlined text-[12px]">lock</span>
+          Closed
+        </span>
+      );
+    }
+    if (approval === 'CLOSURE_REJECTED') {
+      return (
+        <span className="px-2 py-0.5 bg-rose-100 text-rose-900 border border-rose-300 font-bold text-[9px] rounded-xs uppercase tracking-wider inline-flex items-center gap-1">
+          <span className="material-symbols-outlined text-[12px]">history</span>
+          Closure Rejected
+        </span>
+      );
+    }
     if (approval === 'REJECTED') {
       return (
         <span className="px-2 py-0.5 bg-rose-100 text-rose-900 border border-rose-300 font-bold text-[9px] rounded-xs uppercase tracking-wider inline-flex items-center gap-1">
           <span className="material-symbols-outlined text-[12px]">cancel</span>
           Rejected
+        </span>
+      );
+    }
+    if (approval === 'ARCHIVED') {
+      return (
+        <span className="px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-300 font-bold text-[9px] rounded-xs uppercase tracking-wider inline-flex items-center gap-1">
+          <span className="material-symbols-outlined text-[12px]">inventory_2</span>
+          Archived
         </span>
       );
     }
@@ -413,6 +501,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
   // Toggle web requirement status
   const handleToggleRequirement = (project: Project, reqId: string) => {
+    if (isTeamMember) return;
     const currentReqs = getRequirements(project);
     const updatedReqs = currentReqs.map((r) => {
       if (r.id === reqId) {
@@ -429,7 +518,6 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
       setSelectedProject(updated);
     }
   };
-
 
 
   return (
@@ -530,17 +618,17 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
             { key: 'Web Requirements', label: 'Requirements Matrix', icon: 'checklist_rtl' },
             { key: 'Gate Roadmap', label: 'Gate Lifecycle Roadmap', icon: 'alt_route' },
             { key: 'Kanban Pipeline', label: 'Kanban Board', icon: 'view_kanban' },
-            { key: 'AI Charter Generator', label: 'AI Charter Generator', icon: 'auto_awesome' }
+            { key: 'Archived Projects', label: 'Archived Projects', icon: 'inventory_2' }
           ].map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveSubTab(tab.key as any)}
               className={`px-3.5 py-1.5 rounded-xs transition-all flex items-center gap-1.5 ${activeSubTab === tab.key
-                  ? 'bg-white text-blue-950 font-bold shadow-2xs border border-slate-200/60'
-                  : 'hover:text-slate-900 hover:bg-slate-200/50'
+                ? 'bg-white text-blue-950 font-bold shadow-2xs border border-slate-200/60'
+                : 'hover:text-slate-900 hover:bg-slate-200/50'
                 }`}
             >
-              <span className={`material-symbols-outlined text-[16px] ${tab.key === 'AI Charter Generator' ? 'text-amber-500' : ''}`}>
+              <span className="material-symbols-outlined text-[16px]">
                 {tab.icon}
               </span>
               <span>{tab.label}</span>
@@ -595,13 +683,22 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                 onChange={(e) => setFilterDept(e.target.value)}
                 className="border border-slate-200 rounded-sm p-1.5 text-xs text-slate-700 outline-none bg-slate-50"
               >
-                <option value="ALL">All Departments</option>
-                <option value="Engineering">Engineering</option>
-                <option value="Design">Design</option>
-                <option value="Data Eng">Data Eng</option>
-                <option value="Infrastructure">Infrastructure</option>
-                <option value="Enterprise IT">Enterprise IT</option>
-                <option value="Security">Security</option>
+                {isTeamMember && currentPersona?.department ? (
+                  <>
+                    <option value="ALL">All Departments ({currentPersona.department})</option>
+                    <option value={currentPersona.department}>{currentPersona.department}</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="ALL">All Departments</option>
+                    <option value="Engineering">Engineering</option>
+                    <option value="Design">Design</option>
+                    <option value="Data Eng">Data Eng</option>
+                    <option value="Infrastructure">Infrastructure</option>
+                    <option value="Enterprise IT">Enterprise IT</option>
+                    <option value="Security">Security</option>
+                  </>
+                )}
               </select>
 
               <select
@@ -727,7 +824,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                           <div className="pt-0.5">{renderApprovalBadge(p)}</div>
                         </td>
                         <td className="px-4 py-3 text-right space-x-1.5 whitespace-nowrap">
-                          {currentPersona?.roleType === 'EXECUTIVE_MANAGER' && (p.approvalStatus === 'PENDING' || !p.approvalStatus) && (
+                          {isExecutiveUser && isPendingApprovalStatus(p.approvalStatus) && (
                             <>
                               <button
                                 onClick={() => onApproveProject && onApproveProject(p.id)}
@@ -750,22 +847,54 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                               </button>
                             </>
                           )}
+                          {isExecutiveUser && p.approvalStatus === 'PENDING_CLOSURE' && (
+                            <>
+                              <button
+                                onClick={() => onCloseProject && onCloseProject(p.id)}
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-xs shadow-2xs cursor-pointer inline-flex items-center gap-1"
+                                title="Confirm Close Project"
+                              >
+                                <span className="material-symbols-outlined text-[13px]">verified</span>
+                                Close Project
+                              </button>
+                              <button
+                                onClick={() => onRejectClosure && onRejectClosure(p.id)}
+                                className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] rounded-xs shadow-2xs cursor-pointer inline-flex items-center gap-1"
+                                title="Reject Project Closure Request"
+                              >
+                                <span className="material-symbols-outlined text-[13px]">cancel</span>
+                                Reject Closure
+                              </button>
+                            </>
+                          )}
+                          {isProjectManagerUser && (p.approvalStatus === 'APPROVED' || p.approvalStatus === 'CLOSURE_REJECTED') && p.status !== 'COMPLETED' && (
+                            <button
+                              onClick={() => onSubmitClosure && onSubmitClosure(p.id)}
+                              className="px-2.5 py-1 bg-[#00174b] hover:bg-indigo-950 text-white font-bold text-[10px] rounded-xs shadow-2xs cursor-pointer inline-flex items-center gap-1"
+                              title="Submit Project for Closure"
+                            >
+                              <span className="material-symbols-outlined text-[13px]">done_all</span>
+                              Close Project
+                            </button>
+                          )}
                           <button
                             onClick={() => { setSelectedProject(p); setIsEditing(false); }}
                             className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[10px] rounded-xs cursor-pointer"
                           >
                             Details
                           </button>
-                          <button
-                            onClick={() => {
-                              const nextHealth: HealthStatus = p.health === 'GREEN' ? 'YELLOW' : p.health === 'YELLOW' ? 'RED' : 'GREEN';
-                              onUpdateProject({ ...p, health: nextHealth });
-                            }}
-                            className="px-2 py-1 text-[10px] font-bold text-blue-800 hover:bg-blue-50 rounded-xs border border-blue-200 cursor-pointer"
-                            title="Cycle Health State"
-                          >
-                            Cycle Health
-                          </button>
+                          {!isTeamMember && p.approvalStatus !== 'CLOSED' && (
+                            <button
+                              onClick={() => {
+                                const nextHealth: HealthStatus = p.health === 'GREEN' ? 'YELLOW' : p.health === 'YELLOW' ? 'RED' : 'GREEN';
+                                onUpdateProject({ ...p, health: nextHealth });
+                              }}
+                              className="px-2 py-1 text-[10px] font-bold text-blue-800 hover:bg-blue-50 rounded-xs border border-blue-200 cursor-pointer"
+                              title="Cycle Health State"
+                            >
+                              Cycle Health
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -842,7 +971,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                       </div>
 
                       <div className="flex justify-between items-center pt-1 border-t border-slate-50">
-                        {currentPersona?.roleType === 'EXECUTIVE_MANAGER' && (p.approvalStatus === 'PENDING' || !p.approvalStatus) ? (
+                        {isExecutiveUser && isPendingApprovalStatus(p.approvalStatus) ? (
                           <div className="flex gap-1">
                             <button
                               onClick={() => onApproveProject && onApproveProject(p.id)}
@@ -860,6 +989,30 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                               Reject
                             </button>
                           </div>
+                        ) : isExecutiveUser && p.approvalStatus === 'PENDING_CLOSURE' ? (
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => onCloseProject && onCloseProject(p.id)}
+                              className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-xs shadow-2xs cursor-pointer"
+                              title="Confirm Close Project"
+                            >
+                              Close Project
+                            </button>
+                            <button
+                              onClick={() => onRejectClosure && onRejectClosure(p.id)}
+                              className="px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] rounded-xs shadow-2xs cursor-pointer"
+                              title="Reject Closure Request"
+                            >
+                              Reject Closure
+                            </button>
+                          </div>
+                        ) : isProjectManagerUser && (p.approvalStatus === 'APPROVED' || p.approvalStatus === 'CLOSURE_REJECTED') && p.status !== 'COMPLETED' ? (
+                          <button
+                            onClick={() => onSubmitClosure && onSubmitClosure(p.id)}
+                            className="px-2.5 py-1 bg-[#00174b] hover:bg-indigo-950 text-white font-bold text-[10px] rounded-xs shadow-2xs cursor-pointer inline-flex items-center gap-1"
+                          >
+                            Close Project
+                          </button>
                         ) : (
                           <span className="text-[10px] text-slate-400 font-mono">Stage: {stg}</span>
                         )}
@@ -878,6 +1031,90 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
             </div>
           )}
 
+        </div>
+      )}
+
+      {/* SUB-TAB: ARCHIVED PROJECTS */}
+      {activeSubTab === 'Archived Projects' && (
+        <div className="space-y-4 animate-fadeIn">
+          <div className="bg-white border border-slate-200/80 p-6 rounded-sm shadow-2xs space-y-4">
+            <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+              <span className="material-symbols-outlined text-slate-500 text-[22px]">inventory_2</span>
+              Archived Projects
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">
+              Projects that have been archived. Executive Managers can permanently delete these projects.
+            </p>
+          </div>
+          {archivedProjects.length === 0 ? (
+            <div className="bg-white p-8 border border-slate-200/80 rounded-sm text-center">
+              <span className="material-symbols-outlined text-slate-300 text-4xl mb-2">inventory_2</span>
+              <h3 className="text-sm font-bold text-slate-700">No archived projects found</h3>
+            </div>
+          ) : (
+            <div className="bg-white border border-slate-200/80 rounded-sm overflow-x-auto shadow-2xs">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-[#f2f4f6] text-slate-600 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200/80">
+                    <th className="px-4 py-3">Code</th>
+                    <th className="px-4 py-3">Project Title</th>
+                    <th className="px-4 py-3">Dept &amp; Owner</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {archivedProjects.map((p) => (
+                    <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="px-4 py-3 font-mono font-bold text-slate-800">{p.code}</td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => { setSelectedProject(p); setIsEditing(false); }}
+                          className="font-bold text-blue-900 hover:underline text-left block text-xs"
+                        >
+                          {p.name}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="block font-bold text-slate-800">{p.department}</span>
+                        <span className="text-[10px] text-slate-500">{p.owner}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {renderApprovalBadge(p)}
+                      </td>
+                      <td className="px-4 py-3 text-right space-x-2 flex justify-end gap-1">
+                        <button
+                          onClick={() => { setSelectedProject(p); setIsEditing(false); }}
+                          className="px-2.5 py-1 bg-[#00174b] text-white rounded-xs font-bold text-[10px] uppercase tracking-wider hover:bg-indigo-950 transition-colors shadow-2xs"
+                        >
+                          Details
+                        </button>
+                        {currentPersona?.roleType === 'EXECUTIVE_MANAGER' && (
+                          <button
+                            onClick={async () => {
+                              if (confirm('Are you sure you want to permanently delete this project? This cannot be undone.')) {
+                                try {
+                                  await deleteProjectPermanentApi(p.id);
+                                  if (onRefreshProjects) {
+                                    await onRefreshProjects();
+                                  }
+                                } catch (e: any) {
+                                  alert(e?.message || 'Failed to permanently delete');
+                                }
+                              }
+                            }}
+                            className="px-2.5 py-1 bg-rose-600 text-white rounded-xs font-bold text-[10px] uppercase tracking-wider hover:bg-rose-700 transition-colors shadow-2xs"
+                          >
+                            Permanent Delete
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -921,8 +1158,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                       setSelectedLifecycleStageFilter(isSelected ? 'ALL' : stg.stage)
                     }
                     className={`text-left p-3 rounded-sm border transition-all relative overflow-hidden ${isSelected
-                        ? 'bg-[#00174b] text-white border-[#00174b] shadow-md ring-2 ring-indigo-400'
-                        : 'bg-slate-50 hover:bg-white border-slate-200/80 text-slate-800'
+                      ? 'bg-[#00174b] text-white border-[#00174b] shadow-md ring-2 ring-indigo-400'
+                      : 'bg-slate-50 hover:bg-white border-slate-200/80 text-slate-800'
                       }`}
                   >
                     <div className="flex justify-between items-center mb-1">
@@ -956,8 +1193,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
               <button
                 onClick={() => setSelectedLifecycleStageFilter('ALL')}
                 className={`px-3 py-1 rounded-xs transition-colors ${selectedLifecycleStageFilter === 'ALL'
-                    ? 'bg-[#00174b] text-white font-bold'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  ? 'bg-[#00174b] text-white font-bold'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                   }`}
               >
                 All Stages ({projects.length})
@@ -969,8 +1206,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                     key={stage}
                     onClick={() => setSelectedLifecycleStageFilter(stage)}
                     className={`px-3 py-1 rounded-xs transition-colors ${selectedLifecycleStageFilter === stage
-                        ? 'bg-[#00174b] text-white font-bold'
-                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                      ? 'bg-[#00174b] text-white font-bold'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                       }`}
                   >
                     {stage} ({cnt})
@@ -1040,10 +1277,10 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                             <div
                               key={st}
                               className={`h-2.5 rounded-xs transition-all ${isPast
-                                  ? 'bg-emerald-500'
-                                  : isCurrent
-                                    ? 'bg-[#00174b] ring-2 ring-indigo-300'
-                                    : 'bg-slate-200'
+                                ? 'bg-emerald-500'
+                                : isCurrent
+                                  ? 'bg-[#00174b] ring-2 ring-indigo-300'
+                                  : 'bg-slate-200'
                                 }`}
                               title={`${st} (${stepNum}/5)`}
                             />
@@ -1184,10 +1421,10 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{req.category}</span>
                           <span
                             className={`px-1.5 py-0.5 text-[9px] font-bold rounded-xs ${req.status === 'Compliant'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : req.status === 'In Progress'
-                                  ? 'bg-blue-100 text-blue-800'
-                                  : 'bg-amber-100 text-amber-800'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : req.status === 'In Progress'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-amber-100 text-amber-800'
                               }`}
                           >
                             {req.status}
@@ -1323,7 +1560,6 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
       )}
 
 
-
       {/* COMPREHENSIVE PROJECT DETAILS PAGE / MODAL */}
       {selectedProject && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[100] flex items-start sm:items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto">
@@ -1345,77 +1581,109 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
                 {/* Header Action Controls - Conditional by Role */}
                 <div className="flex flex-wrap items-center gap-2">
-                  {userRoleMode === 'Executive Admin' && (
+                  {/* Executive Actions */}
+                  {isExecutiveUser && (
                     <>
-                      <button
-                        type="button"
-                        onClick={() => handleAdvanceStage(selectedProject)}
-                        className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-[11px] uppercase tracking-wider rounded-xs flex items-center gap-1 shadow-2xs"
-                      >
-                        <span className="material-symbols-outlined text-[15px]">verified</span>
-                        Executive Sign-Off
-                      </button>
-
-                      {currentPersona?.roleType !== 'TEAM_MEMBER' && selectedProject.approvalStatus === 'APPROVED' && (
-                        <button
-                          onClick={() => setIsAssignTeamModalOpen(true)}
-                          className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-[11px] uppercase tracking-wider rounded-xs flex items-center gap-1 shadow-2xs"
-                        >
-                          <span className="material-symbols-outlined text-[15px]">person_add</span>
-                          Assign Team Members
-                        </button>
+                      {isPendingApprovalStatus(selectedProject.approvalStatus) && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              if (onApproveProject) onApproveProject(selectedProject.id);
+                              setSelectedProject({ ...selectedProject, approvalStatus: 'APPROVED', status: 'ACTIVE' });
+                            }}
+                            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xs shadow-xs flex items-center gap-1 cursor-pointer transition-colors"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                            Approve Project Charter
+                          </button>
+                          <button
+                            onClick={() => {
+                              setRejectingProjectId(selectedProject.id);
+                              setRejectionReasonInput('');
+                            }}
+                            className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xs shadow-xs flex items-center gap-1 cursor-pointer transition-colors"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">cancel</span>
+                            Reject Charter
+                          </button>
+                        </div>
                       )}
 
-                      <button
-                        onClick={() => {
-                          setEditedProject(selectedProject);
-                          setIsEditing(!isEditing);
-                        }}
-                        className="px-3 py-1.5 bg-indigo-900 hover:bg-indigo-800 text-white font-bold text-[11px] rounded-xs flex items-center gap-1 border border-indigo-700"
-                      >
-                        <span className="material-symbols-outlined text-[15px]">edit</span>
-                        {isEditing ? 'Cancel Edit' : 'Edit Project'}
-                      </button>
+                      {selectedProject.approvalStatus === 'PENDING_CLOSURE' && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              if (onCloseProject) onCloseProject(selectedProject.id);
+                            }}
+                            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xs shadow-xs flex items-center gap-1 cursor-pointer transition-colors"
+                            title="Confirm project closure and change status to Closed"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">verified</span>
+                            Close Project
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (onRejectClosure) onRejectClosure(selectedProject.id);
+                            }}
+                            className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xs shadow-xs flex items-center gap-1 cursor-pointer transition-colors"
+                            title="Reject closure request and send back to Project Manager"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">cancel</span>
+                            Reject Closure
+                          </button>
+                        </div>
+                      )}
                     </>
                   )}
 
-                  {userRoleMode === 'Project Member' && (
-                    <button
-                      onClick={() => setProjectDetailTab('Works Done')}
-                      className="px-3.5 py-1.5 bg-blue-500 hover:bg-blue-600 text-white font-bold text-[11px] uppercase tracking-wider rounded-xs flex items-center gap-1 shadow-2xs"
-                    >
-                      <span className="material-symbols-outlined text-[15px]">add_task</span>
-                      Log Work Deliverable
-                    </button>
+                  {/* Project Manager Actions */}
+                  {isProjectManagerUser && selectedProject.approvalStatus !== 'CLOSED' && (
+                    <>
+                      {(selectedProject.approvalStatus === 'APPROVED' || selectedProject.approvalStatus === 'CLOSURE_REJECTED') && (
+                        <>
+                          <button
+                            onClick={() => setIsAssignTeamModalOpen(true)}
+                            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-[11px] uppercase tracking-wider rounded-xs flex items-center gap-1 shadow-2xs"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">person_add</span>
+                            Assign Team Members
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEditedProject(selectedProject);
+                              setIsEditing(!isEditing);
+                            }}
+                            className="px-3 py-1.5 bg-indigo-900 hover:bg-indigo-800 text-white font-bold text-[11px] rounded-xs flex items-center gap-1 border border-indigo-700"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">edit</span>
+                            {isEditing ? 'Cancel Edit' : 'Edit Project'}
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirmProject(selectedProject)}
+                            className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] rounded-xs flex items-center gap-1 border border-rose-700 shadow-2xs"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">delete</span>
+                            Delete Project
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              if (onSubmitClosure) onSubmitClosure(selectedProject.id);
+                            }}
+                            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider rounded-xs flex items-center gap-1 shadow-2xs cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">done_all</span>
+                            Close Project
+                          </button>
+                        </>
+                      )}
+                    </>
                   )}
 
-                  {currentPersona?.roleType === 'EXECUTIVE_MANAGER' && (selectedProject.approvalStatus === 'PENDING' || !selectedProject.approvalStatus) && (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => {
-                          if (onApproveProject) onApproveProject(selectedProject.id);
-                          setSelectedProject({ ...selectedProject, approvalStatus: 'APPROVED', status: 'ACTIVE' });
-                        }}
-                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xs shadow-xs flex items-center gap-1 cursor-pointer transition-colors"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                        Approve Project Charter
-                      </button>
-                      <button
-                        onClick={() => {
-                          setRejectingProjectId(selectedProject.id);
-                          setRejectionReasonInput('');
-                        }}
-                        className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xs shadow-xs flex items-center gap-1 cursor-pointer transition-colors"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">cancel</span>
-                        Reject Charter
-                      </button>
-                    </div>
-                  )}
-
-                  {userRoleMode === 'Stakeholder' && (
-                    <span className="text-[11px] font-mono text-slate-300 bg-white/10 px-2.5 py-1 rounded-xs border border-white/15">
+                  {/* Read Only Badges */}
+                  {(currentPersona?.roleType === 'TEAM_MEMBER' || selectedProject.approvalStatus === 'CLOSED' || selectedProject.status === 'COMPLETED' || userRoleMode === 'Stakeholder') && (
+                    <span className="text-[11px] font-mono text-slate-300 bg-white/10 px-2.5 py-1 rounded-xs border border-white/15 flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[14px]">lock</span>
                       Read-Only Mode
                     </span>
                   )}
@@ -1489,14 +1757,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                 {userRoleMode === 'Executive Admin' && [
                   { key: 'Overview', label: 'Overview & Financials', icon: 'dashboard' },
                   { key: 'Lifecycle', label: 'Lifecycle Governance', icon: 'account_tree' },
-                  {
-                    key: 'Participants', label: `Participants & Team (${(users || []).filter(u =>
-                      u.assignedProjectCodes?.some(c => c.toLowerCase() === selectedProject.code.toLowerCase() || selectedProject.code.toLowerCase().includes(c.toLowerCase())) ||
-                      u.name.toLowerCase().includes(selectedProject.owner.toLowerCase()) ||
-                      u.department.toLowerCase() === selectedProject.department.toLowerCase()
-                    ).length || 3
-                      })`, icon: 'groups'
-                  },
+                  { key: 'Participants', label: `Participants & Team (${projectTeamMembers.length})`, icon: 'groups' },
                   { key: 'Works Done', label: 'Progress & Works Done', icon: 'task_alt' },
                   { key: 'Risks', label: 'Risks & Issues', icon: 'warning' },
                   { key: 'Chat', label: 'Project Chat & Telegram', icon: 'chat' },
@@ -1506,8 +1767,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                     key={tab.key}
                     onClick={() => setProjectDetailTab(tab.key as any)}
                     className={`px-3.5 py-2 rounded-xs flex items-center gap-1.5 transition-all text-xs ${projectDetailTab === tab.key
-                        ? 'bg-white text-[#00174b] font-extrabold shadow-sm'
-                        : 'text-slate-300 hover:text-white hover:bg-white/10'
+                      ? 'bg-white text-[#00174b] font-extrabold shadow-sm'
+                      : 'text-slate-300 hover:text-white hover:bg-white/10'
                       }`}
                   >
                     <span className="material-symbols-outlined text-[16px]">{tab.icon}</span>
@@ -1527,8 +1788,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                     key={tab.key}
                     onClick={() => setProjectDetailTab(tab.key as any)}
                     className={`px-3.5 py-2 rounded-xs flex items-center gap-1.5 transition-all text-xs ${projectDetailTab === tab.key
-                        ? 'bg-white text-[#00174b] font-extrabold shadow-sm'
-                        : 'text-slate-300 hover:text-white hover:bg-white/10'
+                      ? 'bg-white text-[#00174b] font-extrabold shadow-sm'
+                      : 'text-slate-300 hover:text-white hover:bg-white/10'
                       }`}
                   >
                     <span className="material-symbols-outlined text-[16px]">{tab.icon}</span>
@@ -1547,8 +1808,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                     key={tab.key}
                     onClick={() => setProjectDetailTab(tab.key as any)}
                     className={`px-3.5 py-2 rounded-xs flex items-center gap-1.5 transition-all text-xs ${projectDetailTab === tab.key
-                        ? 'bg-white text-[#00174b] font-extrabold shadow-sm'
-                        : 'text-slate-300 hover:text-white hover:bg-white/10'
+                      ? 'bg-white text-[#00174b] font-extrabold shadow-sm'
+                      : 'text-slate-300 hover:text-white hover:bg-white/10'
                       }`}
                   >
                     <span className="material-symbols-outlined text-[16px]">{tab.icon}</span>
@@ -1566,6 +1827,25 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
+
+                    const newErrors: Record<string, string> = {};
+                    if (!editedProject.name?.trim()) newErrors.name = 'Project name is required';
+                    else if (editedProject.name.length > 100) newErrors.name = 'Project name must be under 100 characters';
+
+                    if (!editedProject.department?.trim()) newErrors.department = 'Department is required';
+
+                    const numBudget = Number(editedProject.budget);
+                    if (isNaN(numBudget) || numBudget < 0) newErrors.budget = 'Budget must be a valid non-negative number';
+
+                    const numProgress = Number(editedProject.progress);
+                    if (isNaN(numProgress) || numProgress < 0 || numProgress > 100) newErrors.progress = 'Progress must be between 0 and 100';
+
+                    if (Object.keys(newErrors).length > 0) {
+                      setEditErrors(newErrors);
+                      return;
+                    }
+                    setEditErrors({});
+
                     onUpdateProject(editedProject);
                     setSelectedProject(editedProject);
                     setIsEditing(false);
@@ -1580,8 +1860,9 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                         type="text"
                         value={editedProject.name}
                         onChange={(e) => setEditedProject({ ...editedProject, name: e.target.value })}
-                        className="w-full border p-2 rounded-sm outline-none focus:border-blue-600"
+                        className={`w-full border p-2 rounded-sm outline-none ${editErrors.name ? 'border-red-500 bg-red-50 focus:border-red-600' : 'focus:border-blue-600'}`}
                       />
+                      {editErrors.name && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span>{editErrors.name}</p>}
                     </div>
                     <div>
                       <label className="block font-bold text-slate-700 uppercase mb-1">Department</label>
@@ -1589,8 +1870,9 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                         type="text"
                         value={editedProject.department}
                         onChange={(e) => setEditedProject({ ...editedProject, department: e.target.value })}
-                        className="w-full border p-2 rounded-sm outline-none focus:border-blue-600"
+                        className={`w-full border p-2 rounded-sm outline-none ${editErrors.department ? 'border-red-500 bg-red-50 focus:border-red-600' : 'focus:border-blue-600'}`}
                       />
+                      {editErrors.department && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span>{editErrors.department}</p>}
                     </div>
                   </div>
 
@@ -1599,30 +1881,32 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                       <div>
                         <label className="block font-bold text-slate-700 uppercase mb-1">Budget ($)</label>
                         <input
-                          type="number"
+                          type="text"
                           value={editedProject.budget}
-                          onChange={(e) => setEditedProject({ ...editedProject, budget: Number(e.target.value) })}
-                          className="w-full border p-2 rounded-sm font-mono"
+                          onChange={(e) => setEditedProject({ ...editedProject, budget: e.target.value as any })}
+                          className={`w-full border p-2 rounded-sm font-mono outline-none ${editErrors.budget ? 'border-red-500 bg-red-50 focus:border-red-600' : 'focus:border-blue-600'}`}
                         />
+                        {editErrors.budget && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span>{editErrors.budget}</p>}
                       </div>
                     )}
                     <div>
                       <label className="block font-bold text-slate-700 uppercase mb-1">Progress (%)</label>
                       <input
-                        type="number"
-                        max={100}
-                        min={0}
+                        type="text"
                         value={editedProject.progress}
-                        onChange={(e) => setEditedProject({ ...editedProject, progress: Number(e.target.value) })}
-                        className="w-full border p-2 rounded-sm font-mono"
+                        onChange={(e) => setEditedProject({ ...editedProject, progress: e.target.value as any })}
+                        disabled={editedProject.approvalStatus === 'APPROVED' || editedProject.status === 'ACTIVE' || editedProject.status === 'COMPLETED'}
+                        className={`w-full border p-2 rounded-sm font-mono outline-none disabled:bg-slate-100 disabled:text-slate-400 ${editErrors.progress ? 'border-red-500 bg-red-50 focus:border-red-600' : 'focus:border-blue-600'}`}
                       />
+                      {editErrors.progress && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span>{editErrors.progress}</p>}
                     </div>
                     <div>
                       <label className="block font-bold text-slate-700 uppercase mb-1">Gate Stage</label>
                       <select
                         value={editedProject.gate}
                         onChange={(e) => setEditedProject({ ...editedProject, gate: e.target.value })}
-                        className="w-full border p-2 rounded-sm"
+                        disabled={editedProject.approvalStatus === 'APPROVED' || editedProject.status === 'ACTIVE' || editedProject.status === 'COMPLETED'}
+                        className="w-full border p-2 rounded-sm outline-none focus:border-blue-600 disabled:bg-slate-100 disabled:text-slate-400"
                       >
                         <option value="Gate 1">Gate 1 (Charter)</option>
                         <option value="Gate 2">Gate 2 (Architecture)</option>
@@ -1636,7 +1920,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                   <div className="flex justify-end gap-2 pt-3 border-t">
                     <button
                       type="button"
-                      onClick={() => setIsEditing(false)}
+                      onClick={() => { setIsEditing(false); setEditErrors({}); }}
                       className="px-4 py-1.5 border rounded-sm font-bold text-slate-600"
                     >
                       Cancel
@@ -1654,195 +1938,57 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                   {/* TAB 1: OVERVIEW & FINANCIALS */}
                   {projectDetailTab === 'Overview' && (
                     <div className="space-y-6 animate-fadeIn">
-                      {/* Metric Cards Banner - Executive Admin View (Includes Financials) */}
-                      {userRoleMode === 'Executive Admin' && (
-                        <>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                            <div className="bg-white border border-slate-200/80 p-4 rounded-sm shadow-2xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Capital Budget</span>
-                              <p className="text-2xl font-black text-slate-900 font-mono">${(selectedProject.budget / 1000).toFixed(0)}k</p>
-                              <span className="text-[11px] text-slate-500">Allocated budget pool</span>
-                            </div>
-
-                            <div className="bg-white border border-slate-200/80 p-4 rounded-sm shadow-2xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Capital Burned</span>
-                              <p className="text-2xl font-black text-indigo-900 font-mono">${(selectedProject.spent / 1000).toFixed(0)}k</p>
-                              <span className="text-[11px] text-emerald-600 font-bold font-mono">
-                                {selectedProject.budget > 0 ? Math.round((selectedProject.spent / selectedProject.budget) * 100) : 0}% Utilized
-                              </span>
-                            </div>
-
-                            <div className="bg-white border border-slate-200/80 p-4 rounded-sm shadow-2xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Remaining Balance</span>
-                              <p className="text-2xl font-black text-emerald-700 font-mono">
-                                ${(Math.max(0, selectedProject.budget - selectedProject.spent) / 1000).toFixed(0)}k
-                              </p>
-                              <span className="text-[11px] text-slate-500">Available capital funds</span>
-                            </div>
-
-                            <div className="bg-white border border-slate-200/80 p-4 rounded-sm shadow-2xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Gate Milestone</span>
-                              <p className="text-xl font-black text-slate-900 font-mono">{selectedProject.gate}</p>
-                              <span className="text-[11px] text-indigo-700 font-bold uppercase">{getProjectStage(selectedProject)} Stage</span>
-                            </div>
+                      {selectedProject.approvalStatus === 'CLOSURE_REJECTED' && (
+                        <div className="bg-rose-50 border border-rose-200 text-rose-900 p-4 rounded-sm flex items-start gap-3 text-xs shadow-2xs">
+                          <span className="material-symbols-outlined text-rose-600 text-[22px] shrink-0">error</span>
+                          <div>
+                            <h5 className="font-extrabold text-rose-900 text-xs">Closure Request Rejected</h5>
+                            <p className="text-rose-800 text-[11px] mt-0.5">
+                              The Executive Manager has rejected the closure request for this project. The project is returned to active management status so you can continue updating deliverables and resubmit when appropriate.
+                            </p>
                           </div>
-
-                          {/* Executive Admin Oversight & Directives Banner */}
-                          <div className="bg-gradient-to-r from-slate-900 to-[#00174b] text-white p-5 rounded-sm shadow-sm space-y-3 border border-slate-800">
-                            <div className="flex flex-wrap justify-between items-center gap-2 border-b border-white/10 pb-2">
-                              <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-amber-400 text-[20px]">shield_person</span>
-                                <div>
-                                  <h4 className="font-extrabold text-sm uppercase tracking-wider text-white">Executive Admin Oversight &amp; PMO Governance Authority</h4>
-                                  <p className="text-[11px] text-indigo-200">System Level 1 Administrative Clearance Active</p>
-                                </div>
-                              </div>
-                              <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono font-bold px-2.5 py-0.5 rounded-xs text-[10px] uppercase">
-                                Executive Gate Approved
-                              </span>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs pt-1">
-                              <div className="bg-white/5 border border-white/10 p-2.5 rounded-xs space-y-1">
-                                <span className="text-[10px] text-slate-300 font-bold uppercase block">Authorized Administrator</span>
-                                <p className="font-bold text-white font-mono">System Admin (Executive PMO)</p>
-                                <p className="text-[10px] text-indigo-300">Authority: Level 1 Unrestricted</p>
-                              </div>
-
-                              <div className="bg-white/5 border border-white/10 p-2.5 rounded-xs space-y-1">
-                                <span className="text-[10px] text-slate-300 font-bold uppercase block">Last Gate Sign-Off</span>
-                                <p className="font-bold text-amber-300 font-mono">2026-07-29 • 09:30 AM</p>
-                                <p className="text-[10px] text-indigo-300">Phase: {getProjectStage(selectedProject)} Verified</p>
-                              </div>
-
-                              <div className="bg-white/5 border border-white/10 p-2.5 rounded-xs space-y-1">
-                                <span className="text-[10px] text-slate-300 font-bold uppercase block">Executive Audit &amp; Compliance</span>
-                                <p className="font-bold text-emerald-400 font-mono">100% Compliant</p>
-                                <p className="text-[10px] text-indigo-300">Zero Critical Governance Blockers</p>
-                              </div>
-                            </div>
-                          </div>
-                        </>
+                        </div>
                       )}
-
-                      {/* Metric Cards Banner - Team Member View (Focuses on Execution & Tasks) */}
-                      {userRoleMode === 'Project Member' && (
-                        <>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                            <div className="bg-white border border-slate-200/80 p-4 rounded-sm shadow-2xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Project Completion</span>
-                              <p className="text-2xl font-black text-blue-700 font-mono">{selectedProject.progress}%</p>
-                              <span className="text-[11px] text-slate-500">Overall deliverable progress</span>
-                            </div>
-
-                            <div className="bg-white border border-slate-200/80 p-4 rounded-sm shadow-2xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Active Gate Phase</span>
-                              <p className="text-xl font-black text-slate-900 font-mono">{selectedProject.gate}</p>
-                              <span className="text-[11px] text-indigo-700 font-bold uppercase">{getProjectStage(selectedProject)} Stage</span>
-                            </div>
-
-                            <div className="bg-white border border-slate-200/80 p-4 rounded-sm shadow-2xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Target Launch Date</span>
-                              <p className="text-lg font-black text-slate-800 font-mono">{selectedProject.targetDate}</p>
-                              <span className="text-[11px] text-emerald-600 font-bold">On Schedule</span>
-                            </div>
-
-                            <div className="bg-white border border-slate-200/80 p-4 rounded-sm shadow-2xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Lead Executive PM</span>
-                              <p className="text-sm font-black text-slate-900">{selectedProject.owner}</p>
-                              <span className="text-[11px] text-slate-500">{selectedProject.department}</span>
-                            </div>
-                          </div>
-
-                          {/* Team Member Workspace Banner */}
-                          <div className="bg-blue-900 text-white p-4 rounded-sm shadow-2xs space-y-2 border border-blue-800 flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <span className="material-symbols-outlined text-blue-300 text-[24px]">badge</span>
-                              <div>
-                                <h4 className="font-extrabold text-sm uppercase tracking-wider text-white">Team Member Work Portal</h4>
-                                <p className="text-[11px] text-blue-200">
-                                  Displaying assigned project objectives, deliverables, participant team, and tech stack.
-                                </p>
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => setProjectDetailTab('Works Done')}
-                              className="px-3 py-1.5 bg-blue-500 hover:bg-blue-400 text-white font-bold text-xs uppercase tracking-wider rounded-xs shadow-2xs flex items-center gap-1"
-                            >
-                              <span className="material-symbols-outlined text-[15px]">task_alt</span>
-                              View Deliverables
-                            </button>
-                          </div>
-                        </>
-                      )}
-
-                      {/* Metric Cards Banner - Stakeholder Read-Only View */}
-                      {userRoleMode === 'Stakeholder' && (
-                        <>
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            <div className="bg-white border border-slate-200/80 p-4 rounded-sm shadow-2xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Initiative Health</span>
-                              <div className="pt-1">{renderHealthBadge(selectedProject.health)}</div>
-                              <span className="text-[11px] text-slate-500 block pt-1">Executive Health Indicator</span>
-                            </div>
-
-                            <div className="bg-white border border-slate-200/80 p-4 rounded-sm shadow-2xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Overall Progress</span>
-                              <p className="text-2xl font-black text-slate-900 font-mono">{selectedProject.progress}%</p>
-                              <span className="text-[11px] text-slate-500">Milestone completion</span>
-                            </div>
-
-                            <div className="bg-white border border-slate-200/80 p-4 rounded-sm shadow-2xs space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Target Delivery</span>
-                              <p className="text-xl font-black text-indigo-900 font-mono">{selectedProject.targetDate}</p>
-                              <span className="text-[11px] text-indigo-700 font-bold uppercase">{selectedProject.gate}</span>
-                            </div>
-                          </div>
-
-                          <div className="bg-slate-800 text-white p-4 rounded-sm shadow-2xs border border-slate-700 flex items-center gap-3">
-                            <span className="material-symbols-outlined text-amber-300 text-[22px]">visibility</span>
-                            <div>
-                              <h4 className="font-extrabold text-xs uppercase tracking-wider text-white">Stakeholder Overview Mode</h4>
-                              <p className="text-[11px] text-slate-300">
-                                Read-only summary presentation for enterprise stakeholders and executive observers.
-                              </p>
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-                      {/* Project Charter & Objectives */}
-                      <div className="bg-white border border-slate-200/80 p-5 rounded-sm shadow-2xs space-y-3">
-                        <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-wider flex items-center gap-1.5 border-b pb-2">
-                          <span className="material-symbols-outlined text-indigo-700 text-[18px]">description</span>
-                          Project Charter &amp; Objective Statement
+                      <div className="bg-white border border-slate-200/80 p-5 rounded-sm shadow-2xs space-y-4">
+                        <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-wider border-b pb-2">
+                          Project Details
                         </h4>
-                        <p className="text-slate-700 leading-relaxed text-xs">
-                          {selectedProject.description ||
-                            `Enterprise initiative ${selectedProject.name} (${selectedProject.code}) is commissioned under the ${selectedProject.department} division to deliver critical system capabilities, technical modernization, and governance gate clearances.`}
-                        </p>
-                      </div>
-
-                      {/* Tech Architecture Stack */}
-                      <div className="bg-white border border-slate-200/80 p-5 rounded-sm shadow-2xs space-y-3">
-                        <h4 className="font-extrabold text-slate-900 text-sm uppercase tracking-wider flex items-center gap-1.5 border-b pb-2">
-                          <span className="material-symbols-outlined text-blue-700 text-[18px]">hub</span>
-                          Web Architecture &amp; Technology Stack
-                        </h4>
-                        <div className="flex flex-wrap gap-2">
-                          {getTechStack(selectedProject).map((tech) => (
-                            <span key={tech} className="bg-blue-50 text-blue-900 font-bold px-3 py-1.5 rounded-xs border border-blue-200 text-xs flex items-center gap-1">
-                              <span className="material-symbols-outlined text-[14px] text-blue-600">code</span>
-                              {tech}
+                        <div className="grid grid-cols-2 gap-4 text-xs">
+                          <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
+                            <span className="block text-slate-500 font-bold uppercase text-[10px]">Status</span>
+                            <span className="text-slate-900 font-bold">{selectedProject.status}</span>
+                          </div>
+                          <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
+                            <span className="block text-slate-500 font-bold uppercase text-[10px]">Approval</span>
+                            <span className={`font-bold ${selectedProject.approvalStatus === 'REJECTED' ? 'text-rose-600' : selectedProject.approvalStatus === 'APPROVED' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                              {selectedProject.approvalStatus || 'PENDING_APPROVAL'}
                             </span>
-                          ))}
+                          </div>
+                          <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
+                            <span className="block text-slate-500 font-bold uppercase text-[10px]">Budget</span>
+                            <span className="text-slate-900 font-bold font-mono">${selectedProject.budget?.toLocaleString() || 0}</span>
+                          </div>
+                          <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
+                            <span className="block text-slate-500 font-bold uppercase text-[10px]">Start Date</span>
+                            <span className="text-slate-900 font-bold font-mono">{selectedProject.startDate || 'N/A'}</span>
+                          </div>
+                          <div className="bg-slate-50 p-3 rounded-xs border border-slate-200">
+                            <span className="block text-slate-500 font-bold uppercase text-[10px]">Target Date</span>
+                            <span className="text-slate-900 font-bold font-mono">{selectedProject.targetDate || 'N/A'}</span>
+                          </div>
+                        </div>
+                        <div>
+                          <span className="block text-slate-500 font-bold uppercase text-[10px] mb-1">Description</span>
+                          <p className="text-slate-800 text-xs bg-slate-50 p-3 rounded-xs border border-slate-200 whitespace-pre-wrap">
+                            {selectedProject.description || 'No description provided.'}
+                          </p>
                         </div>
                       </div>
                     </div>
                   )}
 
                   {/* TAB 2: LIFECYCLE GOVERNANCE & STAGE TEMPLATES */}
-                  {projectDetailTab === 'Lifecycle' && (
+                  {false && (
                     <div className="space-y-6 animate-fadeIn">
                       {/* Interactive 5-Stage Stepper Banner */}
                       <div className="bg-white border border-slate-200/80 p-6 rounded-sm shadow-2xs space-y-4">
@@ -1877,12 +2023,12 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                                 key={stg}
                                 onClick={() => setInspectStage(stg)}
                                 className={`p-3 rounded-xs border text-left transition-all relative cursor-pointer ${isInspected
-                                    ? 'bg-[#00174b] text-white border-[#00174b] shadow-md ring-2 ring-indigo-400'
-                                    : isCurrent
-                                      ? 'bg-indigo-50 border-indigo-300 text-indigo-950 font-bold'
-                                      : isPast
-                                        ? 'bg-emerald-50/70 border-emerald-200 text-slate-800'
-                                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                                  ? 'bg-[#00174b] text-white border-[#00174b] shadow-md ring-2 ring-indigo-400'
+                                  : isCurrent
+                                    ? 'bg-indigo-50 border-indigo-300 text-indigo-950 font-bold'
+                                    : isPast
+                                      ? 'bg-emerald-50/70 border-emerald-200 text-slate-800'
+                                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                                   }`}
                               >
                                 <div className="flex justify-between items-center mb-1">
@@ -2240,25 +2386,12 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
                       {/* Participants Cards Grid */}
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {(() => {
-                          const matchedUsers = (users || []).filter((u) => {
-                            const codeMatch = u.assignedProjectCodes?.some(
-                              (c) =>
-                                c.toLowerCase() === selectedProject.code.toLowerCase() ||
-                                c.toLowerCase() === selectedProject.name.toLowerCase() ||
-                                selectedProject.code.toLowerCase().includes(c.toLowerCase()) ||
-                                selectedProject.name.toLowerCase().includes(c.toLowerCase())
-                            );
-                            const ownerMatch =
-                              u.name.toLowerCase().includes(selectedProject.owner.toLowerCase()) ||
-                              selectedProject.owner.toLowerCase().includes(u.name.toLowerCase());
-                            const deptMatch = u.department.toLowerCase() === selectedProject.department.toLowerCase();
-                            return codeMatch || ownerMatch || deptMatch;
-                          });
-
-                          const displayParticipants = matchedUsers.length > 0 ? matchedUsers : (users || []).slice(0, 3);
-
-                          return displayParticipants.map((usr) => (
+                        {loadingTeam ? (
+                          <div className="text-center text-slate-500 py-8 col-span-full">Loading project team...</div>
+                        ) : projectTeamMembers.length === 0 ? (
+                          <div className="text-center text-slate-500 italic py-8 col-span-full">No team members assigned to this project yet.</div>
+                        ) : (
+                          projectTeamMembers.map((usr) => (
                             <div
                               key={usr.id}
                               className="bg-white border border-slate-200/90 rounded-sm p-4 shadow-2xs space-y-3 hover:border-blue-300 transition-all flex flex-col justify-between"
@@ -2272,7 +2405,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                                   />
                                   <div>
                                     <h5 className="font-extrabold text-slate-900 text-sm leading-snug">{usr.name}</h5>
-                                    <p className="text-[11px] font-semibold text-indigo-900">{usr.role}</p>
+                                    <p className="text-[11px] font-semibold text-indigo-900">{usr.role.replace(/_/g, ' ')}</p>
                                     <p className="text-[10px] text-slate-400 font-mono">{usr.email}</p>
                                   </div>
                                 </div>
@@ -2282,13 +2415,20 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                                     <span>Department:</span>
                                     <strong className="text-slate-800">{usr.department}</strong>
                                   </div>
-                                  <div className="flex justify-between text-slate-600">
-                                    <span>Clearance Level:</span>
-                                    <span className="font-mono text-emerald-700 font-bold">{usr.clearanceLevel || 'Level 3 - Enterprise'}</span>
+                                  <div className="flex justify-between items-center text-slate-600">
+                                    <span>Project Role:</span>
+                                    {usr.responsibility ? (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 border border-amber-200 rounded-xs text-[10px] font-bold text-amber-900">
+                                        <span className="material-symbols-outlined text-[12px] text-amber-700">badge</span>
+                                        {usr.responsibility}
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] text-slate-400 italic">Unassigned</span>
+                                    )}
                                   </div>
                                   <div className="flex justify-between text-slate-600">
-                                    <span>Governance Role:</span>
-                                    <strong className="text-slate-800">{usr.governanceRole || 'Project Contributor'}</strong>
+                                    <span>Clearance Level:</span>
+                                    <span className="font-mono text-emerald-700 font-bold">Level 3 - Enterprise</span>
                                   </div>
                                 </div>
                               </div>
@@ -2300,14 +2440,14 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                                 <span className="text-slate-500 font-bold">100% Allocated</span>
                               </div>
                             </div>
-                          ));
-                        })()}
+                          ))
+                        )}
                       </div>
                     </div>
                   )}
 
                   {/* TAB 4: PROGRESS & WORKS DONE */}
-                  {projectDetailTab === 'Works Done' && (
+                  {false && (
                     <div className="space-y-6 animate-fadeIn">
                       {/* Work Deliverables Header Banner */}
                       <div className="bg-white p-5 border border-slate-200/80 rounded-sm shadow-2xs space-y-4">
@@ -2332,7 +2472,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                         </div>
 
                         {/* Add New Deliverable Form or Approval Lock Banner */}
-                        {selectedProject.approvalStatus === 'PENDING' || (!selectedProject.approvalStatus && currentPersona?.roleType === 'PROJECT_MANAGER') ? (
+                        {isPendingApprovalStatus(selectedProject.approvalStatus) ? (
                           <div className="bg-amber-50 border border-amber-200 p-4 rounded-xs text-amber-900 text-xs flex items-center gap-3">
                             <span className="material-symbols-outlined text-amber-600 text-[24px]">pending_actions</span>
                             <div>
@@ -2352,7 +2492,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                               </p>
                             </div>
                           </div>
-                        ) : (
+                        ) : !isTeamMember ? (
                           <form onSubmit={handleAddDeliverable} className="bg-slate-50 p-3 rounded-xs border border-slate-200 space-y-2">
                             <span className="text-[11px] font-bold text-slate-700 block uppercase">Log New Work Deliverable / Task</span>
                             <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
@@ -2378,7 +2518,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                               </button>
                             </div>
                           </form>
-                        )}
+                        ) : null}
                       </div>
 
 
@@ -2392,7 +2532,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                               <th className="px-4 py-3">Priority</th>
                               <th className="px-4 py-3">Due Date</th>
                               <th className="px-4 py-3">Status</th>
-                              <th className="px-4 py-3 text-right">Action</th>
+                              {!isTeamMember && <th className="px-4 py-3 text-right">Action</th>}
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
@@ -2427,24 +2567,26 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                                   <td className="px-4 py-3 font-mono text-slate-600">{task.dueDate}</td>
                                   <td className="px-4 py-3">
                                     <span className={`px-2.5 py-1 rounded-xs font-bold text-[10px] uppercase font-mono ${task.status === 'Done'
-                                        ? 'bg-emerald-100 text-emerald-800'
-                                        : task.status === 'In Progress'
-                                          ? 'bg-blue-100 text-blue-800'
-                                          : task.status === 'Review'
-                                            ? 'bg-purple-100 text-purple-800'
-                                            : 'bg-slate-200 text-slate-700'
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : task.status === 'In Progress'
+                                        ? 'bg-blue-100 text-blue-800'
+                                        : task.status === 'Review'
+                                          ? 'bg-purple-100 text-purple-800'
+                                          : 'bg-slate-200 text-slate-700'
                                       }`}>
                                       {task.status}
                                     </span>
                                   </td>
-                                  <td className="px-4 py-3 text-right">
-                                    <button
-                                      onClick={() => handleToggleTaskStatus(task.id)}
-                                      className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[10px] rounded-xs border border-slate-300"
-                                    >
-                                      Toggle Status
-                                    </button>
-                                  </td>
+                                  {!isTeamMember && (
+                                    <td className="px-4 py-3 text-right">
+                                      <button
+                                        onClick={() => handleToggleTaskStatus(task.id)}
+                                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[10px] rounded-xs border border-slate-300"
+                                      >
+                                        Toggle Status
+                                      </button>
+                                    </td>
+                                  )}
                                 </tr>
                               ));
                             })()}
@@ -2541,8 +2683,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                                   <td className="px-4 py-3 font-bold text-slate-900">{risk.subject}</td>
                                   <td className="px-4 py-3 font-mono text-[10px]">
                                     <span className={`px-2 py-0.5 rounded-xs font-bold ${risk.severity === 'CRITICAL' || risk.severity === 'HIGH'
-                                        ? 'bg-red-100 text-red-800'
-                                        : 'bg-amber-100 text-amber-800'
+                                      ? 'bg-red-100 text-red-800'
+                                      : 'bg-amber-100 text-amber-800'
                                       }`}>
                                       {risk.severity}
                                     </span>
@@ -2551,8 +2693,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                                   <td className="px-4 py-3 text-slate-700">{risk.owner}</td>
                                   <td className="px-4 py-3">
                                     <span className={`px-2.5 py-1 rounded-xs font-bold text-[10px] uppercase font-mono ${risk.status === 'OPEN'
-                                        ? 'bg-amber-100 text-amber-800'
-                                        : 'bg-emerald-100 text-emerald-800'
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : 'bg-emerald-100 text-emerald-800'
                                       }`}>
                                       {risk.status}
                                     </span>
@@ -2567,7 +2709,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                   )}
 
                   {/* TAB 6: PROJECT CHAT & TELEGRAM */}
-                  {projectDetailTab === 'Chat' && (
+                  {false && (
                     <div className="space-y-4 animate-fadeIn">
                       <div className="bg-white p-4 border border-slate-200/80 rounded-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                         <div>
@@ -2667,7 +2809,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                   )}
 
                   {/* TAB 7: REQUIREMENTS MATRIX */}
-                  {projectDetailTab === 'Requirements' && (
+                  {false && (
                     <div className="space-y-4 animate-fadeIn">
                       <div className="bg-white p-4 border border-slate-200/80 rounded-sm">
                         <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
@@ -2690,8 +2832,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                             <button
                               onClick={() => handleToggleRequirement(selectedProject, req.id)}
                               className={`px-3 py-1.5 font-bold rounded-xs text-[10px] uppercase font-mono tracking-wider ${req.status === 'Compliant'
-                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                  : 'bg-amber-100 text-amber-800 border border-amber-300'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                : 'bg-amber-100 text-amber-800 border border-amber-300'
                                 }`}
                             >
                               {req.status}
@@ -2787,6 +2929,82 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
           setIsAssignTeamModalOpen(false);
         }}
       />
+
+      {/* DELETE CONFIRMATION MODAL */}
+      {deleteConfirmProject && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white border border-slate-300 rounded-sm max-w-md w-full shadow-2xl overflow-hidden flex flex-col">
+            <div className="bg-rose-700 text-white p-5 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-rose-200 text-[24px]">warning</span>
+                <h3 className="font-extrabold text-base tracking-tight">Delete Project?</h3>
+              </div>
+              <button onClick={() => !isDeleting && setDeleteConfirmProject(null)} className="text-rose-200 hover:text-white font-bold text-lg leading-none">✕</button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-slate-700 text-sm">
+                Are you sure you want to delete the project <strong>"{deleteConfirmProject.name}"</strong>?
+              </p>
+
+              {(deleteConfirmProject.status === 'PLANNING' || deleteConfirmProject.approvalStatus === 'PENDING_APPROVAL') ? (
+                <div className="bg-rose-50 border border-rose-200 p-3 rounded-xs text-rose-800 text-xs flex items-start gap-2">
+                  <span className="material-symbols-outlined text-[16px] mt-0.5">delete_forever</span>
+                  <div>
+                    <strong>This action cannot be undone.</strong> The draft project and its settings will be permanently destroyed.
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-blue-50 border border-blue-200 p-3 rounded-xs text-blue-800 text-xs flex items-start gap-2">
+                  <span className="material-symbols-outlined text-[16px] mt-0.5">archive</span>
+                  <div>
+                    <strong>This is an active or approved project.</strong> It will be safely archived to preserve its history, tasks, and team assignments, but it will no longer be active.
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2 shrink-0">
+              <button
+                onClick={() => setDeleteConfirmProject(null)}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xs transition-colors text-xs uppercase tracking-wider disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  setIsDeleting(true);
+                  try {
+                    const success = await deleteProjectApi(deleteConfirmProject.id);
+                    if (success) {
+                      setDeleteConfirmProject(null);
+                      setSelectedProject(null);
+                      if (onRefreshProjects) {
+                        await onRefreshProjects();
+                      }
+                    }
+                  } catch (err: any) {
+                    alert(err.message || "Failed to delete project");
+                    setIsDeleting(false);
+                  }
+                }}
+                disabled={isDeleting}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xs uppercase tracking-wider text-xs shadow-2xs disabled:bg-slate-400 flex items-center gap-1.5"
+              >
+                {isDeleting ? (
+                  <>Processing...</>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-[14px]">delete</span>
+                    {deleteConfirmProject.status === 'PLANNING' ? 'Delete Project' : 'Archive Project'}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

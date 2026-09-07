@@ -1,6 +1,9 @@
 //import { User } from "../models/User.js";
 //import { Project } from "../models/Project.js";
 
+import Project from "../models/projectModel/projectModel.js";
+import User from "../models/userModel.js";
+
 export class ChangeRequestRepository {
   constructor(model) {
     this.model = model;
