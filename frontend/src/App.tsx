@@ -716,6 +716,14 @@ export default function App() {
     }
   };
 
+  const handleAddSubTask = async (subTask: TaskItem) => {
+    await createTaskApi(subTask);
+    const apiTasks = await fetchTasksFromApi();
+    if (apiTasks) {
+      setTasks(apiTasks);
+    }
+  };
+
   const handleUpdateTaskStatus = async (taskId: string, newStatus: TaskItem['status']) => {
     setTasks(tasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)));
     const saved = await updateTaskApi(taskId, { status: newStatus });
@@ -1068,6 +1076,7 @@ export default function App() {
                 onUpdateTaskStatus={handleUpdateTaskStatus}
                 onUpdateTask={handleUpdateTask}
                 onDeleteTask={handleDeleteTask}
+                onAddSubTask={handleAddSubTask}
                 onAddRisk={handleAddRisk}
                 currentPersona={currentPersona}
                 onNotifyPM={handleNotifyPMTaskCompleted}

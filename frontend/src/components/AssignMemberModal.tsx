@@ -47,6 +47,7 @@ export const AssignMemberModal: React.FC<AssignMemberModalProps> = ({
     const roleCode = typeof user.role === 'string' ? user.role : user.role?.code || user.role?.name;
     return String(roleCode).trim().replace(/[\s-]+/g, '_').toUpperCase() === 'PROJECT_MANAGER';
   });
+  const isCurrentUserPM = projectManagers.some((pm) => pm.name === requesterName);
   const standardDepartments = [
     'Engineering',
     'Design',
@@ -77,7 +78,7 @@ export const AssignMemberModal: React.FC<AssignMemberModalProps> = ({
     if (isOpen) {
       setSelectedProjectId(passedSelectedProject?.id || (selectableProjects.length > 0 ? selectableProjects[0].id : ''));
       setSelectedUserId('');
-      setRequesterNameValue(projectManagers[0]?.name || '');
+      setRequesterNameValue(isCurrentUserPM ? requesterName : (projectManagers[0]?.name || ''));
       setRequestDepartment('');
     }
   }, [isOpen, passedSelectedProject, projects]);
@@ -192,17 +193,27 @@ export const AssignMemberModal: React.FC<AssignMemberModalProps> = ({
               {mode === 'request' && (
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">Requested By PM Name *</label>
-                  <select
-                    value={requesterNameValue}
-                    onChange={(e) => setRequesterNameValue(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-sm px-3 py-2 text-sm text-slate-800 font-medium focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-inner"
-                    required
-                  >
-                    <option value="" disabled>Select a PM</option>
-                    {projectManagers.map((manager) => (
-                      <option key={manager.id} value={manager.name}>{manager.name}</option>
-                    ))}
-                  </select>
+                  {isCurrentUserPM ? (
+                    <input
+                      type="text"
+                      value={requesterNameValue}
+                      readOnly
+                      className="w-full border border-slate-300 rounded-sm px-3 py-2 text-sm text-slate-800 font-medium bg-slate-100 focus:outline-none"
+                      required
+                    />
+                  ) : (
+                    <select
+                      value={requesterNameValue}
+                      onChange={(e) => setRequesterNameValue(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-sm px-3 py-2 text-sm text-slate-800 font-medium focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-inner"
+                      required
+                    >
+                      <option value="" disabled>Select a PM</option>
+                      {projectManagers.map((manager) => (
+                        <option key={manager.id} value={manager.name}>{manager.name}</option>
+                      ))}
+                    </select>
+                  )}
                   </div>
               )}
               {mode === 'request' && (
