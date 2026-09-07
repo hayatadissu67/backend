@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   fetchProjectsFromApi,
+  fetchProjectOptionsFromApi,
   createProjectApi,
   updateProjectApi,
   approveProjectApi,
@@ -18,8 +19,10 @@ import {
   assignProjectTeamMembersApi,
   fetchChangeRequestsFromApi,
   createChangeRequestApi,
+  updateChangeRequestApi,
   approveChangeRequestApi,
   rejectChangeRequestApi,
+  deleteChangeRequestApi,
   fetchReportsApi,
   fetchTemplatesApi,
   createDiscussionApi,
@@ -318,6 +321,7 @@ export default function App() {
         const ref = apiProjects.find((p) => p.id === projectId);
         if (ref) setSelectedProject((prev) => (prev?.id === projectId ? ref : prev));
       }
+      }
     } catch (err: any) {
       alert(err.message || 'Failed to approve project.');
     }
@@ -476,6 +480,7 @@ export default function App() {
 
   // Main State
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectOptions, setProjectOptions] = useState<Project[]>([]);
   const [risks, setRisks] = useState<RiskItem[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [resources, setResources] = useState<ResourceLoading[]>([]);
@@ -550,22 +555,41 @@ export default function App() {
 
   const handleAddChangeRequest = async (request: Partial<ChangeRequestItem>) => {
     const created = await createChangeRequestApi(request);
-    if (created) {
-      setChangeRequests((prev) => [created, ...prev]);
-      const newNotif: NotificationItem = {
-        id: `notif-${Date.now()}`,
-        title: `New Change Request: ${created.id}`,
-        message: `${created.title} (${created.amount}) submitted for ${created.project || 'Project'}.`,
-        type: 'info',
-        timestamp: 'Just now',
-        isRead: false
-      };
-      setNotifications((prev) => [newNotif, ...prev]);
+    if (!created) {
+      throw new Error('The change request was not saved.');
     }
+
+    setChangeRequests((prev) => [created, ...prev]);
+    const refreshedRequests = await fetchChangeRequestsFromApi();
+    if (refreshedRequests) setChangeRequests(refreshedRequests);
+
+    const newNotif: NotificationItem = {
+      id: `notif-${Date.now()}`,
+      title: `New Change Request: ${created.id}`,
+      message: `${created.title} (${created.amount}) submitted for ${created.project || 'Project'}.`,
+      type: 'info',
+      timestamp: 'Just now',
+      isRead: false
+    };
+    setNotifications((prev) => [newNotif, ...prev]);
   };
 
-  const handleUpdateChangeRequest = (updated: ChangeRequestItem) => {
-    setChangeRequests((prev) => prev.map((cr) => (cr.id === updated.id ? updated : cr)));
+  const handleUpdateChangeRequest = async (updated: ChangeRequestItem) => {
+    try {
+      const result = await updateChangeRequestApi(String(updated.id), updated);
+      if (result) {
+        setChangeRequests((prev) => prev.map((cr) => (String(cr.id) === String(updated.id) ? result : cr)));
+      } else {
+        throw new Error('The change request update was not saved.');
+      }
+      const refreshedRequests = await fetchChangeRequestsFromApi();
+      if (refreshedRequests) setChangeRequests(refreshedRequests);
+    } catch (err: any) {
+      console.error('Failed to update change request:', err);
+      alert(err.message || 'Failed to update change request');
+      throw err;
+    }
+
     const newNotif: NotificationItem = {
       id: `notif-${Date.now()}`,
       title: `Change Request ${updated.id} Updated`,
@@ -577,25 +601,43 @@ export default function App() {
     setNotifications((prev) => [newNotif, ...prev]);
   };
 
-  const handleDeleteChangeRequest = (id: string) => {
-    setChangeRequests((prev) => prev.filter((cr) => cr.id !== id));
+  const handleDeleteChangeRequest = async (id: string) => {
+    try {
+      const deleted = await deleteChangeRequestApi(id);
+      if (!deleted) {
+        throw new Error('The change request could not be deleted.');
+      }
+      setChangeRequests((prev) => prev.filter((cr) => String(cr.id) !== String(id)));
+    } catch (err: any) {
+      const error = new Error(err.message || 'Failed to delete change request.');
+      alert(error.message);
+      throw error;
+    }
   };
 
   const handleApproveChangeRequest = async (id: string) => {
     try {
       const updated = await approveChangeRequestApi(id);
-      handleUpdateChangeRequest(updated);
+      if (!updated) throw new Error('The change request approval was not saved.');
+      setChangeRequests((prev) => prev.map((cr) => (String(cr.id) === String(id) ? updated : cr)));
+      const refreshedRequests = await fetchChangeRequestsFromApi();
+      if (refreshedRequests) setChangeRequests(refreshedRequests);
     } catch (err: any) {
       alert(err.message || 'Failed to approve change request');
+      throw err;
     }
   };
 
   const handleRejectChangeRequest = async (id: string, reason: string) => {
     try {
       const updated = await rejectChangeRequestApi(id, reason);
-      handleUpdateChangeRequest(updated);
+      if (!updated) throw new Error('The change request rejection was not saved.');
+      setChangeRequests((prev) => prev.map((cr) => (String(cr.id) === String(id) ? updated : cr)));
+      const refreshedRequests = await fetchChangeRequestsFromApi();
+      if (refreshedRequests) setChangeRequests(refreshedRequests);
     } catch (err: any) {
       alert(err.message || 'Failed to reject change request');
+      throw err;
     }
   };
 
@@ -628,12 +670,13 @@ export default function App() {
 
       try {
         const [
-          apiUsers, apiProjects, apiRisks, apiTasks, apiBudgets, apiCRs, apiReports, apiTemplates,
-          apiDepartmentLoading, apiResources
+          apiUsers, apiProjects, apiProjectOptions, apiRisks, apiTasks, apiBudgets, apiCRs, apiReports, apiTemplates,
+          apiDiscussions, apiMeetings, apiNotifications, apiDepartmentLoading, apiResources
         ] = await Promise.all([
           // Executives can list all users; PMs/Risk Managers/Team Members only see TEAM_MEMBERs.
           isExecutive ? fetchUsersFromApi() : fetchTeamMembersFromApi(),
           fetchProjectsFromApi(),
+          fetchProjectOptionsFromApi(),
           fetchRisksFromApi(),
           fetchTasksFromApi(),
           fetchBudgetsFromApi(),
@@ -646,6 +689,7 @@ export default function App() {
 
         if (apiUsers) setUsers(apiUsers);
         if (apiProjects) setProjects(apiProjects);
+        if (apiProjectOptions) setProjectOptions(apiProjectOptions);
         if (apiRisks) setRisks(apiRisks);
         if (apiTasks) setTasks(apiTasks);
         if (apiBudgets) setBudgets(apiBudgets);
@@ -666,22 +710,19 @@ export default function App() {
 
   // Handlers
   const handleAddProject = async (newProject: Project) => {
+    const pendingProject = { ...newProject, approvalStatus: 'PENDING' as const };
+    setProjects((prev) => [pendingProject, ...prev]);
+
     try {
-      const created = await createProjectApi(newProject);
-      if (created) {
-        // Refetch projects from real backend DB to guarantee database persistence state
-        const apiProjects = await fetchProjectsFromApi();
-        if (apiProjects) {
-          setProjects(apiProjects);
-        } else {
-          setProjects((prev) => [created, ...prev]);
-        }
-      } else {
-        alert('Failed to save project to database.');
+      const savedProject = await createProjectApi(pendingProject);
+      if (savedProject) {
+        setProjects((prev) => prev.map((project) => (
+          project.id === newProject.id ? { ...savedProject, approvalStatus: savedProject.approvalStatus || 'PENDING' } : project
+        )));
       }
     } catch (err: any) {
-      console.error('Failed to create project:', err);
-      alert(err.message || 'Failed to save project to database.');
+      console.error('Failed to save new project:', err);
+      alert(err.message || 'Failed to save new project.');
     }
     const act: ActivityItem = {
       id: `a-${Date.now()}`,
@@ -1179,7 +1220,7 @@ export default function App() {
             {currentTab === 'change_requests' && (
               <ChangeRequestsView
                 changeRequests={changeRequests}
-                projects={projects}
+                projects={projectOptions}
                 onAddChangeRequest={handleAddChangeRequest}
                 onUpdateChangeRequest={handleUpdateChangeRequest}
                 onDeleteChangeRequest={handleDeleteChangeRequest}
@@ -1204,6 +1245,9 @@ export default function App() {
             {currentTab === 'budget' && (
               <BudgetView
                 budgets={budgets}
+                projects={projects}
+                onApproveProject={handleApproveProject}
+                onRejectProject={handleRejectProject}
                 currentPersona={currentPersona}
               />
             )}

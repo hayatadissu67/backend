@@ -1,9 +1,13 @@
-import React, { useState } from 'react';
-import { BudgetItem } from '../types';
+import React, { useState, useEffect } from 'react';
+import { BudgetItem, Project } from '../types';
+import { fetchProjectsFromApi, fetchBudgetsFromApi, createBudgetApi, updateBudgetApi, deleteBudgetApi, approveBudgetApi, rejectBudgetApi, fetchAllocationsFromApi, updateAllocationApi, fetchExpensesFromApi, createExpenseApi, fetchBudgetOverviewFromApi } from '../services/api';
 
 interface BudgetViewProps {
   budgets?: BudgetItem[];
+  projects?: Project[];
   onUpdateBudget?: (budgetId: string, allocated: number, spent: number) => void;
+  onApproveProject?: (projectId: string) => void;
+  onRejectProject?: (projectId: string, reason: string) => void;
   currentPersona?: any;
 }
 
@@ -16,6 +20,7 @@ interface BudgetPlan {
   category: string;
   timeline: string;
   estimatedCost: number;
+  status: 'pending' | 'approved' | 'rejected';
 }
 
 interface ProjectAllocation {
@@ -23,15 +28,6 @@ interface ProjectAllocation {
   department: string;
   projectName: string;
   allocatedAmount: number;
-}
-
-interface AllocationHistoryItem {
-  id: string;
-  action: string;
-  projectName: string;
-  amount: number;
-  timestamp: string;
-  modifiedBy: string;
 }
 
 interface PendingApproval {
@@ -59,109 +55,389 @@ interface ExpenseItem {
   category: string;
 }
 
-export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona }) => {
+const budgetCategoryOptions = [
+  'Infrastructure',
+  'Software & Tools',
+  'Human Resources',
+  'Design',
+  'Operations',
+];
+
+const normalizeBudgetPlan = (budget: any, projectLookup: Record<string, Project>): BudgetPlan => {
+  const projectId = budget?.projectId ?? budget?.project_id;
+  const projectName = budget?.projectName || projectLookup[String(projectId)]?.name || 'Unknown Project';
+  return {
+    id: String(budget?.id ?? `bp-${Date.now()}`),
+    planName: budget?.planName || budget?.description || `Budget Plan ${budget?.id ?? ''}`,
+    projectName,
+    category: budget?.category || 'Infrastructure',
+    timeline: budget?.timeline || new Date().toISOString().split('T')[0],
+    estimatedCost: Number(budget?.amount ?? budget?.estimatedCost ?? 0),
+    status: String(budget?.status || 'pending').toLowerCase() as BudgetPlan['status'],
+  };
+};
+
+export const BudgetView: React.FC<BudgetViewProps> = ({
+  budgets,
+  projects = [],
+  onApproveProject,
+  onRejectProject,
+  currentPersona,
+}) => {
   const [activeTab, setActiveTab] = useState<SubTab>('Overview');
-
-
-  // KPI Overall State
-  const totalBudget = budgets?.reduce((acc, curr) => acc + (curr.allocated || 0), 0) || 0;
-  const totalExpense = budgets?.reduce((acc, curr) => acc + (curr.actualSpent || 0), 0) || 0;
-
-  const remainingBudget = totalBudget - totalExpense;
-  const budgetUtilization = ((totalExpense / totalBudget) * 100).toFixed(1);
-
+  const [projectOptions, setProjectOptions] = useState<Project[]>(projects);
   const [budgetPlans, setBudgetPlans] = useState<BudgetPlan[]>([]);
-
+  const [editingBudgetPlan, setEditingBudgetPlan] = useState<BudgetPlan | null>(null);
+  const [deletingPlanId, setDeletingPlanId] = useState<string | null>(null);
   const [planNameInput, setPlanNameInput] = useState('');
-  const [projectNameInput, setProjectNameInput] = useState('');
-  const [categoryInput, setCategoryInput] = useState('');
+  const [projectNameInput, setProjectNameInput] = useState(projects[0]?.name || '');
+  const [categoryInput, setCategoryInput] = useState('Infrastructure');
   const [estimatedCostInput, setEstimatedCostInput] = useState('');
   const [timelineInput, setTimelineInput] = useState('');
 
   // Allocation State
   const [allocations, setAllocations] = useState<ProjectAllocation[]>([]);
-
   const [selectedAllocationProject, setSelectedAllocationProject] = useState<string>('PMO Tower');
   const [newAllocationAmount, setNewAllocationAmount] = useState<string>('');
-  const [allocationHistory, setAllocationHistory] = useState<AllocationHistoryItem[]>([]);
 
   // Expenses State
   const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
-
   const [expenseName, setExpenseName] = useState('');
   const [expenseAmount, setExpenseAmount] = useState('');
+  const [expenseProjectId, setExpenseProjectId] = useState(projects[0]?.id || '');
+  const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split('T')[0]);
   const [expenseCategory, setExpenseCategory] = useState('Infrastructure');
+  const [expenseError, setExpenseError] = useState('');
 
   // Approvals State
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
-
   const [selectedRequestToReview, setSelectedRequestToReview] = useState<string>('');
   const [reviewComment, setReviewComment] = useState<string>('');
   const [approvalHistory, setApprovalHistory] = useState<ApprovalHistoryItem[]>([]);
+  const [overviewTotals, setOverviewTotals] = useState({ totalBudget: 0, totalExpense: 0 });
+
+  useEffect(() => {
+    if (projects && projects.length > 0) {
+      setProjectOptions(projects);
+      setProjectNameInput((prev) => prev || projects[0].name);
+      setExpenseProjectId((prev) => prev || projects[0].id);
+    } else {
+      let isMounted = true;
+      fetchProjectsFromApi().then((apiProjects) => {
+        if (!isMounted || !apiProjects || apiProjects.length === 0) return;
+        setProjectOptions(apiProjects);
+        setProjectNameInput((prev) => prev || apiProjects[0].name);
+        setExpenseProjectId((prev) => prev || apiProjects[0].id);
+      }).catch((err) => {
+        console.warn('Failed to load projects for budget planning:', err);
+      });
+
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [projects]);
+
+  useEffect(() => {
+    if (projectOptions.length > 0 && !projectOptions.some((project) => String(project.id) === String(expenseProjectId))) {
+      setExpenseProjectId(projectOptions[0].id);
+    }
+  }, [projectOptions, expenseProjectId]);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchBudgetOverviewFromApi().then((overview) => {
+      if (isMounted && overview) setOverviewTotals(overview);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [projects, budgets]);
+
+  useEffect(() => {
+    const projectLookup = Object.fromEntries(projectOptions.map((project) => [String(project.id), project]));
+
+    if (budgets && budgets.length > 0) {
+      setBudgetPlans(budgets.map((budget) => normalizeBudgetPlan(budget, projectLookup)));
+      return;
+    }
+
+    let isMounted = true;
+    fetchBudgetsFromApi().then((apiBudgets) => {
+      if (!isMounted || !apiBudgets || apiBudgets.length === 0) return;
+      setBudgetPlans(apiBudgets.map((budget) => normalizeBudgetPlan(budget, projectLookup)));
+    }).catch((err) => {
+      console.warn('Failed to fetch saved budget plans:', err);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [budgets, projectOptions]);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchAllocationsFromApi().then((apiAllocations) => {
+      if (!isMounted || !apiAllocations) return;
+      setAllocations(apiAllocations.map((allocation: any) => ({
+        id: String(allocation.id),
+        department: allocation.project?.department || projectOptions.find((project) => String(project.id) === String(allocation.projectId || allocation.project_id))?.department || 'Unassigned',
+        projectName: allocation.project?.name || projectOptions.find((project) => String(project.id) === String(allocation.projectId || allocation.project_id))?.name || 'Unknown Project',
+        allocatedAmount: Number(allocation.amount) || 0,
+      })));
+    });
+    fetchExpensesFromApi().then((apiExpenses) => {
+      if (!isMounted || !apiExpenses) return;
+      setExpenses(apiExpenses.map((expense: any) => ({
+        id: String(expense.id),
+        name: expense.name,
+        amount: Number(expense.amount) || 0,
+        date: expense.date,
+        category: expense.category,
+      })));
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [projects]);
+
+  useEffect(() => {
+    if (allocations.length > 0 && !allocations.some((allocation) => allocation.projectName === selectedAllocationProject)) {
+      setSelectedAllocationProject(allocations[0].projectName);
+    }
+  }, [allocations, selectedAllocationProject]);
+
+  useEffect(() => {
+    const projectApprovals: PendingApproval[] = projects
+      .map((project) => ({
+        id: String(project.id),
+        requestTitle: `${project.name} - Initial Budget`,
+        department: project.department,
+        status: project.approvalStatus === 'APPROVED'
+          ? 'Approved'
+          : project.approvalStatus === 'REJECTED'
+            ? 'Rejected'
+            : 'Pending',
+        amount: Number(project.budget) || 0,
+      }));
+
+    setPendingApprovals(projectApprovals);
+  }, [projects]);
+
+  // KPI Overall State
+  const totalBudget = overviewTotals.totalBudget;
+  const totalExpense = overviewTotals.totalExpense;
+
+  const remainingBudget = totalBudget - totalExpense;
+  const budgetUtilization = ((totalExpense / totalBudget) * 100).toFixed(1);
+
+  const [budgetFormError, setBudgetFormError] = useState('');
 
   // Handle Save Budget Plan
-  const handleSaveBudgetPlan = (e: React.FormEvent) => {
+  const handleSaveBudgetPlan = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!planNameInput.trim()) return;
+    const cost = Number(estimatedCostInput);
+    const planName = planNameInput.trim();
+    if (!planName || /^\d+(?:\.\d+)?$/.test(planName)) {
+      setBudgetFormError('Plan Name must contain text and cannot be only numbers.');
+      return;
+    }
+    if (!projectNameInput.trim() || !categoryInput.trim() || !timelineInput) {
+      setBudgetFormError('Complete all required fields.');
+      return;
+    }
+    if (!Number.isFinite(cost) || cost <= 0) {
+      setBudgetFormError('Amount must be a valid positive number.');
+      return;
+    }
+    setBudgetFormError('');
 
-    const cost = parseFloat(estimatedCostInput) || 0;
-    const newPlan: BudgetPlan = {
-      id: `bp-${Date.now()}`,
-      planName: planNameInput.trim(),
-      projectName: projectNameInput.trim() || 'PMO Tower',
-      category: categoryInput.trim() || 'General',
+    const selectedProject = projectOptions.find((project) => project.name === projectNameInput.trim()) || projectOptions[0];
+    const payload = {
+      projectId: selectedProject?.id || null,
+      projectName: selectedProject?.name || projectNameInput.trim() || 'PMO Tower',
+      planName,
+      category: categoryInput.trim() || 'Infrastructure',
       timeline: timelineInput || new Date().toISOString().split('T')[0],
-      estimatedCost: cost,
+      amount: cost,
+      description: `${planName} - ${categoryInput}`,
+      status: 'pending',
     };
 
-    setBudgetPlans((prev) => [newPlan, ...prev]);
+    try {
+      const createdPlan = await createBudgetApi(payload);
+      if (!createdPlan) {
+        throw new Error('The budget plan was not saved.');
+      }
+
+      const projectLookup = Object.fromEntries(projectOptions.map((project) => [String(project.id), project]));
+      const normalizedPlan = normalizeBudgetPlan(createdPlan, projectLookup);
+      setBudgetPlans((prev) => [normalizedPlan, ...prev.filter((bp) => bp.id !== normalizedPlan.id)]);
+
+      const refreshedBudgets = await fetchBudgetsFromApi();
+      if (refreshedBudgets) {
+        setBudgetPlans(refreshedBudgets.map((budget) => normalizeBudgetPlan(budget, projectLookup)));
+      }
+    } catch (err: any) {
+      console.warn('Budget plan save failed via API:', err);
+      setBudgetFormError(err.message || 'Failed to save budget plan.');
+      return;
+    }
+
     setPlanNameInput('');
-    setProjectNameInput('');
-    setCategoryInput('');
+    setProjectNameInput(projectOptions[0]?.name || '');
+    setCategoryInput('Infrastructure');
     setEstimatedCostInput('');
     setTimelineInput('');
   };
 
-  // Handle Update Allocation
-  const handleUpdateAllocation = (e: React.FormEvent) => {
+  const handleUpdateBudgetPlan = async (e: React.FormEvent) => {
     e.preventDefault();
-    const amount = parseFloat(newAllocationAmount);
-    if (isNaN(amount)) return;
+    if (!editingBudgetPlan) return;
 
-    setAllocations((prev) =>
-      prev.map((al) => (al.projectName === selectedAllocationProject ? { ...al, allocatedAmount: amount } : al))
-    );
-
-    const newHistory: AllocationHistoryItem = {
-      id: `ah-${Date.now()}`,
-      action: 'Updated Allocation',
-      projectName: selectedAllocationProject,
-      amount: amount,
-      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16),
-      modifiedBy: 'Admin',
+    const selectedProject = projectOptions.find((project) => project.name === editingBudgetPlan.projectName.trim()) || projectOptions[0];
+    const payload = {
+      projectId: selectedProject?.id || null,
+      projectName: editingBudgetPlan.projectName.trim() || 'PMO Tower',
+      planName: editingBudgetPlan.planName.trim() || 'Untitled Budget Plan',
+      category: editingBudgetPlan.category || 'Infrastructure',
+      timeline: editingBudgetPlan.timeline || new Date().toISOString().split('T')[0],
+      amount: Number(editingBudgetPlan.estimatedCost) || 0,
+      description: `${editingBudgetPlan.planName.trim()} - ${editingBudgetPlan.category}`,
+      status: 'pending',
     };
 
-    setAllocationHistory((prev) => [newHistory, ...prev]);
-    setNewAllocationAmount('');
+    try {
+      const updatedBudget = await updateBudgetApi(editingBudgetPlan.id, payload);
+      const normalizedPlan = updatedBudget ? normalizeBudgetPlan(updatedBudget, Object.fromEntries(projectOptions.map((project) => [String(project.id), project]))) : {
+        ...editingBudgetPlan,
+        planName: editingBudgetPlan.planName.trim() || 'Untitled Budget Plan',
+        projectName: editingBudgetPlan.projectName.trim() || 'PMO Tower',
+        category: editingBudgetPlan.category || 'Infrastructure',
+        timeline: editingBudgetPlan.timeline || new Date().toISOString().split('T')[0],
+        estimatedCost: Number(editingBudgetPlan.estimatedCost) || 0,
+      };
+
+      setBudgetPlans((prev) => prev.map((bp) => bp.id === normalizedPlan.id ? normalizedPlan : bp));
+    } catch (err) {
+      console.warn('Failed to update budget plan via API:', err);
+    }
+
+    setEditingBudgetPlan(null);
+  };
+
+  const handleDeleteBudgetPlan = async (id: string) => {
+    try {
+      await deleteBudgetApi(id);
+      setBudgetPlans((prev) => prev.filter((bp) => bp.id !== id));
+    } catch (err) {
+      console.warn('Failed to delete budget plan via API:', err);
+      setBudgetPlans((prev) => prev.filter((bp) => bp.id !== id));
+    }
+    setDeletingPlanId(null);
+  };
+
+  const handleBudgetApproval = async (id: string, decision: 'approved' | 'rejected') => {
+    try {
+      const updatedBudget = decision === 'approved'
+        ? await approveBudgetApi(id)
+        : await rejectBudgetApi(id);
+      if (!updatedBudget) throw new Error(`Budget ${decision} was not saved.`);
+
+      const projectLookup = Object.fromEntries(projectOptions.map((project) => [String(project.id), project]));
+      setBudgetPlans((prev) => prev.map((plan) => (
+        plan.id === id ? normalizeBudgetPlan(updatedBudget, projectLookup) : plan
+      )));
+
+      const refreshedBudgets = await fetchBudgetsFromApi();
+      if (refreshedBudgets) {
+        setBudgetPlans(refreshedBudgets.map((budget) => normalizeBudgetPlan(budget, projectLookup)));
+      }
+    } catch (err: any) {
+      alert(err.message || `Failed to ${decision} budget.`);
+    }
+  };
+
+  // Handle Update Allocation
+  const handleUpdateAllocation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = Number(newAllocationAmount);
+    const selectedAllocation = allocations.find((allocation) => allocation.projectName === selectedAllocationProject);
+    if (!selectedAllocation || !Number.isFinite(amount) || amount <= 0) return;
+    if (currentPersona?.roleType !== 'EXECUTIVE_MANAGER' && amount > 999999999) {
+      alert('Allocation amounts over $999,999,999 require Executive Manager authorization.');
+      return;
+    }
+
+    try {
+      const savedAllocation = await updateAllocationApi(selectedAllocation.id, amount);
+      if (!savedAllocation) return;
+
+      setAllocations((prev) =>
+        prev.map((al) => (al.id === selectedAllocation.id ? { ...al, allocatedAmount: amount } : al))
+      );
+
+      setNewAllocationAmount('');
+    } catch (err: any) {
+      alert(err.message || 'Failed to update allocation.');
+    }
   };
 
   // Handle Record Expense
-  const handleRecordExpense = (e: React.FormEvent) => {
+  const handleRecordExpense = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!expenseName.trim()) return;
+    setExpenseError('');
+    const normalizedExpenseName = expenseName.trim();
+    if (!normalizedExpenseName) {
+      setExpenseError('Expense name is required.');
+      return;
+    }
+    if (/^\d+(?:\.\d+)?$/.test(normalizedExpenseName)) {
+      setExpenseError('Expense Item Name must contain text and cannot be only numbers.');
+      return;
+    }
     const amt = parseFloat(expenseAmount) || 0;
+    const projectId = expenseProjectId;
+    if (!projectId) {
+      setExpenseError('A project is required before recording an expense.');
+      return;
+    }
+    if (amt <= 0) {
+      setExpenseError('Amount must be a valid positive number.');
+      return;
+    }
+    if (!expenseDate) {
+      setExpenseError('Expense date is required.');
+      return;
+    }
 
-    const newExp: ExpenseItem = {
-      id: `ex-${Date.now()}`,
-      name: expenseName.trim(),
-      amount: amt,
-      date: new Date().toISOString().split('T')[0],
-      category: expenseCategory,
-    };
+    try {
+      const savedExpense = await createExpenseApi({
+        projectId,
+        name: normalizedExpenseName,
+        amount: amt,
+        date: expenseDate,
+        category: expenseCategory,
+      });
+      if (!savedExpense) throw new Error('The expense was not saved.');
 
-    setExpenses((prev) => [newExp, ...prev]);
-    setExpenseName('');
-    setExpenseAmount('');
+      const refreshedExpenses = await fetchExpensesFromApi();
+      if (refreshedExpenses) {
+        setExpenses(refreshedExpenses.map((expense: any) => ({
+          id: String(expense.id),
+          name: expense.name,
+          amount: Number(expense.amount) || 0,
+          date: expense.date,
+          category: expense.category,
+        })));
+      }
+      setExpenseName('');
+      setExpenseAmount('');
+      setExpenseProjectId(projectOptions[0]?.id || '');
+      setExpenseDate(new Date().toISOString().split('T')[0]);
+    } catch (err: any) {
+      setExpenseError(err.response?.data?.message || err.message || 'Failed to save expense.');
+    }
   };
 
   // Handle Approval / Rejection
@@ -170,8 +446,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
     const req = pendingApprovals.find((r) => r.id === selectedRequestToReview || r.requestTitle === selectedRequestToReview);
     if (!req) return;
 
-    // Remove from pending
-    setPendingApprovals((prev) => prev.filter((r) => r.id !== req.id));
+    handleProjectApprovalAction(req.id, decision);
 
     // Add to history
     const historyItem: ApprovalHistoryItem = {
@@ -184,6 +459,22 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
     };
 
     setApprovalHistory((prev) => [historyItem, ...prev]);
+    setSelectedRequestToReview('');
+    setReviewComment('');
+  };
+
+  const handleProjectApprovalAction = (projectId: string, decision: 'Approved' | 'Rejected') => {
+    const reason = reviewComment.trim() || 'Rejected from Budget Approvals.';
+
+    if (decision === 'Approved') {
+      onApproveProject?.(projectId);
+    } else {
+      onRejectProject?.(projectId, reason);
+    }
+
+    setPendingApprovals((prev) => prev.map((approval) => (
+      approval.id === projectId ? { ...approval, status: decision } : approval
+    )));
     setSelectedRequestToReview('');
     setReviewComment('');
   };
@@ -298,27 +589,8 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
             </div>
           </div>
 
-          {/* Bottom Grid: Recent Expenses & Quick Actions */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left 2 Cols: Recent Expenses */}
-            <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200/80 p-5 shadow-2xs space-y-4">
-              <h2 className="text-sm font-extrabold text-slate-900 tracking-tight">Recent Expenses</h2>
-
-              <div className="space-y-2">
-                {expenses.map((exp) => (
-                  <div
-                    key={exp.id}
-                    className="flex justify-between items-center bg-slate-50/70 p-3.5 rounded-lg border border-slate-100 text-xs"
-                  >
-                    <span className="font-semibold text-slate-700">{exp.name}</span>
-                    <span className="font-extrabold text-slate-900">${exp.amount.toLocaleString()}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Right 1 Col: Quick Actions */}
-            <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-2xs space-y-4">
+          {/* Quick Actions */}
+          <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-2xs space-y-4">
               <h2 className="text-sm font-extrabold text-slate-900 tracking-tight">Quick Actions</h2>
 
               {currentPersona?.roleType !== 'EXECUTIVE_MANAGER' && (
@@ -343,9 +615,8 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
                   </button>
                 </div>
               )}
-            </div>
           </div>
-        </div>
+            </div>
       )}
 
       {/* TAB 2: PLANNING */}
@@ -364,11 +635,14 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
               <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-2xs space-y-4">
                 <h2 className="text-sm font-extrabold text-slate-900">Create New Budget Plan</h2>
                 <form onSubmit={handleSaveBudgetPlan} className="space-y-3.5">
+                  {budgetFormError && <p className="text-xs font-semibold text-red-600" role="alert">{budgetFormError}</p>}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Plan Name *</label>
                     <input
                       type="text"
                       required
+                      pattern=".*[A-Za-z].*"
+                      title="Enter a plan name containing text; numbers alone are not allowed."
                       placeholder="e.g. Q1 Expansion"
                       value={planNameInput}
                       onChange={(e) => setPlanNameInput(e.target.value)}
@@ -378,26 +652,38 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Project Budget / Project Name *</label>
-                    <input
-                      type="text"
+                    <select
                       required
-                      placeholder="Fkn: PMO Tower"
                       value={projectNameInput}
                       onChange={(e) => setProjectNameInput(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600 focus:bg-white"
-                    />
+                    >
+                      {projectOptions.length === 0 ? (
+                        <option value="">No projects available</option>
+                      ) : (
+                        projectOptions.map((project) => (
+                          <option key={project.id} value={project.name}>
+                            {project.name} ({project.code})
+                          </option>
+                        ))
+                      )}
+                    </select>
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Budget Categories *</label>
-                    <input
-                      type="text"
+                    <select
                       required
-                      placeholder="Fkn: Software &amp; Tools"
                       value={categoryInput}
                       onChange={(e) => setCategoryInput(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600 focus:bg-white"
-                    />
+                    >
+                      {budgetCategoryOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
@@ -405,6 +691,8 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
                     <input
                       type="number"
                       required
+                      min="0.01"
+                      step="0.01"
                       placeholder="0.00"
                       value={estimatedCostInput}
                       onChange={(e) => setEstimatedCostInput(e.target.value)}
@@ -447,6 +735,9 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
                       <th className="py-2.5 px-3">CATEGORY</th>
                       <th className="py-2.5 px-3">TIMELINE</th>
                       <th className="py-2.5 px-3 text-right">ESTIMATED COST</th>
+                      {currentPersona?.roleType !== 'PROJECT_MANAGER' && (
+                        <th className="py-2.5 px-3 text-right">ACTIONS</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -463,11 +754,179 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
                         <td className="py-3.5 px-3 text-right font-black text-slate-900">
                           ${bp.estimatedCost.toLocaleString()}
                         </td>
+                        {currentPersona?.roleType !== 'PROJECT_MANAGER' && (
+                          <td className="py-3.5 px-3 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-3 font-semibold text-xs">
+                              <button
+                                onClick={() => setEditingBudgetPlan(bp)}
+                                className="text-amber-600 hover:text-amber-800 hover:underline cursor-pointer transition-colors"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => setDeletingPlanId(bp.id)}
+                                className="text-red-600 hover:text-red-800 hover:underline cursor-pointer transition-colors"
+                              >
+                                Delete
+                              </button>
+                              {currentPersona?.roleType === 'EXECUTIVE_MANAGER' && bp.status === 'pending' && (
+                                <>
+                                  <button
+                                    onClick={() => handleBudgetApproval(bp.id, 'approved')}
+                                    className="text-emerald-600 hover:text-emerald-800 hover:underline cursor-pointer transition-colors"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    onClick={() => handleBudgetApproval(bp.id, 'rejected')}
+                                    className="text-red-600 hover:text-red-800 hover:underline cursor-pointer transition-colors"
+                                  >
+                                    Reject
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingBudgetPlan && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-5 bg-slate-900 text-white flex justify-between items-center">
+              <div>
+                <h3 className="font-extrabold text-base">Edit Budget Plan</h3>
+                <p className="text-xs text-slate-300 mt-0.5">Update the selected project budget plan.</p>
+              </div>
+              <button
+                onClick={() => setEditingBudgetPlan(null)}
+                className="text-slate-400 hover:text-white text-lg font-bold p-1 rounded-md"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateBudgetPlan} className="p-5 space-y-4 overflow-y-auto custom-scroll">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Plan Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingBudgetPlan.planName}
+                  onChange={(e) => setEditingBudgetPlan({ ...editingBudgetPlan, planName: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600 focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Project Budget / Project Name *</label>
+                <select
+                  required
+                  value={editingBudgetPlan.projectName}
+                  onChange={(e) => setEditingBudgetPlan({ ...editingBudgetPlan, projectName: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600 focus:bg-white"
+                >
+                  {projectOptions.length === 0 ? (
+                    <option value="">No projects available</option>
+                  ) : (
+                    projectOptions.map((project) => (
+                      <option key={project.id} value={project.name}>
+                        {project.name} ({project.code})
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Budget Categories *</label>
+                <select
+                  required
+                  value={editingBudgetPlan.category}
+                  onChange={(e) => setEditingBudgetPlan({ ...editingBudgetPlan, category: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600 focus:bg-white"
+                >
+                  {budgetCategoryOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Estimated Costs ($) *</label>
+                  <input
+                    type="number"
+                    required
+                    value={editingBudgetPlan.estimatedCost}
+                    onChange={(e) => setEditingBudgetPlan({ ...editingBudgetPlan, estimatedCost: Number(e.target.value) || 0 })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Budget Timeline *</label>
+                  <input
+                    type="date"
+                    required
+                    value={editingBudgetPlan.timeline}
+                    onChange={(e) => setEditingBudgetPlan({ ...editingBudgetPlan, timeline: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingBudgetPlan(null)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2.5 px-4 rounded-lg transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-[#2563eb] hover:bg-blue-700 text-white font-bold text-xs py-2.5 px-4 rounded-lg shadow-2xs transition-all cursor-pointer"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {deletingPlanId && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden">
+            <div className="p-5">
+              <h3 className="font-extrabold text-base text-slate-900">Delete Budget Plan?</h3>
+              <p className="text-xs text-slate-600 mt-2">Are you sure you want to remove this budget plan from your project planning list?</p>
+            </div>
+
+            <div className="flex justify-end gap-3 bg-slate-50 p-4 border-t border-slate-200">
+              <button
+                onClick={() => setDeletingPlanId(null)}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2.5 px-4 rounded-lg transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteBudgetPlan(deletingPlanId)}
+                className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs py-2.5 px-4 rounded-lg shadow-2xs transition-all cursor-pointer"
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>
@@ -543,38 +1002,6 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
             </div>
           )}
 
-          {/* Allocation History */}
-          <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-5 space-y-4">
-            <div>
-              <h2 className="text-base font-extrabold text-slate-900 tracking-tight">Allocation History</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Log of previous adjustments and creation records.</p>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-100 text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-                    <th className="py-2.5 px-3">Action</th>
-                    <th className="py-2.5 px-3">Project Name</th>
-                    <th className="py-2.5 px-3">Amount</th>
-                    <th className="py-2.5 px-3">Timestamp</th>
-                    <th className="py-2.5 px-3">Modified By</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {allocationHistory.map((ah) => (
-                    <tr key={ah.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3.5 px-3 text-slate-700 font-medium">{ah.action}</td>
-                      <td className="py-3.5 px-3 font-bold text-slate-900">{ah.projectName}</td>
-                      <td className="py-3.5 px-3 font-bold text-slate-900">${ah.amount.toLocaleString()}</td>
-                      <td className="py-3.5 px-3 text-slate-500 font-mono text-[11px]">{ah.timestamp}</td>
-                      <td className="py-3.5 px-3 text-slate-600 font-semibold">{ah.modifiedBy}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
         </div>
       )}
 
@@ -591,11 +1018,30 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
               <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-2xs space-y-4">
                 <h2 className="text-sm font-extrabold text-slate-900">Record New Expense</h2>
                 <form onSubmit={handleRecordExpense} className="space-y-3.5">
+                  {expenseError && <p className="text-xs font-semibold text-red-600" role="alert">{expenseError}</p>}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Project Name *</label>
+                    <select
+                      required
+                      value={expenseProjectId}
+                      onChange={(e) => setExpenseProjectId(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
+                    >
+                      <option value="">Select a project</option>
+                      {projectOptions.map((project) => (
+                        <option key={project.id} value={project.id}>
+                          {project.name} ({project.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Expense Item Name *</label>
                     <input
                       type="text"
                       required
+                      pattern=".*[A-Za-z].*"
+                      title="Enter an expense name containing text; numbers alone are not allowed."
                       placeholder="e.g. AWS Cloud Services"
                       value={expenseName}
                       onChange={(e) => setExpenseName(e.target.value)}
@@ -611,6 +1057,17 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
                       placeholder="0.00"
                       value={expenseAmount}
                       onChange={(e) => setExpenseAmount(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Expense Date *</label>
+                    <input
+                      type="date"
+                      required
+                      value={expenseDate}
+                      onChange={(e) => setExpenseDate(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
                     />
                   </div>
@@ -653,7 +1110,11 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {expenses.map((exp) => (
+                    {expenses.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-3 py-8 text-center text-xs text-slate-400">No saved expenses found.</td>
+                      </tr>
+                    ) : expenses.map((exp) => (
                       <tr key={exp.id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="py-3.5 px-3 font-bold text-slate-900">{exp.name}</td>
                         <td className="py-3.5 px-3 text-slate-600 font-medium">{exp.category}</td>
@@ -686,13 +1147,16 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
                     <th className="py-2.5 px-3">Department</th>
                     <th className="py-2.5 px-3">Status</th>
                     <th className="py-2.5 px-3 text-right">Amount</th>
+                    {currentPersona?.roleType !== 'PROJECT_MANAGER' && (
+                      <th className="py-2.5 px-3 text-right">Actions</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {pendingApprovals.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="py-6 text-center text-slate-400 font-semibold">
-                        No pending budget approval requests.
+                      <td colSpan={currentPersona?.roleType !== 'PROJECT_MANAGER' ? 5 : 4} className="py-6 text-center text-slate-400 font-semibold">
+                        No budget approval requests.
                       </td>
                     </tr>
                   ) : (
@@ -701,13 +1165,44 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
                         <td className="py-3.5 px-3 font-bold text-slate-900">{pa.requestTitle}</td>
                         <td className="py-3.5 px-3 text-slate-600">{pa.department}</td>
                         <td className="py-3.5 px-3">
-                          <span className="bg-amber-100 text-amber-800 border border-amber-200 px-2.5 py-0.5 rounded-md font-bold text-[11px]">
+                          <span className={`px-2.5 py-0.5 rounded-md font-bold text-[11px] ${pa.status === 'Approved'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : pa.status === 'Rejected'
+                              ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                              : 'bg-amber-100 text-amber-800 border border-amber-200'
+                            }`}>
                             {pa.status}
                           </span>
                         </td>
                         <td className="py-3.5 px-3 text-right font-black text-slate-900">
                           ${pa.amount.toLocaleString()}
                         </td>
+                        {currentPersona?.roleType !== 'PROJECT_MANAGER' && (
+                          <td className="py-3.5 px-3 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-3 font-semibold">
+                              {pa.status === 'Pending' ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleProjectApprovalAction(pa.id, 'Rejected')}
+                                    className="text-rose-600 hover:text-rose-800 hover:underline cursor-pointer"
+                                  >
+                                    Reject
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleProjectApprovalAction(pa.id, 'Approved')}
+                                    className="text-emerald-600 hover:text-emerald-800 hover:underline cursor-pointer"
+                                  >
+                                    Approve
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="text-slate-400">Completed</span>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))
                   )}
@@ -716,99 +1211,6 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ budgets, currentPersona 
             </div>
           </div>
 
-          {/* Review Request Section */}
-          {currentPersona?.roleType !== 'PROJECT_MANAGER' && (
-            <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-5 space-y-4">
-              <div>
-                <h2 className="text-base font-extrabold text-slate-900 tracking-tight">Review Request</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Select a pending request to approve, reject, and add review comments.</p>
-              </div>
-
-              <div className="space-y-3 pt-1">
-                <div className="flex flex-col sm:flex-row items-center gap-3">
-                  <select
-                    value={selectedRequestToReview}
-                    onChange={(e) => setSelectedRequestToReview(e.target.value)}
-                    className="w-full sm:w-72 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 outline-none focus:border-blue-600"
-                  >
-                    <option value="">Select Request to Review</option>
-                    {pendingApprovals.map((pa) => (
-                      <option key={pa.id} value={pa.requestTitle}>
-                        {pa.requestTitle} (${pa.amount.toLocaleString()})
-                      </option>
-                    ))}
-                  </select>
-
-                  <input
-                    type="text"
-                    placeholder="Add comments / reasons..."
-                    value={reviewComment}
-                    onChange={(e) => setReviewComment(e.target.value)}
-                    className="w-full sm:flex-1 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => handleDecision('Rejected')}
-                    className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs px-5 py-2.5 rounded-lg shadow-xs transition-all cursor-pointer"
-                  >
-                    Reject Request
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDecision('Approved')}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-lg shadow-2xs transition-all cursor-pointer"
-                  >
-                    Approve Request
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Approval History */}
-          <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-5 space-y-4">
-            <div>
-              <h2 className="text-base font-extrabold text-slate-900 tracking-tight">Approval History</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Log of past decisions and review notes.</p>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-100 text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-                    <th className="py-2.5 px-3">Request Title</th>
-                    <th className="py-2.5 px-3">Amount</th>
-                    <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3">Comments</th>
-                    <th className="py-2.5 px-3 text-right">Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {approvalHistory.map((aph) => (
-                    <tr key={aph.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3.5 px-3 font-bold text-slate-900">{aph.requestTitle}</td>
-                      <td className="py-3.5 px-3 font-bold text-slate-900">${aph.amount.toLocaleString()}</td>
-                      <td className="py-3.5 px-3">
-                        <span
-                          className={`px-2.5 py-0.5 rounded-md font-bold text-[11px] ${aph.status === 'Approved'
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                              : 'bg-red-100 text-red-800 border border-red-200'
-                            }`}
-                        >
-                          {aph.status}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-3 text-slate-600">{aph.comments}</td>
-                      <td className="py-3.5 px-3 text-right font-mono text-slate-500">{aph.date}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
         </div>
       )}
 

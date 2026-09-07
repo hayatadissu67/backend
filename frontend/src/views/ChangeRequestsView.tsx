@@ -4,11 +4,11 @@ import { ChangeRequestItem, Project } from '../types';
 interface ChangeRequestsViewProps {
   changeRequests?: ChangeRequestItem[];
   projects?: Project[];
-  onAddChangeRequest?: (request: Partial<ChangeRequestItem>) => void;
-  onUpdateChangeRequest?: (updated: ChangeRequestItem) => void;
+  onAddChangeRequest?: (request: Partial<ChangeRequestItem>) => Promise<void>;
+  onUpdateChangeRequest?: (updated: ChangeRequestItem) => Promise<void>;
   onDeleteChangeRequest?: (id: string) => void;
-  onApproveChangeRequest?: (id: string) => void;
-  onRejectChangeRequest?: (id: string, reason: string) => void;
+  onApproveChangeRequest?: (id: string) => Promise<void>;
+  onRejectChangeRequest?: (id: string, reason: string) => Promise<void>;
   currentPersona?: any;
 }
 
@@ -22,6 +22,12 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
   onRejectChangeRequest,
   currentPersona
 }) => {
+  const normalizedRole = String(currentPersona?.roleType || '').toUpperCase().replace(/\s+/g, '_');
+  const isTeamMember = normalizedRole === 'TEAM_MEMBER';
+  const isExecutiveManager = normalizedRole === 'EXECUTIVE_MANAGER';
+  const changeRequestTypes = isTeamMember
+    ? ['Performance', 'Scope Extension']
+    : ['Budget Increase', 'Reallocation', 'Compliance', 'Performance', 'Scope Extension'];
   // Local state initialized with props or default mock data
   const [localRequests, setLocalRequests] = useState<ChangeRequestItem[]>(propChangeRequests || []);
   const [searchTerm, setSearchTerm] = useState('');
@@ -33,16 +39,25 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
   const [editingRequest, setEditingRequest] = useState<ChangeRequestItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  const standardCategoryOptions = [
+    'Infrastructure',
+    'Software & Tools',
+    'Human Resources',
+    'Design',
+    'Operations',
+  ];
+
   // Form State for New Change Request
   const [newTitle, setNewTitle] = useState('');
   const [newProjectId, setNewProjectId] = useState(projects[0]?.id || '');
   const [newCategory, setNewCategory] = useState('Infrastructure');
   const [newDate, setNewDate] = useState(new Date().toISOString().split('T')[0]);
-  const [newType, setNewType] = useState('Budget Increase');
-  const [newAmount, setNewAmount] = useState('$5,000');
+  const [newType, setNewType] = useState(isTeamMember ? 'Performance' : 'Budget Increase');
+  const [newAmount, setNewAmount] = useState('5000');
   const [newPriority, setNewPriority] = useState<'High' | 'Medium' | 'Critical' | 'Low'>('High');
   const [newRequestedBy, setNewRequestedBy] = useState('Sarah Jenkins');
   const [newDescription, setNewDescription] = useState('');
+  const [newRequestFormError, setNewRequestFormError] = useState('');
 
   // Sync if prop updates
   React.useEffect(() => {
@@ -51,6 +66,18 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
     }
   }, [propChangeRequests]);
 
+  React.useEffect(() => {
+    if (projects.length > 0 && !newProjectId) {
+      setNewProjectId(projects[0].id);
+    }
+  }, [projects, newProjectId]);
+
+  React.useEffect(() => {
+    if (!changeRequestTypes.includes(newType)) {
+      setNewType(changeRequestTypes[0]);
+    }
+  }, [changeRequestTypes, newType]);
+
   const requestsToDisplay = localRequests.length > 0 ? localRequests : propChangeRequests || [];
 
   // If team member, only show requests related to their assigned projects or those they requested
@@ -58,7 +85,10 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
     ? requestsToDisplay.filter(r => {
         const projCode = projects?.find(p => p.id?.toString() === r.projectId?.toString() || p.name === r.project)?.code;
         const assigned = currentPersona?.assignedProjectCodes || [];
-        return (projCode && assigned.includes(projCode)) || r.requestedBy === currentPersona?.name || r.requestedBy === currentPersona?.email;
+        return (projCode && assigned.includes(projCode))
+          || String(r.requestedBy) === String(currentPersona?.id)
+          || r.requestedBy === currentPersona?.name
+          || r.requestedBy === currentPersona?.email;
       })
     : requestsToDisplay;
 
@@ -78,9 +108,18 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
   });
 
   // Handle Add New Change Request
-  const handleCreateNew = (e: React.FormEvent) => {
+  const handleCreateNew = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim()) return;
+    const numericAmount = Number(newAmount.replace(/[$,\s]/g, ''));
+    if (!newTitle.trim() || !newDescription.trim() || !newProjectId) {
+      setNewRequestFormError('Complete the title, project, and description fields.');
+      return;
+    }
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      setNewRequestFormError('Amount must be a valid positive number.');
+      return;
+    }
+    setNewRequestFormError('');
 
     // We pass projectId to backend.
     const newReq: any = {
@@ -89,15 +128,20 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
       category: newCategory,
       date: newDate,
       type: newType,
-      amount: newAmount.startsWith('$') ? newAmount : `$${newAmount}`,
+      amount: numericAmount,
       priority: newPriority,
-      requestedBy: newRequestedBy,
-      description: newDescription || 'Standard PMO change request submitted for executive governance review.',
+      requestedBy: currentPersona?.id || newRequestedBy,
+      description: newDescription.trim(),
       status: 'PENDING'
     };
 
     if (onAddChangeRequest) {
-      onAddChangeRequest(newReq);
+      try {
+        await onAddChangeRequest(newReq);
+      } catch (error: any) {
+        setNewRequestFormError(error.message || 'Failed to save change request.');
+        return;
+      }
     } else {
       setLocalRequests((prev) => [newReq, ...prev]);
     }
@@ -109,41 +153,60 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
   };
 
   // Handle Update Status directly
-  const handleApprove = (req: ChangeRequestItem) => {
-    if (onApproveChangeRequest) {
-      onApproveChangeRequest(req.id);
+  const handleApprove = async (req: ChangeRequestItem) => {
+    if (String(req.status).toUpperCase() !== 'PENDING' || !onApproveChangeRequest) return;
+    try {
+      await onApproveChangeRequest(req.id);
+      setViewingRequest(null);
+    } catch (error: any) {
+      alert(error.message || 'Failed to approve change request.');
     }
-    setViewingRequest(null);
   };
 
-  const handleReject = (req: ChangeRequestItem) => {
+  const handleReject = async (req: ChangeRequestItem) => {
+    if (String(req.status).toUpperCase() !== 'PENDING' || !onRejectChangeRequest) return;
     const reason = prompt("Enter rejection reason:") || "Not specified";
-    if (onRejectChangeRequest) {
-      onRejectChangeRequest(req.id, reason);
+    try {
+      await onRejectChangeRequest(req.id, reason);
+      setViewingRequest(null);
+    } catch (error: any) {
+      alert(error.message || 'Failed to reject change request.');
     }
-    setViewingRequest(null);
   };
 
   // Handle Edit Submit
-  const handleEditSubmit = (e: React.FormEvent) => {
+  const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRequest) return;
 
+    const numericAmount = Number(String(editingRequest.amount ?? '').replace(/[$,\s]/g, ''));
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      alert('Amount must be a valid positive number.');
+      return;
+    }
+
+    const requestToUpdate = { ...editingRequest, amount: String(numericAmount) };
+
     if (onUpdateChangeRequest) {
-      onUpdateChangeRequest(editingRequest);
+      try {
+        await onUpdateChangeRequest(requestToUpdate);
+      } catch (error: any) {
+        alert(error.message || 'Failed to update change request.');
+        return;
+      }
     } else {
-      setLocalRequests((prev) => prev.map((r) => (r.id === editingRequest.id ? editingRequest : r)));
+      setLocalRequests((prev) => prev.map((r) => (r.id === editingRequest.id ? requestToUpdate : r)));
     }
 
     setEditingRequest(null);
   };
 
   // Handle Delete
-  const ConfirmDelete = (id: string) => {
+  const ConfirmDelete = async (id: string) => {
     if (onDeleteChangeRequest) {
-      onDeleteChangeRequest(id);
+      await onDeleteChangeRequest(id);
     } else {
-      setLocalRequests((prev) => prev.filter((r) => r.id !== id));
+      setLocalRequests((prev) => prev.filter((r) => String(r.id) !== String(id)));
     }
     setDeletingId(null);
   };
@@ -324,8 +387,8 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
                         >
                           View
                         </button>
-                        {/* Only allow edit/delete for non-team members (PMs/Execs) */}
-                        {currentPersona?.roleType !== 'TEAM_MEMBER' && (
+                        {/* Reviewed requests are read-only for Team Members. */}
+                        {(isExecutiveManager || String(req.status).toUpperCase() === 'PENDING') && (
                           <>
                             <button
                               onClick={() => setEditingRequest(req)}
@@ -339,6 +402,22 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
                             >
                               Delete
                             </button>
+                            {isExecutiveManager && String(req.status).toUpperCase() === 'PENDING' && (
+                              <>
+                                <button
+                                  onClick={() => handleApprove(req)}
+                                  className="text-emerald-600 hover:text-emerald-800 hover:underline cursor-pointer transition-colors"
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => handleReject(req)}
+                                  className="text-red-600 hover:text-red-800 hover:underline cursor-pointer transition-colors"
+                                >
+                                  Reject
+                                </button>
+                              </>
+                            )}
                           </>
                         )}
                       </div>
@@ -374,6 +453,7 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
             </div>
 
             <form onSubmit={handleCreateNew} className="p-5 space-y-4 overflow-y-auto flex-1 custom-scroll">
+              {newRequestFormError && <p className="text-xs font-semibold text-red-600" role="alert">{newRequestFormError}</p>}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Change Request Title <span className="text-red-500">*</span>
@@ -411,13 +491,11 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
                     onChange={(e) => setNewCategory(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
                   >
-                    <option value="Infrastructure">Infrastructure</option>
-                    <option value="Design">Design</option>
-                    <option value="Security">Security</option>
-                    <option value="Backend">Backend</option>
-                    <option value="Frontend">Frontend</option>
-                    <option value="Hardware">Hardware</option>
-                    <option value="Operations">Operations</option>
+                    {standardCategoryOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -430,18 +508,20 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
                     onChange={(e) => setNewType(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
                   >
-                    <option value="Budget Increase">Budget Increase</option>
-                    <option value="Reallocation">Reallocation</option>
-                    <option value="Compliance">Compliance</option>
-                    <option value="Performance">Performance</option>
-                    <option value="Scope Extension">Scope Extension</option>
+                    {changeRequestTypes.map((requestType) => (
+                      <option key={requestType} value={requestType}>
+                        {requestType}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Amount ($)</label>
                   <input
-                    type="text"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
                     value={newAmount}
                     onChange={(e) => setNewAmount(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
@@ -489,6 +569,7 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
                 <label className="block text-xs font-bold text-slate-700 mb-1">Justification / Details</label>
                 <textarea
                   rows={3}
+                  required
                   value={newDescription}
                   onChange={(e) => setNewDescription(e.target.value)}
                   placeholder="Describe why this change request is required and its expected business impact..."
@@ -659,21 +740,39 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Project</label>
-                  <input
-                    type="text"
-                    value={editingRequest.project}
-                    onChange={(e) => setEditingRequest({ ...editingRequest, project: e.target.value })}
+                  <select
+                    value={editingRequest.projectId || ''}
+                    onChange={(e) => {
+                      const selected = projects.find(p => p.id === e.target.value);
+                      setEditingRequest({
+                        ...editingRequest,
+                        projectId: e.target.value,
+                        project: selected?.name || '',
+                      });
+                    }}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
-                  />
+                  >
+                    <option value="">Select a project</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.code})
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Category</label>
-                  <input
-                    type="text"
+                  <select
                     value={editingRequest.category}
                     onChange={(e) => setEditingRequest({ ...editingRequest, category: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
-                  />
+                  >
+                    {standardCategoryOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -681,8 +780,10 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Amount</label>
                   <input
-                    type="text"
-                    value={editingRequest.amount}
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={String(editingRequest.amount ?? '').replace(/[$,\s]/g, '')}
                     onChange={(e) => setEditingRequest({ ...editingRequest, amount: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
                   />
@@ -700,18 +801,20 @@ export const ChangeRequestsView: React.FC<ChangeRequestsViewProps> = ({
                     <option value="Low">Low</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Status</label>
-                  <select
-                    value={editingRequest.status}
-                    onChange={(e) => setEditingRequest({ ...editingRequest, status: e.target.value as any })}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
-                  >
-                    <option value="Pending">Pending</option>
-                    <option value="Approved">Approved</option>
-                    <option value="Rejected">Rejected</option>
-                  </select>
-                </div>
+                {currentPersona?.roleType === 'EXECUTIVE_MANAGER' && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Status</label>
+                    <select
+                      value={editingRequest.status}
+                      onChange={(e) => setEditingRequest({ ...editingRequest, status: e.target.value as any })}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs outline-none focus:border-blue-600"
+                    >
+                      <option value="PENDING">Pending</option>
+                      <option value="APPROVED">Approved</option>
+                      <option value="REJECTED">Rejected</option>
+                    </select>
+                  </div>
+                )}
               </div>
 
               <div>

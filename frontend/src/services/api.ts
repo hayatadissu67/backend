@@ -192,6 +192,16 @@ export const fetchProjectsFromApi = async (): Promise<Project[] | null> => {
   }
 };
 
+export const fetchProjectOptionsFromApi = async (): Promise<Project[] | null> => {
+  try {
+    const res = await api.get('/projects/options');
+    return res.data?.success && Array.isArray(res.data.data) ? res.data.data : [];
+  } catch (err) {
+    console.warn('Failed to fetch project options from API:', err);
+    return null;
+  }
+};
+
 export const createProjectApi = async (projectData: Partial<Project>): Promise<Project | null> => {
   try {
     const res = await api.post('/projects', projectData);
@@ -483,6 +493,114 @@ export const fetchBudgetsFromApi = async (): Promise<BudgetItem[] | null> => {
   }
 };
 
+export interface BudgetOverview {
+  totalBudget: number;
+  totalExpense: number;
+}
+
+export const fetchBudgetOverviewFromApi = async (): Promise<BudgetOverview | null> => {
+  try {
+    const res = await api.get('/budgets/overview');
+    return res.data?.success ? res.data.data : null;
+  } catch (err) {
+    console.warn('Failed to fetch budget overview from API:', err);
+    return null;
+  }
+};
+
+export const createBudgetApi = async (budgetData: Partial<BudgetItem> & {
+  projectId?: string | number | null;
+  projectName?: string;
+  planName?: string;
+  category?: string;
+  timeline?: string;
+  amount?: number | string;
+  description?: string;
+  status?: string;
+}): Promise<any | null> => {
+  try {
+    const res = await api.post('/budgets', budgetData);
+    return res.data?.success ? res.data.data : null;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to create budget plan.';
+    throw new Error(message);
+  }
+};
+
+export const updateBudgetApi = async (id: string | number, budgetData: Partial<BudgetItem> & {
+  projectId?: string | number | null;
+  projectName?: string;
+  planName?: string;
+  category?: string;
+  timeline?: string;
+  amount?: number | string;
+  description?: string;
+  status?: string;
+}): Promise<any | null> => {
+  try {
+    const res = await api.put(`/budgets/${id}`, budgetData);
+    return res.data?.success ? res.data.data : null;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to update budget plan.';
+    throw new Error(message);
+  }
+};
+
+export const deleteBudgetApi = async (id: string | number): Promise<boolean> => {
+  try {
+    const res = await api.delete(`/budgets/${id}`);
+    return !!res.data?.success;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to delete budget plan.';
+    throw new Error(message);
+  }
+};
+
+export const approveBudgetApi = async (id: string): Promise<any | null> => {
+  const res = await api.patch(`/budgets/${id}/approve`);
+  return res.data?.success ? res.data.data : null;
+};
+
+export const rejectBudgetApi = async (id: string): Promise<any | null> => {
+  const res = await api.patch(`/budgets/${id}/reject`);
+  return res.data?.success ? res.data.data : null;
+};
+
+export const fetchAllocationsFromApi = async (): Promise<any[] | null> => {
+  try {
+    const res = await api.get('/allocations');
+    return res.data?.success && Array.isArray(res.data.data) ? res.data.data : [];
+  } catch (err) {
+    console.warn('Failed to fetch allocations from API:', err);
+    return null;
+  }
+};
+
+export const updateAllocationApi = async (id: string, amount: number): Promise<any | null> => {
+  try {
+    const res = await api.patch(`/allocations/${id}`, { amount });
+    return res.data?.success ? res.data.data : null;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to update allocation.';
+    throw new Error(message);
+  }
+};
+
+export const fetchExpensesFromApi = async (): Promise<any[] | null> => {
+  try {
+    const res = await api.get('/expenses');
+    return res.data?.success && Array.isArray(res.data.data) ? res.data.data : [];
+  } catch (err) {
+    console.warn('Failed to fetch expenses from API:', err);
+    return null;
+  }
+};
+
+export const createExpenseApi = async (data: Record<string, unknown>): Promise<any | null> => {
+  const res = await api.post('/expenses', data);
+  return res.data?.success ? res.data.data : null;
+};
+
 // --- Change Requests API ---
 export const fetchChangeRequestsFromApi = async (): Promise<ChangeRequestItem[] | null> => {
   try {
@@ -498,9 +616,9 @@ export const createChangeRequestApi = async (data: Partial<ChangeRequestItem>): 
   try {
     const res = await api.post('/change-requests', data);
     return res.data?.success ? res.data.data : null;
-  } catch (err) {
-    console.warn('Failed to create change request via API:', err);
-    return null;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to create change request.';
+    throw new Error(message);
   }
 };
 
@@ -508,9 +626,9 @@ export const updateChangeRequestApi = async (id: string, data: Partial<ChangeReq
   try {
     const res = await api.put(`/change-requests/${id}`, data);
     return res.data?.success ? res.data.data : null;
-  } catch (err) {
-    console.warn('Failed to update change request via API:', err);
-    return null;
+  } catch (err: any) {
+    const message = err.response?.data?.message || err.message || 'Failed to update change request.';
+    throw new Error(message);
   }
 };
 
