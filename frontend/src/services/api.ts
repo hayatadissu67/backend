@@ -29,11 +29,12 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (
-      [401, 403].includes(error.response?.status) &&
+      error.response?.status === 401 &&
       !error.config.url?.includes('/auth/login')
     ) {
       // Force a fresh login when an old/invalid token causes repeated auth failures.
       sessionStorage.removeItem('token');
+      window.dispatchEvent(new Event('auth-expired'));
     }
     return Promise.reject(error);
   }
@@ -670,6 +671,16 @@ export const createMessageApi = async (messageData: any) => {
   }
 };
 
+export const updateMessageApi = async (id: string, updates: any) => {
+  try {
+    const res = await api.patch(`/communication/messages/${id}`, updates);
+    return res.data?.success ? res.data.data : null;
+  } catch (err) {
+    console.error('API Error updating message:', err);
+    return null;
+  }
+};
+
 export const fetchDiscussionsApi = async () => {
   try {
     const res = await api.get('/communication/discussions');
@@ -718,6 +729,22 @@ export const deleteDocumentApi = async (id: string) => {
     return res.data?.success;
   } catch (err) {
     console.error('API Error deleting document:', err);
+    return false;
+  }
+};
+
+export const downloadDocumentApi = async (id: string, fileName: string) => {
+  try {
+    const res = await api.get(`/communication/documents/${id}/download`, { responseType: 'blob' });
+    const url = URL.createObjectURL(res.data);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+    return true;
+  } catch (err) {
+    console.error('API Error downloading document:', err);
     return false;
   }
 };

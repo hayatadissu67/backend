@@ -25,7 +25,7 @@ async function getCurrentUser(req, res) {
   const role = safeUser.roleId
     ? await Role.findByPk(safeUser.roleId, { attributes: ['id', 'code', 'name'] })
     : null;
-  return res.json({ success: true, user: { ...safeUser, role: role ? role.code : null } });
+  return res.json({ success: true, user: { ...safeUser, role: role ? role.code : safeUser.role || null } });
 }
 
 export { register, login, getCurrentUser };

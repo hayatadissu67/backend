@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { DiscussionItem, MeetingItem, NotificationItem, LoggedInPersona, Project, UserItem } from '../types';
-import { fetchChannelsApi, createChannelApi, fetchMessagesApi, createMessageApi, fetchDocumentsApi, createDocumentApi, deleteDocumentApi } from '../services/api';
+import { fetchChannelsApi, createChannelApi, fetchMessagesApi, createMessageApi, updateMessageApi, fetchDocumentsApi, createDocumentApi, deleteDocumentApi, downloadDocumentApi } from '../services/api';
 
 export interface DocumentFileItem {
   id: string;
@@ -296,6 +296,7 @@ interface CommunicationViewProps {
   meetings: MeetingItem[];
   onAddMeeting: (meeting: MeetingItem) => void;
   notifications: NotificationItem[];
+  searchQuery?: string;
   onMarkAllNotificationsRead: () => void;
   onClearNotifications: () => void;
   activeSubTab?: 'discussions' | 'chat' | 'calendar' | 'notifications' | 'files';
@@ -311,6 +312,7 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
   meetings,
   onAddMeeting,
   notifications,
+  searchQuery = '',
   onMarkAllNotificationsRead,
   onClearNotifications,
   activeSubTab = 'discussions',
@@ -331,6 +333,13 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
 
   // Toast Notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [, setRelativeTimeTick] = useState(0);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setRelativeTimeTick((tick) => tick + 1), 60000);
+    return () => window.clearInterval(interval);
+  }, []);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
@@ -342,6 +351,8 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   useEffect(() => {
+    if (!sessionStorage.getItem('token')) return undefined;
+
     const loadChatData = async () => {
       const [apiChannels, apiMessages] = await Promise.all([
         fetchChannelsApi(),
@@ -435,7 +446,7 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
     }
   }, [projects]);
 
-  const activeChannel = channels.find((c) => c.id === activeChannelId) || channels[0];
+  const activeChannel = channels.find((c) => c.id === activeChannelId) || channels[0] || INITIAL_CHANNELS[0];
 
   // Handler to create custom channel for any project
   const handleCreateNewChannel = (e: React.FormEvent) => {
@@ -453,7 +464,11 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
     };
 
     setChannels((prev) => [...prev, createdChan]);
-    createChannelApi(createdChan);
+    createChannelApi(createdChan).then((saved) => {
+      if (saved) {
+        setChannels((prev) => prev.map((channel) => channel.id === createdChan.id ? { ...createdChan, ...saved } : channel));
+      }
+    });
     
     setActiveChannelId(createdChan.id);
     setIsCreateChannelOpen(false);
@@ -469,13 +484,15 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
     e.preventDefault();
     if (!chatInput.trim()) return;
 
+    const channelId = activeChannelId || activeChannel.id;
+
     const currentSender = currentPersona ? currentPersona.name : 'Sarah Jenkins';
     const currentRole = currentPersona ? currentPersona.roleTitle : 'PMO Executive Director';
     const currentAvatar = currentPersona?.avatar || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150';
 
     const newMsg: ChatMessage = {
       id: `m-${Date.now()}`,
-      channelId: activeChannelId,
+      channelId,
       sender: currentSender,
       senderRole: currentRole,
       avatar: currentAvatar,
@@ -493,7 +510,9 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
     };
 
     setChatMessages((prev) => [...prev, newMsg]);
-    createMessageApi(newMsg);
+    createMessageApi(newMsg).then((saved) => {
+      if (saved) setChatMessages((prev) => prev.map((message) => message.id === newMsg.id ? saved : message));
+    });
 
     const sentText = chatInput;
     setChatInput('');
@@ -521,41 +540,38 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
     };
 
     setChatMessages((prev) => [...prev, voiceMsg]);
-    createMessageApi(voiceMsg);
+    createMessageApi(voiceMsg).then((saved) => {
+      if (saved) setChatMessages((prev) => prev.map((message) => message.id === voiceMsg.id ? saved : message));
+    });
 
     showToast('Recorded and sent Telegram voice note (0:18)');
   };
 
-  const handleAddReaction = (msgId: string, emoji: string) => {
-    setChatMessages((prev) =>
-      prev.map((m) => {
-        if (m.id !== msgId) return m;
-        const currentReactions = m.reactions ? [...m.reactions] : [];
-        const existing = currentReactions.find((r) => r.emoji === emoji);
-        const userName = currentPersona ? currentPersona.name : 'Sarah Jenkins';
-
-        if (existing) {
-          existing.count += 1;
-          if (!existing.users.includes(userName)) existing.users.push(userName);
-        } else {
-          currentReactions.push({ emoji, count: 1, users: [userName] });
-        }
-        return { ...m, reactions: currentReactions };
-      })
-    );
+  const handleAddReaction = async (msgId: string, emoji: string) => {
+    const existingMessage = chatMessages.find((message) => message.id === msgId);
+    if (!existingMessage) return;
+    const reactions = existingMessage.reactions ? existingMessage.reactions.map((reaction) => ({ ...reaction, users: [...reaction.users] })) : [];
+    const existingReaction = reactions.find((reaction) => reaction.emoji === emoji);
+    const userName = currentPersona ? currentPersona.name : 'Sarah Jenkins';
+    if (existingReaction) {
+      existingReaction.count += 1;
+      if (!existingReaction.users.includes(userName)) existingReaction.users.push(userName);
+    } else {
+      reactions.push({ emoji, count: 1, users: [userName] });
+    }
+    setChatMessages((prev) => prev.map((message) => message.id === msgId ? { ...message, reactions } : message));
+    const message = await updateMessageApi(msgId, { reactions });
+    if (message) setChatMessages((prev) => prev.map((item) => item.id === msgId ? message : item));
   };
 
-  const handleTogglePin = (msgId: string) => {
-    setChatMessages((prev) =>
-      prev.map((m) => {
-        if (m.id === msgId) {
-          const pinned = !m.isPinned;
-          showToast(pinned ? 'Pinned message to chat header' : 'Unpinned message');
-          return { ...m, isPinned: pinned };
-        }
-        return m;
-      })
-    );
+  const handleTogglePin = async (msgId: string) => {
+    const existingMessage = chatMessages.find((message) => message.id === msgId);
+    if (!existingMessage) return;
+    const pinned = !existingMessage.isPinned;
+    setChatMessages((prev) => prev.map((message) => message.id === msgId ? { ...message, isPinned: pinned } : message));
+    showToast(pinned ? 'Pinned message to chat header' : 'Unpinned message');
+    const message = await updateMessageApi(msgId, { isPinned: pinned });
+    if (message) setChatMessages((prev) => prev.map((item) => item.id === msgId ? message : item));
   };
 
   const handleExtractChatNotes = () => {
@@ -650,7 +666,8 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
       content: newDiscussionContent,
       timestamp: 'Just now',
       repliesCount: 0,
-      projectTag: discussionProjectTag
+      projectTag: discussionProjectTag,
+      createdAt: new Date().toISOString()
     };
 
     onAddDiscussion(item);
@@ -658,9 +675,37 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
     showToast('Posted executive bulletin to communication feed.');
   };
 
+  const handleShareDiscussion = async (discussion: DiscussionItem) => {
+    try {
+      await navigator.clipboard.writeText(`${discussion.author}: ${discussion.content}`);
+      showToast('Discussion copied to clipboard');
+    } catch {
+      showToast('Clipboard access is unavailable in this browser');
+    }
+  };
+
   const filteredDiscussions = discussions.filter(
-    (d) => discussionTagFilter === 'ALL' || d.projectTag === discussionTagFilter
+    (d) => {
+      const query = searchQuery.trim().toLowerCase();
+      const matchesProject = discussionTagFilter === 'ALL' || d.projectTag === discussionTagFilter;
+      const matchesSearch = !query || [d.author, d.role, d.content, d.projectTag]
+        .some((value) => String(value || '').toLowerCase().includes(query));
+      return matchesProject && matchesSearch;
+    }
   );
+
+  const formatRelativeTime = (timestamp: string, createdAt?: string) => {
+    const date = createdAt ? new Date(createdAt) : new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return timestamp;
+    const elapsedSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+    if (elapsedSeconds < 60) return 'Just now';
+    const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+    if (elapsedMinutes < 60) return `${elapsedMinutes} min ago`;
+    const elapsedHours = Math.floor(elapsedMinutes / 60);
+    if (elapsedHours < 24) return `${elapsedHours} hr${elapsedHours === 1 ? '' : 's'} ago`;
+    const elapsedDays = Math.floor(elapsedHours / 24);
+    return `${elapsedDays} day${elapsedDays === 1 ? '' : 's'} ago`;
+  };
 
   // --- CALENDAR MODULE STATE ---
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -701,6 +746,16 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
     showToast(`Scheduled governance meeting: "${newM.title}"`);
   };
 
+  const handleGenerateMeetingMinutes = async (meeting: MeetingItem) => {
+    const minutes = `Meeting: ${meeting.title}\nDate: ${meeting.date}\nTime: ${meeting.time}\nLocation: ${meeting.location}\nAttendees: ${meeting.attendees.join(', ')}\n\nAgenda:\n${meeting.agenda}`;
+    try {
+      await navigator.clipboard.writeText(minutes);
+      showToast(`Meeting minutes copied for "${meeting.title}"`);
+    } catch {
+      showToast('Meeting minutes generated, but clipboard access is unavailable');
+    }
+  };
+
   // --- NOTIFICATIONS MODULE STATE ---
   const [notificationFilter, setNotificationFilter] = useState<'all' | 'unread' | 'alert'>('all');
 
@@ -717,6 +772,7 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
   const [documentSearch, setDocumentSearch] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const chatAttachmentInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const loadDocs = async () => {
@@ -758,6 +814,13 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
     }
 
     showToast(`Successfully uploaded ${files.length} document(s) to Communication Vault.`);
+  };
+
+  const handleChatAttachment = async (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    await handleFileUpload(files);
+    showToast(`Uploaded ${file.name} to the Communication Vault`);
   };
 
   const handleDeleteDocument = async (id: string) => {
@@ -965,7 +1028,7 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
                     />
                     <div>
                       <h4 className="font-bold text-slate-900 text-xs">{item.author}</h4>
-                      <p className="text-[10px] text-slate-500 font-medium">{item.role} • {item.timestamp}</p>
+                      <p className="text-[10px] text-slate-500 font-medium">{item.role} • {formatRelativeTime(item.timestamp, item.createdAt)}</p>
                     </div>
                   </div>
 
@@ -978,14 +1041,18 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
 
                 <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-[11px] text-slate-500">
                   <button
-                    onClick={() => showToast(`Replying to thread by ${item.author}`)}
+                    onClick={() => {
+                      setSubTab('discussions');
+                      showToast(`Replying to thread by ${item.author}. Add your response above.`);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
                     className="flex items-center gap-1 font-semibold hover:text-blue-600 transition-colors"
                   >
                     <span className="material-symbols-outlined text-[16px]">reply</span>
                     {item.repliesCount} Responses
                   </button>
                   <button
-                    onClick={() => showToast('Discussion thread link copied to clipboard!')}
+                    onClick={() => handleShareDiscussion(item)}
                     className="hover:text-slate-800 transition-colors flex items-center gap-1"
                   >
                     <span className="material-symbols-outlined text-[14px]">link</span>
@@ -1550,12 +1617,18 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
                     </label>
                     <button
                       type="button"
-                      onClick={() => showToast('File attachment picker opened (Images, Logs, Documents)')}
+                      onClick={() => chatAttachmentInputRef.current?.click()}
                       className="hover:text-blue-600 flex items-center gap-0.5 font-medium"
                     >
                       <span className="material-symbols-outlined text-[14px]">attach_file</span>
                       <span>Attach Media</span>
                     </button>
+                    <input
+                      ref={chatAttachmentInputRef}
+                      type="file"
+                      className="hidden"
+                      onChange={(event) => handleChatAttachment(event.target.files)}
+                    />
                   </div>
                   <span className="text-[10px] text-slate-400">Shift+Enter for newline</span>
                 </div>
@@ -1796,7 +1869,7 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
                   </div>
 
                   <button
-                    onClick={() => showToast(`Generated AI summary for "${m.title}"`)}
+                    onClick={() => handleGenerateMeetingMinutes(m)}
                     className="px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border border-indigo-200 font-bold text-xs rounded-xs flex items-center gap-1 transition-colors"
                   >
                     <span className="material-symbols-outlined text-[16px] text-amber-500">auto_awesome</span>
@@ -2132,7 +2205,10 @@ export const CommunicationView: React.FC<CommunicationViewProps> = ({
                     <td className="px-6 py-4 text-slate-700 font-medium">{d.author}</td>
                     <td className="px-6 py-4 text-right flex justify-end gap-2">
                       <button
-                        onClick={() => showToast(`Downloading document: ${d.title}`)}
+                        onClick={async () => {
+                          const downloaded = await downloadDocumentApi(d.id, d.title);
+                          showToast(downloaded ? `Downloaded document: ${d.title}` : `Failed to download ${d.title}`);
+                        }}
                         className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[10px] rounded-xs uppercase tracking-wider inline-flex items-center gap-1 transition-colors"
                       >
                         <span className="material-symbols-outlined text-[14px]">download</span>

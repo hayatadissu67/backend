@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import User from "../models/userModel.js";
 import Role from "../models/roleModel.js";
+import { getDemoAccountById } from "../services/authService.js";
 
 export const protect = async (req, res, next) => {
   let token;
@@ -26,15 +27,25 @@ export const protect = async (req, res, next) => {
     const decoded = jwt.verify(token, secret);
 
     // Find user from token
-    const user = await User.findByPk(decoded.id, {
-      attributes: { exclude: ["password"] },
-    });
+    let user;
+    try {
+      user = await User.findByPk(decoded.id, {
+        attributes: { exclude: ["password"] },
+      });
+    } catch (databaseError) {
+      user = null;
+    }
 
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "User not found",
-      });
+      const demoUser = getDemoAccountById(decoded.id);
+      if (!demoUser) {
+        return res.status(401).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+      req.user = demoUser;
+      return next();
     }
 
     // Load role separately to avoid eager-loading association issues

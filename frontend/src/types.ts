@@ -340,6 +340,7 @@ export interface DiscussionItem {
   timestamp: string;
   repliesCount: number;
   projectTag: string;
+  createdAt?: string;
 }
 
 export interface NotificationItem {

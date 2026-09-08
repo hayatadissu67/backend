@@ -23,7 +23,10 @@ import {
   fetchReportsApi,
   fetchTemplatesApi,
   createDiscussionApi,
+  fetchDiscussionsApi,
   createMeetingApi,
+  fetchMeetingsApi,
+  fetchNotificationsApi,
   markNotificationsReadApi,
   clearNotificationsApi,
   fetchUsersFromApi,
@@ -186,6 +189,17 @@ export default function App() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      clearAuthData();
+      setCurrentUser(null);
+      setAuthStatus('unauthenticated');
+    };
+
+    window.addEventListener('auth-expired', handleAuthExpired);
+    return () => window.removeEventListener('auth-expired', handleAuthExpired);
   }, []);
 
   // Sync navigation with browser back/forward buttons via hash
@@ -519,6 +533,21 @@ export default function App() {
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [templates, setTemplates] = useState<ReportTemplate[]>([]);
 
+  useEffect(() => {
+    if (!currentUser) return;
+    const loadCommunication = async () => {
+      const [savedDiscussions, savedMeetings, savedNotifications] = await Promise.all([
+        fetchDiscussionsApi(),
+        fetchMeetingsApi(),
+        fetchNotificationsApi(),
+      ]);
+      if (savedDiscussions.length > 0) setDiscussions(savedDiscussions);
+      if (savedMeetings.length > 0) setMeetings(savedMeetings);
+      if (savedNotifications.length > 0) setNotifications(savedNotifications);
+    };
+    loadCommunication();
+  }, [currentUser]);
+
   const handleAddChangeRequest = async (request: Partial<ChangeRequestItem>) => {
     const created = await createChangeRequestApi(request);
     if (created) {
@@ -811,9 +840,12 @@ export default function App() {
     setActivities((prev) => [act, ...prev]);
   };
 
-  const handleAddDiscussion = (newDiscussion: DiscussionItem) => {
-    setDiscussions([newDiscussion, ...discussions]);
-    createDiscussionApi(newDiscussion);
+  const handleAddDiscussion = async (newDiscussion: DiscussionItem) => {
+    setDiscussions((prev) => [newDiscussion, ...prev]);
+    const saved = await createDiscussionApi(newDiscussion);
+    if (saved) {
+      setDiscussions((prev) => prev.map((discussion) => discussion.id === newDiscussion.id ? saved : discussion));
+    }
   };
 
   const handleMarkAllNotificationsRead = () => {
@@ -998,6 +1030,8 @@ export default function App() {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         unreadNotificationsCount={unreadNotificationsCount}
+        notificationsList={notifications}
+        onMarkNotificationsRead={handleMarkAllNotificationsRead}
         onOpenNewProject={() => setIsNewProjectOpen(true)}
         onOpenUserProfile={() => handleOpenUserProfile()}
         onLogout={handleLogout}
@@ -1179,6 +1213,7 @@ export default function App() {
                 meetings={meetings}
                 onAddMeeting={handleAddMeeting}
                 notifications={notifications}
+                searchQuery={searchQuery}
                 onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
                 onClearNotifications={handleClearNotifications}
                 activeSubTab={

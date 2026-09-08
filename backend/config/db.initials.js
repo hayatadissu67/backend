@@ -5,6 +5,9 @@ import "../models/changeRequestModel.js";
 
 import "../models/taskModel.js";
 import "../models/notificationModel.js";
+import "../models/portfolioModel.js";
+import "../models/reportModel.js";
+import "../models/templateModel.js";
 import Risk from "../models/riskModel.js";
 import User from "../models/userModel.js";
 import ProjectTeam from "../models/projectModel/ProjectTeam.js";
@@ -16,13 +19,10 @@ const initDB = async () => {
     Risk.belongsTo(User, { foreignKey: 'resolvedBy', as: 'Resolver' });
     
     // Project Team Associations (Optional, but good for completeness)
-    User.belongsToMany(Project, { through: ProjectTeam, foreignKey: 'userId', otherKey: 'projectCode', sourceKey: 'id', targetKey: 'code' });
-    Project.belongsToMany(User, { through: ProjectTeam, foreignKey: 'projectCode', otherKey: 'userId', sourceKey: 'code', targetKey: 'id' });
-
     await sequelize.authenticate();
     console.log("✅ Database connection established");
 
-    await sequelize.sync({ alter: true });
+    await sequelize.sync({ alter: process.env.DB_SYNC_ALTER === "true" });
 
     console.log("✅ All models synced successfully");
   } catch (error) {

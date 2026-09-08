@@ -12,7 +12,7 @@ const ProjectTeam = sequelize.define('ProjectTeam', {
     allowNull: false,
   },
   projectCode: {
-    type: DataTypes.STRING,
+    type: DataTypes.STRING(255),
     allowNull: false,
   },
   responsibility: {
