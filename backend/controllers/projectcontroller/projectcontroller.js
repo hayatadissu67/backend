@@ -12,9 +12,7 @@ export const createProject = async (req, res) => {
       delete req.body.id;
     }
     if (req.user && req.user.email) {
-      if (!req.body.owner) {
-        req.body.owner = req.user.name || req.user.email;
-      }
+      req.body.owner = req.user.name || req.user.email;
     }
     req.body.approvalStatus = 'PENDING';
 
@@ -60,7 +58,8 @@ export const createProject = async (req, res) => {
 
 export const getAllProjects = async (req, res) => {
   try {
-    const projects = await getAllProjectsService(req.user);
+  
+    const projects = await getAllProjectsService(req?.user);
     res.status(200).json({
       success: true,
       data: projects,
@@ -180,7 +179,7 @@ export const deleteProject = async (req, res) => {
       });
     }
 
-    if (req.user && req.user.role !== 'EXECUTIVE_MANAGER' && existingProject.owner !== req.user.email) {
+    if (req.user && req.user.role !== 'EXECUTIVE_MANAGER' && existingProject.owner !== req.user.email && existingProject.owner !== req.user.name) {
       return res.status(403).json({
         success: false,
         message: "Not authorized to delete this project",

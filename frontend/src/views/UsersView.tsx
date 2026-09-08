@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserItem, UserRoleType, LoggedInPersona } from '../types';
-import { createUserApi, deleteUserApi, updateUserStatusApi, updateUserApi } from '../services/api';
+import { createUserApi, deleteUserApi, updateUserStatusApi, updateUserApi, fetchUserProjectsApi } from '../services/api';
 
 const getRoleCode = (role: unknown): string => {
   if (typeof role === 'string') return role;
@@ -50,7 +50,6 @@ export const UsersView: React.FC<UsersViewProps> = ({
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRoleType>(isPM ? 'TEAM_MEMBER' : 'PROJECT_MANAGER');
-  const [department, setDepartment] = useState('Engineering');
   const [status, setStatus] = useState<'Active' | 'Pending'>('Active');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
@@ -61,6 +60,29 @@ export const UsersView: React.FC<UsersViewProps> = ({
     tempPassword: string;
   } | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Map of userId -> array of project details
+  const [userProjectsMap, setUserProjectsMap] = useState<Record<string | number, any[]>>({});
+
+  // Fetch project details for users when the users list changes
+  useEffect(() => {
+    let cancelled = false;
+    const fetchProjectsForUsers = async () => {
+      const entries = await Promise.all(
+        users.map(async (u) => {
+          const projects = await fetchUserProjectsApi(u.id);
+          return [u.id, projects || []] as const;
+        })
+      );
+      if (!cancelled) {
+        setUserProjectsMap(Object.fromEntries(entries));
+      }
+    };
+    fetchProjectsForUsers();
+    return () => {
+      cancelled = true;
+    };
+  }, [users]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -79,7 +101,6 @@ export const UsersView: React.FC<UsersViewProps> = ({
         name,
         email,
         role,
-        department,
         status,
         avatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150`,
       });
@@ -556,26 +577,51 @@ export const UsersView: React.FC<UsersViewProps> = ({
                       </td>
                       <td className="p-3 text-slate-600 font-medium">{u.department}</td>
                       <td className="p-3">
-                        {u.assignedProjectCodes && u.assignedProjectCodes.length > 0 ? (
-                          <div className="flex flex-wrap gap-1 items-center">
-                            {u.assignedProjectCodes.map((proj, idx) => (
-                              <span
-                                key={idx}
-                                className="inline-flex items-center gap-1 bg-indigo-50 border border-indigo-200 text-indigo-950 px-2 py-0.5 rounded-xs font-mono font-bold text-[11px] shadow-2xs"
-                              >
-                                <span className="material-symbols-outlined text-[13px] text-indigo-700">folder</span>
-                                {proj}
+                        {(() => {
+                          const projects = userProjectsMap[u.id];
+                          if (projects && projects.length > 0) {
+                            return (
+                              <div className="flex flex-wrap gap-1 items-center">
+                                {projects.map((proj, idx) => (
+                                  <span
+                                    key={proj.code || proj.id || idx}
+                                    className="inline-flex items-center gap-1 bg-indigo-50 border border-indigo-200 text-indigo-950 px-2 py-0.5 rounded-xs font-mono font-bold text-[11px] shadow-2xs"
+                                    title={proj.name || proj.code}
+                                  >
+                                    <span className="material-symbols-outlined text-[13px] text-indigo-700">folder</span>
+                                    {proj.code || proj.name}
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          }
+                          if (u.assignedProjectCodes && u.assignedProjectCodes.length > 0) {
+                            return (
+                              <div className="flex flex-wrap gap-1 items-center">
+                                {u.assignedProjectCodes.map((proj, idx) => (
+                                  <span
+                                    key={idx}
+                                    className="inline-flex items-center gap-1 bg-indigo-50 border border-indigo-200 text-indigo-950 px-2 py-0.5 rounded-xs font-mono font-bold text-[11px] shadow-2xs"
+                                  >
+                                    <span className="material-symbols-outlined text-[13px] text-indigo-700">folder</span>
+                                    {proj}
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          }
+                          if ((u as any).projectsAssigned > 0) {
+                            return (
+                              <span className="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-900 px-2 py-0.5 rounded-xs font-mono font-bold text-[11px]">
+                                <span className="material-symbols-outlined text-[13px] text-blue-700">folder_open</span>
+                                {(u as any).projectsAssigned} Assigned
                               </span>
-                            ))}
-                          </div>
-                        ) : u.projectsAssigned > 0 ? (
-                          <span className="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-900 px-2 py-0.5 rounded-xs font-mono font-bold text-[11px]">
-                            <span className="material-symbols-outlined text-[13px] text-blue-700">folder_open</span>
-                            {u.projectsAssigned} Assigned
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 font-mono text-[11px] italic">Unassigned</span>
-                        )}
+                            );
+                          }
+                          return (
+                            <span className="text-slate-400 font-mono text-[11px] italic">Unassigned</span>
+                          );
+                        })()}
                       </td>
                       <td className="p-3">
                         <span
@@ -708,9 +754,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
                   className="w-full border border-slate-300 rounded-sm p-2 outline-none focus:border-blue-600"
                 />
               </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Assigned Role *
@@ -731,28 +775,9 @@ export const UsersView: React.FC<UsersViewProps> = ({
                   </select>
                 )}
               </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Department
-                </label>
-                <select
-                  value={department}
-                  onChange={(e) => setDepartment(e.target.value)}
-                  className="w-full border border-slate-300 rounded-sm p-2 outline-none focus:border-blue-600"
-                >
-                  <option value="Engineering">Engineering</option>
-                  <option value="Infrastructure">Infrastructure</option>
-                  <option value="Enterprise IT">Enterprise IT</option>
-                  <option value="Data Eng">Data Eng</option>
-                  <option value="Cybersecurity">Cybersecurity</option>
-                  <option value="Product Mgmt">Product Mgmt</option>
-                </select>
-              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
+            <div>
                 <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Account Access Status
                 </label>
@@ -765,7 +790,6 @@ export const UsersView: React.FC<UsersViewProps> = ({
                   <option value="Pending">Pending Invitation Acceptance</option>
                 </select>
               </div>
-            </div>
 
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-sm text-blue-900 text-[11px] flex items-center gap-2">
               <span className="material-symbols-outlined text-blue-700 text-sm">lock</span>

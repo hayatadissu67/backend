@@ -108,13 +108,6 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
             <span className="material-symbols-outlined text-[18px]">verified_user</span>
             Approvals ({pendingApprovals.length})
           </button>
-          <button
-            onClick={onOpenNewProject}
-            className="px-3.5 py-2 bg-[#00174b] hover:bg-indigo-950 text-white font-bold text-xs uppercase tracking-wider rounded-xs transition-colors flex items-center gap-1.5 shadow-2xs"
-          >
-            <span className="material-symbols-outlined text-[18px]">add_circle</span>
-            New Project Charter
-          </button>
         </div>
       </div>
 

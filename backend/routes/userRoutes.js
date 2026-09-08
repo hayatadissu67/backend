@@ -3,6 +3,7 @@ import {
   addUser,
   getUsers,
   getTeamMembers,
+  getUserProjects,
   updateUser,
   updateUserStatus,
   deleteUser,
@@ -12,11 +13,12 @@ import { authorize, protect } from "../middleware/authMiddleware.js";
 const router = Router();
 
 // Public-to-any-authenticated-user endpoint: list TEAM_MEMBER accounts.
-// PMs use this to populate the "Assign Member" / dashboard team views.
 router.get("/team-members", protect, getTeamMembers);
 
+// Projects associated with a specific user (owner or assigned)
+router.get("/:id/projects", protect, getUserProjects);
+
 // Backwards-compatible: allow POST /api/users (root) as well as /add for creating users
-// Both endpoints require EXECUTIVE_MANAGER role (protect applied at parent router)
 router.post("/", authorize("EXECUTIVE_MANAGER"), addUser);
 router.post("/add", authorize("EXECUTIVE_MANAGER"), addUser);
 

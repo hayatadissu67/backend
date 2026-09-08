@@ -22,7 +22,7 @@ const initDB = async () => {
     await sequelize.authenticate();
     console.log("✅ Database connection established");
 
-    await sequelize.sync({ alter: true });
+    await sequelize.sync({ alter: false });
 
     console.log("✅ All models synced successfully");
   } catch (error) {

@@ -827,8 +827,8 @@ export default function App() {
   };
 
   const handleApprovalAction = (id: string, status: 'Approved' | 'Rejected') => {
-    setApprovals(
-      approvals.map((a) => (a.id === id ? { ...a, status } : a))
+    setApprovals((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, status } : a))
     );
 
     const act: ActivityItem = {
@@ -1090,7 +1090,7 @@ export default function App() {
             {/* Projects View */}
             {(currentTab === 'projects' || currentTab === 'ai_project') && (
               <ProjectsView
-                projects={searchedProjects}
+                projects={projects}
                 risks={searchedRisks}
                 tasks={tasks}
                 users={users}

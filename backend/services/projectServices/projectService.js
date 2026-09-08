@@ -1,4 +1,5 @@
 import Project from "../../models/projectModel/projectModel.js";
+import { Op } from "sequelize";
 
 export const createProjectService = async (data) => {
   return await Project.create(data);
@@ -6,30 +7,30 @@ export const createProjectService = async (data) => {
 
 export const getAllProjectsService = async (user) => {
   let whereClause = {};
+
   if (user) {
-    if (user.role === 'TEAM_MEMBER') {
-      const ProjectTeam = (await import('../../models/projectModel/ProjectTeam.js')).default;
-      const assignments = await ProjectTeam.findAll({ where: { userId: user.id } });
-      const projectCodes = assignments.map(a => a.projectCode);
-      const { Op } = await import('sequelize');
-      if (projectCodes.length > 0) {
-        whereClause = { code: { [Op.in]: projectCodes } };
+    const roleCode = String(user.role || "").toUpperCase();
+
+    if (roleCode === "TEAM_MEMBER") {
+      const assigned = user.assignedProjectCodes || [];
+      if (assigned.length > 0) {
+        whereClause = { code: { [Op.in]: assigned } };
       } else {
         whereClause = { id: null };
       }
-    } else if (user.role === 'PROJECT_MANAGER') {
-      const { Op } = await import('sequelize');
+    } else if (roleCode === "PROJECT_MANAGER") {
       whereClause = {
         [Op.or]: [
           { owner: user.email },
-          { owner: user.name }
-        ]
+          { owner: user.name },
+        ],
       };
     }
   }
+
   return await Project.findAll({
     where: whereClause,
-    order: [['createdAt', 'DESC']]
+    order: [["createdAt", "DESC"]],
   });
 };
 

@@ -29,10 +29,12 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (
-      [401, 403].includes(error.response?.status) &&
+      error.response?.status === 401 &&
       !error.config.url?.includes('/auth/login')
     ) {
-      // Force a fresh login when an old/invalid token causes repeated auth failures.
+      // Only clear the token when the backend explicitly says it is invalid/expired.
+      // A 403 means the token is valid but the caller lacks permissions for that
+      // specific resource — do NOT log the user out for permission denials.
       sessionStorage.removeItem('token');
     }
     return Promise.reject(error);
@@ -116,6 +118,16 @@ export const fetchTeamMembersFromApi = async (): Promise<UserItem[] | null> => {
   }
 };
 
+export const fetchUserProjectsApi = async (userId: string | number) => {
+  try {
+    const res = await api.get(`/users/${userId}/projects`);
+    return res.data?.success && Array.isArray(res.data.data) ? res.data.data : [];
+  } catch (err) {
+    console.warn('Failed to fetch user projects from API:', err);
+    return null;
+  }
+};
+
 export interface CreateUserResponse {
   success: boolean;
   message?: string;
@@ -158,7 +170,11 @@ export const deleteUserApi = async (id: string | number): Promise<boolean> => {
     const res = await api.delete(`/users/${id}`);
     return !!res.data?.success;
   } catch (err: any) {
+    const status = err.response?.status;
     const message = err.response?.data?.message || err.message || 'Failed to delete user.';
+    if (status === 404) {
+      return true;
+    }
     throw new Error(message);
   }
 };
@@ -167,6 +183,7 @@ export const deleteUserApi = async (id: string | number): Promise<boolean> => {
 export const fetchProjectsFromApi = async (): Promise<Project[] | null> => {
   try {
     const res = await api.get('/projects');
+    console.log('Fetched projects from API: 🤣🤣', res.data);
     return res.data?.success && Array.isArray(res.data.data) ? res.data.data : [];
   } catch (err) {
     console.warn('Failed to fetch projects from API:', err);
