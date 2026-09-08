@@ -49,9 +49,16 @@ export const protect = async (req, res, next) => {
     }
 
     // Load role separately to avoid eager-loading association issues
-    const role = user.roleId
-      ? await Role.findByPk(user.roleId, { attributes: ["id", "code", "name"] })
-      : null;
+    let role = null;
+    if (user.roleId) {
+      try {
+        role = await Role.findByPk(user.roleId, {
+          attributes: ["id", "code", "name"],
+        });
+      } catch (roleErr) {
+        console.error("Role lookup failed:", roleErr.message);
+      }
+    }
 
     req.user = {
       ...user.toJSON(),

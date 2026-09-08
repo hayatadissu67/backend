@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import User from "../models/userModel.js";
 import Role from "../models/roleModel.js";
+import { Op } from "sequelize";
 
 const SAFE_USER_ATTRS = { exclude: ["password"] };
 
@@ -74,33 +75,33 @@ export const addUser = async (req, res) => {
 
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
-      return res
-        .status(409)
-        .json({ success: false, message: "User already exists" });
+      return res.status(409).json({ success: false, message: "User already exists" });
     }
 
     let resolvedRole = null;
     if (roleId) {
       resolvedRole = await Role.findByPk(roleId);
       if (!resolvedRole) {
-        return res
-          .status(404)
-          .json({ success: false, message: "Role not found (by id)" });
+        return res.status(404).json({ success: false, message: "Role not found (by id)" });
       }
     } else if (role) {
       resolvedRole = await Role.findOne({ where: { code: role } });
       if (!resolvedRole) {
-        return res
-          .status(404)
-          .json({ success: false, message: "Role not found (by code)" });
+        return res.status(404).json({ success: false, message: "Role not found (by code)" });
       }
     } else {
-      return res
-        .status(400)
-        .json({ success: false, message: "role or roleId is required" });
+      return res.status(400).json({ success: false, message: "role or roleId is required" });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // If no password is provided, generate a secure temporary one.
+    let plainPassword = password || tempPassword;
+    let generatedTemp = false;
+    if (!plainPassword) {
+      plainPassword = crypto.randomBytes(6).toString("base64").replace(/[^A-Za-z0-9]/g, "A").slice(0, 10);
+      generatedTemp = true;
+    }
+
+    const hashedPassword = await bcrypt.hash(plainPassword, 10);
 
     const user = await User.create({
       name,
@@ -108,11 +109,9 @@ export const addUser = async (req, res) => {
       password: hashedPassword,
       roleId: resolvedRole.id,
       department: department || "Unassigned",
-      avatar:
-        avatar ||
-        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
+      avatar: avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
       status: status || "Active",
-      mustChangePassword: !!mustChangePassword,
+      mustChangePassword: generatedTemp || mustChangePassword === true,
     });
 
     const safe = await enrichWithRole(serializeUser(user));
@@ -120,12 +119,11 @@ export const addUser = async (req, res) => {
       success: true,
       message: "User added successfully",
       data: safe,
+      temporaryPassword: generatedTemp ? plainPassword : undefined,
     });
   } catch (error) {
     console.error("addUser error:", error);
-    return res
-      .status(500)
-      .json({ success: false, message: error.message || "Server error" });
+    return res.status(500).json({ success: false, message: error.message || "Server error" });
   }
 };
 
@@ -164,6 +162,73 @@ export const getTeamMembers = async (req, res) => {
     return res.status(200).json({ success: true, data: safeUsers });
   } catch (error) {
     console.error("getTeamMembers error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: error.message || "Server error" });
+  }
+};
+
+// Get projects associated with a user:
+// - If the user is a TEAM_MEMBER, return projects where the user is assigned by code
+// - If the user is a PROJECT_MANAGER or EXECUTIVE_MANAGER, return projects they own/created
+export const getUserProjects = async (req, res) => {
+  try {
+    const user = await User.findByPk(req.params.id, {
+      attributes: SAFE_USER_ATTRS,
+    });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    const role = user.roleId
+      ? await Role.findByPk(user.roleId, { attributes: ["code"] })
+      : null;
+    const roleCode = role ? role.code : null;
+
+    // Import Project model lazily to avoid circular deps
+    const { default: Project } = await import("../models/projectModel/projectModel.js");
+
+    let projects = [];
+    if (String(roleCode).toUpperCase() === "TEAM_MEMBER") {
+      // Team members: projects assigned by code
+      const codes = user.assignedProjectCodes || [];
+      if (codes.length > 0) {
+        projects = await Project.findAll({
+          where: { code: codes },
+          order: [["createdAt", "DESC"]],
+        });
+      }
+    } else {
+      // PM / Executive / Risk Manager: projects they own
+      projects = await Project.findAll({
+        where: {
+          [Op.or]: [
+            { owner: user.email },
+            { owner: user.name },
+          ],
+        },
+        order: [["createdAt", "DESC"]],
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: projects.map((p) => ({
+        id: p.id,
+        code: p.code,
+        name: p.name,
+        status: p.status,
+        health: p.health,
+        progress: p.progress,
+        owner: p.owner,
+        department: p.department,
+        targetDate: p.targetDate,
+      })),
+    });
+  } catch (error) {
+    console.error("getUserProjects error:", error);
     return res
       .status(500)
       .json({ success: false, message: error.message || "Server error" });

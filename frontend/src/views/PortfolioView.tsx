@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Project, RiskItem, ResourceLoading, NavigationTab } from '../types';
+import { Project, RiskItem, ResourceLoading, NavigationTab, LoggedInPersona, BudgetItem } from '../types';
 
 interface PortfolioViewProps {
   projects: Project[];
   risks: RiskItem[];
+  budgets?: BudgetItem[];
   resources?: ResourceLoading[];
   onNavigate?: (tab: NavigationTab) => void;
   onSelectProject?: (project: Project | string) => void;

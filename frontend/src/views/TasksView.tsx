@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { TaskItem, TaskItemComment, Project, UserItem, LoggedInPersona, RiskItem, Severity } from '../types';
+import { createTaskApi } from '../services/api';
 
 interface TasksViewProps {
   tasks: TaskItem[];
@@ -10,6 +11,7 @@ interface TasksViewProps {
   onUpdateTaskStatus: (taskId: string, newStatus: TaskItem['status']) => void;
   onUpdateTask?: (task: TaskItem) => void;
   onDeleteTask?: (taskId: string) => void;
+  onAddSubTask?: (subTask: TaskItem) => Promise<void>;
   onAddRisk?: (risk: RiskItem) => void;
   currentPersona?: LoggedInPersona;
   onNotifyPM?: (task: TaskItem, memberName: string, notes?: string) => void;
@@ -24,6 +26,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
   onUpdateTaskStatus,
   onUpdateTask,
   onDeleteTask,
+  onAddSubTask,
   onAddRisk,
   currentPersona,
   onNotifyPM
@@ -65,6 +68,10 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
   const [quickUpdateTask, setQuickUpdateTask] = useState<TaskItem | null>(null);
   const [newCommentText, setNewCommentText] = useState<string>('');
+  const [showSubTaskModal, setShowSubTaskModal] = useState<boolean>(false);
+  const [subTaskParent, setSubTaskParent] = useState<TaskItem | null>(null);
+  const [subTaskTitle, setSubTaskTitle] = useState<string>('');
+  const [subTaskDescription, setSubTaskDescription] = useState<string>('');
 
   // Form State (for Create Task)
   const [title, setTitle] = useState<string>('');
@@ -76,6 +83,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const startDate = new Date().toISOString().split('T')[0];
   const [description, setDescription] = useState<string>('');
   const [initialStatus, setInitialStatus] = useState<TaskItem['status']>('Backlog');
+  const [quickSubTaskTitle, setQuickSubTaskTitle] = useState<string>('');
 
   // Sub Tasks state
   const [subTaskInputs, setSubTaskInputs] = useState<{ id: number; title: string }[]>([]);
@@ -109,6 +117,39 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleCreateSubTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!subTaskParent || !subTaskTitle.trim()) return;
+
+    const newSubTask: TaskItem = {
+      id: `t-${Date.now()}`,
+      title: subTaskTitle.trim(),
+      projectCode: subTaskParent.projectCode,
+      projectName: subTaskParent.projectName,
+      assignee: subTaskParent.assignee,
+      status: 'Backlog',
+      priority: subTaskParent.priority,
+      dueDate: subTaskParent.dueDate,
+      startDate: subTaskParent.startDate || new Date().toISOString().split('T')[0],
+      progress: 0,
+      estimatedHours: subTaskParent.estimatedHours || 16,
+      hoursLogged: 0,
+      description: subTaskDescription || '',
+      comments: [],
+      parentTaskId: subTaskParent.id,
+      subTasks: [],
+    };
+
+    if (onAddSubTask) {
+      await onAddSubTask(newSubTask);
+      setShowSubTaskModal(false);
+      setSubTaskParent(null);
+      setSubTaskTitle('');
+      setSubTaskDescription('');
+      showToast('✓ Sub Task created successfully');
+    }
   };
 
   const handleReportRiskToPM = (e: React.FormEvent) => {
@@ -303,14 +344,14 @@ export const TasksView: React.FC<TasksViewProps> = ({
 
   // Filtered tasks for general list and board
   const filteredTasks = tasks.filter((t) => {
-    if (filterPriority !== 'ALL' && t.priority !== filterPriority) return false;
-    if (filterProject !== 'ALL' && t.projectCode !== filterProject) return false;
-    if (filterStatus !== 'ALL' && t.status !== filterStatus) return false;
+    if (filterPriority !== 'ALL' && (t.priority || '') !== filterPriority) return false;
+    if (filterProject !== 'ALL' && (t.projectCode || '') !== filterProject) return false;
+    if (filterStatus !== 'ALL' && (t.status || '') !== filterStatus) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const matchTitle = t.title.toLowerCase().includes(q);
-      const matchAssignee = t.assignee.toLowerCase().includes(q);
-      const matchProject = (t.projectName || t.projectCode).toLowerCase().includes(q);
+      const matchTitle = (t.title || '').toLowerCase().includes(q);
+      const matchAssignee = (t.assignee || '').toLowerCase().includes(q);
+      const matchProject = ((t.projectName || t.projectCode || '')).toLowerCase().includes(q);
       if (!matchTitle && !matchAssignee && !matchProject) return false;
     }
     return true;
@@ -1019,17 +1060,19 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     <th className="p-3">Status</th>
                     <th className="p-3">Progress</th>
                     <th className="p-3">Deadline</th>
-                    <th className="p-3">Sub Tasks</th>
-                    <th className="p-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredTasks.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="p-8 text-center text-slate-400 text-xs font-medium">
-                        No tasks matching current search filter criteria.
-                      </td>
-                    </tr>
+                     <th className="p-3">Sub Tasks</th>
+                     {activeTab !== 'Reports' && (
+                       <th className="p-3 text-right">Actions</th>
+                     )}
+                   </tr>
+                 </thead>
+                 <tbody className="divide-y divide-slate-100">
+                   {filteredTasks.length === 0 ? (
+                     <tr>
+                       <td colSpan={activeTab === 'Reports' ? 8 : 9} className="p-8 text-center text-slate-400 text-xs font-medium">
+                         No tasks matching current search filter criteria.
+                       </td>
+                     </tr>
                   ) : (
                     filteredTasks.map((t) => {
                       const overdue = isOverdue(t);
@@ -1132,28 +1175,40 @@ export const TasksView: React.FC<TasksViewProps> = ({
                                 </div>
                               </div>
                             )}
-                          </td>
-                          <td className="p-3 text-right">
-                            <div className="flex justify-end items-center gap-1">
-                              <button
-                                onClick={() => setQuickUpdateTask(t)}
-                                className="px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold rounded-xs text-[11px]"
-                                title="Update Progress & Details"
-                              >
-                                Edit / Progress
-                              </button>
-                              {onDeleteTask && (
-                                <button
-                                  onClick={() => onDeleteTask(t.id)}
-                                  className="px-2 py-1 text-red-600 hover:bg-red-50 rounded-xs text-[11px] font-bold"
-                                  title="Delete Task"
-                                >
-                                  ✕
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
+                           </td>
+                            {activeTab !== 'Reports' && (
+                              <td className="p-3 text-right">
+                                <div className="flex justify-end items-center gap-1">
+                                  {activeTab === 'Task List' ? (
+                                    <button
+                                      onClick={() => { setSubTaskParent(t); setSubTaskTitle(''); setSubTaskDescription(''); setShowSubTaskModal(true); }}
+                                      className="px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold rounded-xs text-[11px]"
+                                      title="Add Sub Task"
+                                    >
+                                      Add Sub Task
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => setQuickUpdateTask(t)}
+                                      className="px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold rounded-xs text-[11px]"
+                                      title="Update Progress & Details"
+                                    >
+                                      Edit / Progress
+                                    </button>
+                                  )}
+                                  {onDeleteTask && (
+                                    <button
+                                      onClick={() => onDeleteTask(t.id)}
+                                      className="px-2 py-1 text-red-600 hover:bg-red-50 rounded-xs text-[11px] font-bold"
+                                      title="Delete Task"
+                                    >
+                                      ✕
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            )}
+                         </tr>
                       );
                     })
                   )}
@@ -1627,21 +1682,14 @@ export const TasksView: React.FC<TasksViewProps> = ({
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <span className="font-mono text-xs font-black text-indigo-900 block">
-                            Target: {t.dueDate}
-                          </span>
-                          <span className="text-[10px] font-bold text-emerald-600">{t.progress ?? 0}% Complete</span>
-                        </div>
-
-                        <button
-                          onClick={() => setQuickUpdateTask(t)}
-                          className="px-3 py-1.5 bg-[#00174b] hover:bg-indigo-950 text-white font-bold text-xs rounded-xs"
-                        >
-                          Update Progress
-                        </button>
-                      </div>
+                       <div className="flex items-center gap-4">
+                         <div className="text-right">
+                           <span className="font-mono text-xs font-black text-indigo-900 block">
+                             Target: {t.dueDate}
+                           </span>
+                           <span className="text-[10px] font-bold text-emerald-600">{t.progress ?? 0}% Complete</span>
+                         </div>
+                       </div>
                     </div>
                   ))}
               </div>
@@ -1825,6 +1873,24 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 />
               </div>
 
+              <div>
+                <label className="block font-bold text-slate-700 uppercase mb-1">Sub Task</label>
+                <input
+                  type="text"
+                  value={quickSubTaskTitle}
+                  onChange={(e) => setQuickSubTaskTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && quickSubTaskTitle.trim()) {
+                      e.preventDefault();
+                      setSubTaskInputs((prev) => [...prev, { id: Date.now(), title: quickSubTaskTitle.trim() }]);
+                      setQuickSubTaskTitle('');
+                    }
+                  }}
+                  placeholder="Add a sub task..."
+                  className="w-full border border-slate-300 p-2 rounded-sm outline-none focus:border-blue-600"
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 uppercase mb-1">Project</label>
@@ -1966,6 +2032,70 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   className="px-4 py-1.5 bg-[#00174b] text-white font-bold rounded-sm uppercase tracking-wider"
                 >
                   Assign Task
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ADD SUB TASK MODAL */}
+      {showSubTaskModal && subTaskParent && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white max-w-md w-full p-6 rounded-sm border border-slate-300 shadow-xl space-y-4 text-xs animate-fadeIn">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-indigo-600">account_tree</span>
+                Add Sub Task
+              </h3>
+              <button onClick={() => setShowSubTaskModal(false)} className="text-slate-400 hover:text-slate-600 text-base font-bold">✕</button>
+            </div>
+
+            <form onSubmit={handleCreateSubTask} className="space-y-3">
+              <div>
+                <label className="block font-bold text-slate-700 uppercase mb-1">Parent Task</label>
+                <div className="bg-slate-50 border border-slate-200 rounded-sm px-3 py-2 text-xs font-bold text-slate-800">
+                  {subTaskParent.title}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 uppercase mb-1">Sub Task Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={subTaskTitle}
+                  onChange={(e) => setSubTaskTitle(e.target.value)}
+                  placeholder="Sub task title..."
+                  className="w-full border border-slate-300 p-2 rounded-sm outline-none focus:border-blue-600"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 uppercase mb-1">Description</label>
+                <textarea
+                  rows={2}
+                  value={subTaskDescription}
+                  onChange={(e) => setSubTaskDescription(e.target.value)}
+                  placeholder="Sub task details..."
+                  className="w-full border border-slate-300 p-2 rounded-sm outline-none focus:border-blue-600"
+                />
+              </div>
+
+              <div className="pt-3 border-t flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSubTaskModal(false)}
+                  className="px-3 py-1.5 border rounded-sm font-bold text-slate-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 bg-[#00174b] text-white font-bold rounded-sm uppercase tracking-wider"
+                >
+                  Create Sub Task
                 </button>
               </div>
             </form>

@@ -745,6 +745,14 @@ export default function App() {
     }
   };
 
+  const handleAddSubTask = async (subTask: TaskItem) => {
+    await createTaskApi(subTask);
+    const apiTasks = await fetchTasksFromApi();
+    if (apiTasks) {
+      setTasks(apiTasks);
+    }
+  };
+
   const handleUpdateTaskStatus = async (taskId: string, newStatus: TaskItem['status']) => {
     setTasks(tasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)));
     const saved = await updateTaskApi(taskId, { status: newStatus });
@@ -859,8 +867,8 @@ export default function App() {
   };
 
   const handleApprovalAction = (id: string, status: 'Approved' | 'Rejected') => {
-    setApprovals(
-      approvals.map((a) => (a.id === id ? { ...a, status } : a))
+    setApprovals((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, status } : a))
     );
 
     const act: ActivityItem = {
@@ -1102,6 +1110,7 @@ export default function App() {
                 onUpdateTaskStatus={handleUpdateTaskStatus}
                 onUpdateTask={handleUpdateTask}
                 onDeleteTask={handleDeleteTask}
+                onAddSubTask={handleAddSubTask}
                 onAddRisk={handleAddRisk}
                 currentPersona={currentPersona}
                 onNotifyPM={handleNotifyPMTaskCompleted}
@@ -1124,7 +1133,7 @@ export default function App() {
             {/* Projects View */}
             {(currentTab === 'projects' || currentTab === 'ai_project') && (
               <ProjectsView
-                projects={searchedProjects}
+                projects={projects}
                 risks={searchedRisks}
                 tasks={tasks}
                 users={users}

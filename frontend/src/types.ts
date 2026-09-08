@@ -72,6 +72,7 @@ export interface RiskItem {
   submittedBy?: string;
   category: 'Risk' | 'Issue';
   projectRef?: string;
+  projectCode?: string;
   milestoneRef?: string;
   status: 'OPEN' | 'IN_REVIEW' | 'MITIGATED' | 'REPORTED' | 'UNDER_REVIEW' | 'ESCALATED' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
   createdDate: string;

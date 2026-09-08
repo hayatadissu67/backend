@@ -11,7 +11,7 @@ import {
   LifecyclePhaseCriterion
 } from '../types';
 import { AssignTeamModal } from "../components/AssignTeamModal";
-import { getProjectTeamApi } from '@/services/api';
+import { getProjectTeamApi, deleteProjectApi, deleteProjectPermanentApi } from '@/services/api';
 
 interface ProjectsViewProps {
   projects: Project[];
@@ -59,6 +59,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
     'Directory' | 'Project Lifecycle' | 'Web Requirements' | 'Gate Roadmap' | 'Kanban Pipeline' | 'Archived Projects'
   >('Directory');
 
+  console.log("fghnnn  bb  😒😒😒",projects)
   // Directory layout toggle: Grid or Table
   const [layoutMode, setLayoutMode] = useState<'table' | 'grid'>('table');
 

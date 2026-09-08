@@ -44,9 +44,12 @@ export const AssignMemberModal: React.FC<AssignMemberModalProps> = ({
   const approvedProjects = projects.filter((p) => p.approvalStatus === 'APPROVED');
   const selectableProjects = mode === 'request' ? projects : approvedProjects;
   const projectManagers = users.filter((user) => {
-    const roleCode = typeof user.role === 'string' ? user.role : user.role?.code || user.role?.name;
+    if (!user) return false;
+    if (typeof user.role === 'string') return user.role === 'PROJECT_MANAGER';
+    const roleCode = (user.role as any)?.code || (user.role as any)?.name || '';
     return String(roleCode).trim().replace(/[\s-]+/g, '_').toUpperCase() === 'PROJECT_MANAGER';
   });
+  const isCurrentUserPM = projectManagers.some((pm) => pm.name === requesterName);
   const standardDepartments = [
     'Engineering',
     'Design',
@@ -77,7 +80,7 @@ export const AssignMemberModal: React.FC<AssignMemberModalProps> = ({
     if (isOpen) {
       setSelectedProjectId(passedSelectedProject?.id || (selectableProjects.length > 0 ? selectableProjects[0].id : ''));
       setSelectedUserId('');
-      setRequesterNameValue(projectManagers[0]?.name || '');
+      setRequesterNameValue(isCurrentUserPM ? requesterName : (projectManagers[0]?.name || ''));
       setRequestDepartment('');
     }
   }, [isOpen, passedSelectedProject, projects]);
@@ -192,17 +195,27 @@ export const AssignMemberModal: React.FC<AssignMemberModalProps> = ({
               {mode === 'request' && (
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">Requested By PM Name *</label>
-                  <select
-                    value={requesterNameValue}
-                    onChange={(e) => setRequesterNameValue(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-sm px-3 py-2 text-sm text-slate-800 font-medium focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-inner"
-                    required
-                  >
-                    <option value="" disabled>Select a PM</option>
-                    {projectManagers.map((manager) => (
-                      <option key={manager.id} value={manager.name}>{manager.name}</option>
-                    ))}
-                  </select>
+                  {isCurrentUserPM ? (
+                    <input
+                      type="text"
+                      value={requesterNameValue}
+                      readOnly
+                      className="w-full border border-slate-300 rounded-sm px-3 py-2 text-sm text-slate-800 font-medium bg-slate-100 focus:outline-none"
+                      required
+                    />
+                  ) : (
+                    <select
+                      value={requesterNameValue}
+                      onChange={(e) => setRequesterNameValue(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-sm px-3 py-2 text-sm text-slate-800 font-medium focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-inner"
+                      required
+                    >
+                      <option value="" disabled>Select a PM</option>
+                      {projectManagers.map((manager) => (
+                        <option key={manager.id} value={manager.name}>{manager.name}</option>
+                      ))}
+                    </select>
+                  )}
                   </div>
               )}
               {mode === 'request' && (
@@ -251,7 +264,7 @@ export const AssignMemberModal: React.FC<AssignMemberModalProps> = ({
                   {(!loadingUsers ? (availableUsers.length ? availableUsers : users) : [])
                     .filter(u => {
                       if (!u) return false;
-                      const roleCode = typeof u.role === 'string' ? u.role : u.role?.code || u.role?.name;
+                      const roleCode = typeof u.role === 'string' ? u.role : (u.role as any)?.code || (u.role as any)?.name;
                       if (String(roleCode).toUpperCase() !== 'TEAM_MEMBER') return false;
                       const allocatedHours = resourceRecords
                         .filter((record) =>

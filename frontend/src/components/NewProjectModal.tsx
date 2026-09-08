@@ -5,8 +5,8 @@ interface NewProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddProject: (newProject: Project) => void;
-  currentUserName?: string;
   users?: any[];
+  currentUserName?: string;
 }
 
 export const NewProjectModal: React.FC<NewProjectModalProps> = ({
@@ -17,8 +17,6 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
   users = []
 }) => {
   const [name, setName] = useState('');
-  const [department, setDepartment] = useState('Engineering');
-  const [owner, setOwner] = useState(currentUserName || 'Alex Rivers');
   const [budget, setBudget] = useState('');
   const [health, setHealth] = useState<HealthStatus>('GREEN');
   const [gate, setGate] = useState('Gate 1');
@@ -42,8 +40,6 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
     const newErrors: Record<string, string> = {};
     if (!name.trim()) newErrors.name = 'Project name is required';
     else if (name.length > 100) newErrors.name = 'Project name must be under 100 characters';
-    
-    if (!owner.trim()) newErrors.owner = 'Project Manager/Owner is required';
     
     if (description && description.length > 2000) newErrors.description = 'Description is too long';
 
@@ -78,8 +74,8 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
       id: `p-${Date.now()}`,
       name,
       code: `PRJ-${cleanCodePart}-${Math.floor(100 + Math.random() * 900)}`,
-      department,
-      owner,
+      department: 'General',
+      owner: currentUserName || 'PMO',
       status: 'PLANNING',
       health,
       budget: numBudget,
@@ -93,7 +89,7 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
         stageNumber: 1,
         phaseDurationDays: 14,
         health: health === 'GREEN' ? 'Green' : health === 'YELLOW' ? 'Amber' : 'Red',
-        approver: owner,
+        approver: currentUserName || 'PMO',
         signOffDate: new Date().toISOString().split('T')[0],
         criteria: [
           { id: 'c1', label: 'Project Charter & Scope Finalized', completed: true },
@@ -143,41 +139,6 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
               className={`w-full border rounded-sm p-2 text-xs outline-none ${errors.name ? 'border-red-500 bg-red-50 focus:border-red-600' : 'border-slate-300 focus:border-blue-600'}`}
             />
             {errors.name && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span>{errors.name}</p>}
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Department
-              </label>
-              <select
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
-                className="w-full border border-slate-300 rounded-sm p-2 text-xs focus:border-blue-600 outline-none"
-              >
-                <option value="Engineering">Engineering</option>
-                <option value="Design">Design</option>
-                <option value="Product Mgmt">Product Mgmt</option>
-                <option value="Data Eng">Data Eng</option>
-                <option value="Infrastructure">Infrastructure</option>
-                <option value="Enterprise IT">Enterprise IT</option>
-                <option value="Security">Security</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Project Manager / Owner
-              </label>
-              <input
-                type="text"
-                required
-                value={owner}
-                onChange={(e) => setOwner(e.target.value)}
-                className={`w-full border rounded-sm p-2 text-xs outline-none ${errors.owner ? 'border-red-500 bg-red-50 focus:border-red-600' : 'border-slate-300 focus:border-blue-600'}`}
-              />
-              {errors.owner && <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">warning</span>{errors.owner}</p>}
-            </div>
           </div>
 
           <div>

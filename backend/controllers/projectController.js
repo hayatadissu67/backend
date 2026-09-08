@@ -4,11 +4,15 @@ import {
   getProjectByIdService,
   updateProjectService,
   deleteProjectService,
-} from "../services/projectService.js";
+} from "../services/projectServices/projectService.js";
 
 export const createProject = async (req, res) => {
   try {
-    const project = await createProjectService(req.body);
+    const data = {
+      ...req.body,
+      owner: req.user?.name || req.user?.email || req.body.owner || 'PMO',
+    };
+    const project = await createProjectService(data);
     res.status(201).json({
       success: true,
       message: "Project created successfully",
@@ -24,15 +28,7 @@ export const createProject = async (req, res) => {
 
 export const getAllProjects = async (req, res) => {
   try {
-    let projects = await getAllProjectsService();
-
-    // If Team Member, filter projects to those assigned to the user (by code)
-    const roleCode = req.user && (req.user.role?.code || req.user.role || req.user.role?.name);
-    if (String(roleCode).toUpperCase() === 'TEAM_MEMBER') {
-      const assigned = req.user.assignedProjectCodes || [];
-      projects = projects.filter(p => assigned.includes(p.code));
-    }
-
+    const projects = await getAllProjectsService(req.user || null);
     res.status(200).json({ success: true, data: projects });
   } catch (error) {
     res.status(500).json({
