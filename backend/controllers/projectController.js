@@ -45,10 +45,10 @@ export const getAllProjects = async (req, res) => {
 
     // If Team Member, filter projects to those assigned to the user (by code)
     const roleCode = req.user && (req.user.role?.code || req.user.role || req.user.role?.name);
-    if (String(roleCode).toUpperCase() === 'TEAM_MEMBER') {
-      const assigned = req.user.assignedProjectCodes || [];
-      projects = projects.filter(p => assigned.includes(p.code));
-    }
+    // if (String(roleCode).toUpperCase() === 'TEAM_MEMBER') {
+    //   const assigned = req.user.assignedProjectCodes || [];
+    //   projects = projects.filter(p => assigned.includes(p.code));
+    // }
 
     res.status(200).json({ success: true, data: projects });
   } catch (error) {

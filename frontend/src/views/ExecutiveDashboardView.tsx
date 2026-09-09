@@ -46,8 +46,8 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
   const [showAiSummary, setShowAiSummary] = useState(true);
 
   // Financial Calculations
-  const totalAllocated = budgets.reduce((acc, b) => acc + b.allocated, 0) || 4200000;
-  const totalSpent = budgets.reduce((acc, b) => acc + b.actualSpent, 0) || 1850000;
+  const totalAllocated = budgets.reduce((acc, b) => acc + (b.allocated || 0), 0) || 4200000;
+  const totalSpent = budgets.reduce((acc, b) => acc + (b.actualSpent || 0), 0) || 1850000;
   const remainingBudget = totalAllocated - totalSpent;
   const budgetBurnRate = Math.round((totalSpent / totalAllocated) * 100);
 
@@ -406,11 +406,11 @@ export const ExecutiveDashboardView: React.FC<ExecutiveDashboardViewProps> = ({
                         <span className="font-mono text-slate-500 mr-1.5">{b.projectCode}</span>
                         {b.projectName}
                       </td>
-                      <td className="p-2.5 font-mono text-slate-700">${b.allocated.toLocaleString()}</td>
-                      <td className="p-2.5 font-mono font-bold text-slate-900">${b.actualSpent.toLocaleString()}</td>
-                      <td className="p-2.5 font-mono text-slate-600">${b.committed.toLocaleString()}</td>
+                      <td className="p-2.5 font-mono text-slate-700">${(b.allocated ?? 0).toLocaleString()}</td>
+                      <td className="p-2.5 font-mono font-bold text-slate-900">${(b.actualSpent ?? 0).toLocaleString()}</td>
+                      <td className="p-2.5 font-mono text-slate-600">${(b.committed ?? 0).toLocaleString()}</td>
                       <td className="p-2.5 font-mono font-bold text-emerald-600">
-                        +${b.variance.toLocaleString()}
+                        +${(b.variance ?? 0).toLocaleString()}
                       </td>
                       <td className="p-2.5">
                         <span

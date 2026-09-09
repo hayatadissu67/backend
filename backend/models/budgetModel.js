@@ -15,9 +15,49 @@ const Budget = sequelize.define(
       allowNull: false,
     },
 
+    projectCode: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
+    projectName: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
     amount: {
       type: DataTypes.DECIMAL(15, 2),
       allowNull: false,
+    },
+
+    allocated: {
+      type: DataTypes.DECIMAL(15, 2),
+      allowNull: false,
+      defaultValue: 0,
+    },
+
+    actualSpent: {
+      type: DataTypes.DECIMAL(15, 2),
+      allowNull: false,
+      defaultValue: 0,
+    },
+
+    committed: {
+      type: DataTypes.DECIMAL(15, 2),
+      allowNull: false,
+      defaultValue: 0,
+    },
+
+    variance: {
+      type: DataTypes.DECIMAL(15, 2),
+      allowNull: false,
+      defaultValue: 0,
+    },
+
+    health: {
+      type: DataTypes.ENUM("On Track", "Over Budget", "Under Budget"),
+      allowNull: true,
+      defaultValue: "On Track",
     },
 
     description: {

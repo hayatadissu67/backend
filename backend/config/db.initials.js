@@ -14,6 +14,9 @@ import "../models/riskModel.js";
 import "../models/Resource.js";
 import "../models/executiveRequestModel.js";
 import "../models/auditLogModel.js";
+import "../models/discussionModel.js";
+import "../models/meetingModel.js";
+import "../models/notificationModel.js";
 
 const ensureDatabaseExists = async () => {
   try {
@@ -139,6 +142,30 @@ const ensureTemplateColumns = async () => {
   }
 };
 
+const ensureBudgetColumns = async () => {
+  const [tables] = await sequelize.query("SHOW TABLES LIKE 'budgets'");
+  if (tables.length === 0) return;
+
+  const [columns] = await sequelize.query("SHOW COLUMNS FROM `budgets`");
+  const existing = new Set(
+    columns.map((column) => column.Field || column.COLUMN_NAME || column.column_name)
+  );
+
+  for (const [name, definition] of Object.entries({
+    projectCode: "VARCHAR(255) NULL",
+    projectName: "VARCHAR(255) NULL",
+    allocated: "DECIMAL(15,2) NOT NULL DEFAULT 0",
+    actualSpent: "DECIMAL(15,2) NOT NULL DEFAULT 0",
+    committed: "DECIMAL(15,2) NOT NULL DEFAULT 0",
+    variance: "DECIMAL(15,2) NOT NULL DEFAULT 0",
+    health: "ENUM('On Track', 'Over Budget', 'Under Budget') NULL DEFAULT 'On Track'",
+  })) {
+    if (!existing.has(name)) {
+      await sequelize.query(`ALTER TABLE \`budgets\` ADD COLUMN \`${name}\` ${definition}`);
+    }
+  }
+};
+
 const ensureProjectColumns = async () => {
   const [tables] = await sequelize.query("SHOW TABLES LIKE 'Projects'");
   if (tables.length === 0) return;
@@ -184,6 +211,7 @@ const initDB = async () => {
       await repairRoleIdColumn();
       await removeDuplicateUserEmailIndexes();
       await sequelize.sync();
+      await ensureBudgetColumns();
       await ensureReportColumns();
       await ensureTemplateColumns();
       await ensureProjectColumns();
