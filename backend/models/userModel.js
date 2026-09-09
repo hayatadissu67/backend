@@ -51,6 +51,18 @@ const User = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+
+    mustChangePassword: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+
+    assignedProjectCodes: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: [],
+    },
   },
   {
     tableName: "users",

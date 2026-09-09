@@ -1,19 +1,23 @@
 import { Resource } from "../models/Resource.js";
 import { sequelize } from "../config/db.js";
 import { ResourceRepository } from "../repository/resourceRepository.js";
+import { ResourceService } from "../services/resourceService.js";
+
+const TOTAL_ORGANIZATIONAL_CAPACITY_FTE = 200;
 
 const resourceRepository = new ResourceRepository();
+const resourceService = new ResourceService();
 
 class ResourceController {
   async createResource(req, res, next) {
     try {
-      const resource = await resourceRepository.createResource(req.body);
+      const resource = await resourceService.createResource(req.body);
       res.status(201).json({
         success: true,
         data: resource,
       });
     } catch (error) {
-      next(error);
+      res.status(400).json({ success: false, message: error.message });
     }
   }
 
@@ -27,6 +31,10 @@ class ResourceController {
 
       const resources = await Resource.findAll({
         where,
+        include: [
+          { association: "project" },
+          { association: "user", attributes: { exclude: ["password"] } },
+        ],
         order: [["createdAt", "DESC"]],
       });
       res.status(200).json({
@@ -40,7 +48,12 @@ class ResourceController {
 
   async getResourceById(req, res, next) {
     try {
-      const resource = await Resource.findByPk(req.params.id);
+      const resource = await Resource.findByPk(req.params.id, {
+        include: [
+          { association: "project" },
+          { association: "user", attributes: { exclude: ["password"] } },
+        ],
+      });
       if (!resource) {
         return res.status(404).json({
           success: false,
@@ -56,12 +69,41 @@ class ResourceController {
   async updateResourceStatus(req, res, next) {
     try {
       const { id } = req.params;
-      const { status } = req.body;
-      const resource = await resourceRepository.updateResourceStatus(id, status);
+      const { status, comment } = req.body;
+      const resource = await resourceService.updateResourceStatus(id, status, comment);
       res.status(200).json({
         success: true,
         data: resource,
       });
+    } catch (error) {
+      const status = error.message?.includes("not found") ? 404 : 400;
+      res.status(status).json({ success: false, message: error.message });
+    }
+  }
+
+  async updateResource(req, res, next) {
+    try {
+      const allowedFields = [
+        "type",
+        "projectId",
+        "userId",
+        "assignedTask",
+        "hoursPerWeek",
+        "pmRequesterName",
+        "requestedWorkEmail",
+        "department",
+        "projectRoleTitle",
+        "businessJustification",
+        "status",
+      ];
+      const updates = Object.fromEntries(
+        Object.entries(req.body).filter(([key]) => allowedFields.includes(key))
+      );
+      const resource = await resourceService.updateResource(
+        req.params.id,
+        updates
+      );
+      res.status(200).json({ success: true, data: resource });
     } catch (error) {
       const status = error.message?.includes("not found") ? 404 : 400;
       res.status(status).json({ success: false, message: error.message });
@@ -97,25 +139,34 @@ class ResourceController {
       const [rows] = await sequelize.query(
         `SELECT
             department,
-            COUNT(DISTINCT employeeName) AS headcount,
-            COALESCE(SUM(hoursPerWeek), 0) AS totalHours,
-            COALESCE(ROUND(AVG(hoursPerWeek)), 0) AS avgHoursPerEmployee
-          FROM resources
-          WHERE type = 'ALLOCATION' AND status = 'ACTIVE'
+            COUNT(*) AS headcount,
+            COALESCE(SUM(allocatedFte), 0) AS totalFte
+          FROM (
+            SELECT
+              department,
+              COALESCE(CAST(userId AS CHAR), employeeName) AS employeeKey,
+              LEAST(SUM(hoursPerWeek) / 40, 1) AS allocatedFte
+            FROM resources
+            WHERE (type = 'ALLOCATION' AND status = 'ACTIVE')
+              OR (type = 'ASSIGNMENT_REQUEST' AND status = 'APPROVED')
+            GROUP BY department, employeeKey
+          ) AS employeeAllocations
           GROUP BY department
           ORDER BY department ASC;`
       );
 
-      // Capacity is computed as avgHoursPerEmployee / 40h * 100
+      // Compare every department against the same organization-wide FTE baseline.
       const loading = rows.map((r) => {
+        const headcount = Number(r.headcount);
+        const totalFte = Number(r.totalFte);
         const pct = Math.min(
-          120,
-          Math.round((Number(r.avgHoursPerEmployee) / 40) * 100)
+          100,
+          Number(((totalFte / TOTAL_ORGANIZATIONAL_CAPACITY_FTE) * 100).toFixed(1))
         );
         return {
           department: r.department,
           percentage: pct,
-          headcount: Number(r.headcount),
+          headcount,
           colorClass: pct >= 90 ? "bg-red-600" : "bg-blue-900",
         };
       });
@@ -137,7 +188,7 @@ class ResourceController {
         type: "ASSIGNMENT_REQUEST",
         status: "PENDING",
       };
-      const created = await resourceRepository.createResource(payload);
+      const created = await resourceService.createResource(payload);
       res.status(201).json({ success: true, data: created });
     } catch (error) {
       next(error);

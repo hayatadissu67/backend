@@ -1,43 +1,17 @@
-import { dbConfig, sequelize } from "./db.js";
-import mysql from "mysql2/promise";
-
-import "../models/reportModel.js";
-import "../models/templateModel.js";
-import "../models/portfolioModel.js";
+import { sequelize } from "./db.js";
 import "../models/budgetModel.js";
 import "../models/changeRequestModel.js";
-import "../models/roleModel.js";
-import "../models/userModel.js";
-import "../models/association.js";
-import "../models/projectModel.js";
-import "../models/riskModel.js";
-import "../models/Resource.js";
-import "../models/executiveRequestModel.js";
-import "../models/auditLogModel.js";
-import "../models/discussionModel.js";
-import "../models/meetingModel.js";
+
+
+import "../models/taskModel.js";
 import "../models/notificationModel.js";
-
-const ensureDatabaseExists = async () => {
-  try {
-    const connection = await mysql.createConnection({
-      host: dbConfig.host,
-      port: dbConfig.port,
-      user: dbConfig.username,
-      password: dbConfig.password,
-    });
-
-    await connection.query(
-      `CREATE DATABASE IF NOT EXISTS \`${dbConfig.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;`
-    );
-    await connection.end();
-
-    console.log(`✅ Ensured database '${dbConfig.database}' exists`);
-  } catch (err) {
-    console.error("❌ Could not ensure database exists:", err.message || err);
-    throw err;
-  }
-};
+import "../models/portfolioModel.js";
+import "../models/reportModel.js";
+import "../models/templateModel.js";
+import Risk from "../models/riskModel.js";
+import User from "../models/userModel.js";
+import ProjectTeam from "../models/projectModel/ProjectTeam.js";
+import Project from "../models/projectModel/projectModel.js";
 
 const repairRoleIdColumn = async () => {
   const [columns] = await sequelize.query(
@@ -201,24 +175,16 @@ const ensureProjectColumns = async () => {
 
 const initDB = async () => {
   try {
-    // Make sure the database exists before letting Sequelize connect
-    await ensureDatabaseExists();
-
+    // Define Associations
+    Risk.belongsTo(User, { foreignKey: 'resolvedBy', as: 'Resolver' });
+    
+    // Project Team Associations (Optional, but good for completeness)
     await sequelize.authenticate();
     console.log("✅ Database connection established");
 
-    try {
-      await repairRoleIdColumn();
-      await removeDuplicateUserEmailIndexes();
-      await sequelize.sync();
-      await ensureBudgetColumns();
-      await ensureReportColumns();
-      await ensureTemplateColumns();
-      await ensureProjectColumns();
-      console.log("✅ All models synced successfully");
-    } catch (syncErr) {
-      throw syncErr;
-    }
+    await sequelize.sync({ alter: process.env.DB_SYNC_ALTER === "true" });
+
+    console.log("✅ All models synced successfully");
   } catch (error) {
     console.error("❌ Error initializing database:", error);
   }

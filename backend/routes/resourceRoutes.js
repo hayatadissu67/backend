@@ -16,7 +16,7 @@ router.get("/department-loading", authorizePermission("resources.view"), (req, r
 // PM creates an assignment request that Executives approve/reject
 router.post(
   "/request",
-  authorizePermission("resources.update"),
+  authorizePermission("resources.request"),
   (req, res, next) => resourceController.createAssignmentRequest(req, res, next)
 );
 
@@ -34,9 +34,13 @@ router.get("/:id", authorizePermission("resources.view"), (req, res, next) =>
   resourceController.getResourceById(req, res, next)
 );
 
+router.put("/:id", authorizePermission("resources.update"), (req, res, next) =>
+  resourceController.updateResource(req, res, next)
+);
+
 router.patch(
   "/:id/status",
-  authorizePermission("resources.update"),
+  authorizePermission("resources.approve"),
   (req, res, next) => resourceController.updateResourceStatus(req, res, next)
 );
 

@@ -2,40 +2,32 @@ import express from "express";
 
 import budgetRoutes from "./budgetRoutes.js";
 import changeRequestRoutes from "./changeRequestRoutes.js";
-import projectRoutes from "./projectRoutes.js";
-import riskRoutes from "./riskRoutes.js";
-import authRoutes from "./authRoutes.js";
+import projectRoutes from "./projectRoutes/projectRoutes.js";
+import riskRoutes from "./riskRoutes/riskRoutes.js";
+import authRoute from "./authRoutes.js";
 import { protect } from "../middleware/authMiddleware.js";
+
 import userRoutes from "./userRoutes.js";
-import taskRoutes from "./taskRoutes.js";
-import reportRoutes from "./reportRoutes.js";
-import templateRoutes from "./templateRoutes.js";
-import resourceRoutes from "./resourceRoutes.js";
-import executiveRequestRoutes from "./executiveRequestRoutes.js";
-import auditLogRoutes from "./auditLogRoutes.js";
-import discussionRoutes from "./discussionRoutes.js";
-import meetingRoutes from "./meetingRoutes.js";
-import notificationRoutes from "./notificationRoutes.js";
+import communicationRoutes from "./communicationRoutes.js";
+import taskRoute from "./taskRoutes.js";
 
 const router = express.Router();
 
-// Auth routes (public)
-router.use("/auth", authRoutes);
+// Auth routes (unprotected)
+router.use("/auth", authRoute);
 
-// Protected routes (require valid JWT)
-router.use("/users", protect, userRoutes);
-router.use("/tasks", protect, taskRoutes);
-router.use("/reports", protect, reportRoutes);
-router.use("/templates", protect, templateRoutes);
-router.use("/executive-requests", protect, executiveRequestRoutes);
-router.use("/audit-logs", protect, auditLogRoutes);
-router.use("/budgets", protect, budgetRoutes);
-router.use("/change-requests", protect, changeRequestRoutes);
-router.use("/projects", protect, projectRoutes);
-router.use("/risks", protect, riskRoutes);
-router.use("/resources", protect, resourceRoutes);
-router.use("/communication/discussions", protect, discussionRoutes);
-router.use("/communication/meetings", protect, meetingRoutes);
-router.use("/notifications", protect, notificationRoutes);
+// Protected routes
+router.use(protect);
+router.use("/users", userRoutes);
+router.use("/budgets", budgetRoutes);
+router.use("/change-requests", changeRequestRoutes);
+router.use("/projects", projectRoutes);
+router.use("/risks", riskRoutes);
+router.use("/communication", communicationRoutes);
+router.use("/tasks", taskRoute);
+
+// Mock routes to prevent 404 errors on frontend
+router.get("/reports", (req, res) => res.json({ success: true, data: [] }));
+router.get("/templates", (req, res) => res.json({ success: true, data: [] }));
 
 export default router;

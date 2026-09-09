@@ -1,4 +1,7 @@
 import { Sequelize } from "sequelize";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 export const dbConfig = {
   database: process.env.DB_NAME || "pmo",
@@ -13,8 +16,8 @@ export const sequelize = new Sequelize(
   dbConfig.username,
   dbConfig.password,
   {
-    host: dbConfig.host,
-    port: dbConfig.port,
+    host: process.env.DB_HOST || "localhost",
+    port: Number(process.env.DB_PORT || 3306),
     dialect: "mysql",
     logging: false,
   }

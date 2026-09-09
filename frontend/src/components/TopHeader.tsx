@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { LoggedInPersona, NotificationItem, Project } from '../types';
 
 interface TopHeaderProps {
@@ -36,6 +36,33 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showProjectMenu, setShowProjectMenu] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [notificationsMuted, setNotificationsMuted] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setNotificationsMuted(localStorage.getItem('pmo-notifications-muted') === 'true');
+  }, []);
+
+  const toggleNotificationsMuted = () => {
+    setNotificationsMuted((muted) => {
+      const next = !muted;
+      localStorage.setItem('pmo-notifications-muted', String(next));
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (!showNotifications) return undefined;
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
+        setShowNotifications(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [showNotifications]);
 
   const activeName = currentPersona?.name || 'Sarah Jenkins';
   const activeRole = currentPersona?.roleTitle || 'PMO Executive Director';
@@ -163,14 +190,14 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
         <div className="flex items-center gap-3">
           {/* Notifications Button */}
-          <div className="relative">
+          <div ref={notificationsRef} className="relative">
             <button
               onClick={() => setShowNotifications(!showNotifications)}
               className="w-10 h-10 flex items-center justify-center text-[#45464d] hover:text-[#191c1e] hover:bg-slate-200/50 rounded-full transition-colors relative"
               title="Notifications"
             >
-              <span className="material-symbols-outlined text-[22px]">notifications</span>
-              {unreadNotificationsCount > 0 && (
+              <span className="material-symbols-outlined text-[22px]">{notificationsMuted ? 'notifications_off' : 'notifications'}</span>
+              {!notificationsMuted && unreadNotificationsCount > 0 && (
                 <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] bg-red-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 ring-2 ring-white animate-pulse">
                   {unreadNotificationsCount}
                 </span>
@@ -182,14 +209,25 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               <div className="absolute right-0 mt-2 w-88 bg-white border border-slate-200 rounded-md shadow-2xl z-50 py-2">
                 <div className="px-4 py-2 border-b border-slate-100 flex justify-between items-center">
                   <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">PM &amp; Team Telemetry Feed</h4>
-                  {onMarkNotificationsRead && (
-                    <button onClick={onMarkNotificationsRead} className="text-[11px] text-blue-600 font-semibold hover:underline">
-                      Mark all read
+                  <div className="flex items-center gap-2">
+                    {onMarkNotificationsRead && !notificationsMuted && (
+                      <button onClick={onMarkNotificationsRead} className="text-[11px] text-blue-600 font-semibold hover:underline">
+                        Mark all read
+                      </button>
+                    )}
+                    <button
+                      onClick={toggleNotificationsMuted}
+                      className="text-[11px] text-slate-600 font-semibold hover:text-slate-900"
+                      title={notificationsMuted ? 'Unmute notifications' : 'Mute notifications'}
+                    >
+                      {notificationsMuted ? 'Unmute' : 'Mute'}
                     </button>
-                  )}
+                  </div>
                 </div>
                 <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
-                  {notificationsList.length === 0 ? (
+                  {notificationsMuted ? (
+                    <div className="p-4 text-center text-xs text-slate-500">Notifications are muted</div>
+                  ) : notificationsList.length === 0 ? (
                     <div className="p-4 text-center text-xs text-slate-400">No new notifications</div>
                   ) : (
                     notificationsList.map((n) => (

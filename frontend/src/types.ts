@@ -42,7 +42,6 @@ export interface Project {
   gate: string;
   targetDate: string;
   startDate?: string;
-  endDate?: string;
   description?: string;
   techStack?: string[];
   liveUrl?: string;
@@ -50,9 +49,10 @@ export interface Project {
   priority?: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
   requirements?: WebRequirement[];
   teamMembers?: string[];
+  assignedTeamMembers?: { userId: number; responsibility: string }[];
   lifecycleStage?: LifecycleStage;
   lifecycle?: ProjectLifecycleInfo;
-  approvalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
+  approvalStatus?: 'PENDING_APPROVAL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'ARCHIVED' | 'PENDING_DELETION' | 'PENDING_CLOSURE' | 'CLOSED' | string;
   approvedBy?: string;
   approvedAt?: string;
   rejectionReason?: string;
@@ -81,9 +81,10 @@ export interface RiskItem {
   escalationNotes?: string;
   escalatedAt?: string;
   resolutionNotes?: string;
-  resolvedBy?: string;
+  resolvedBy?: string | number;
   resolvedById?: number;
   resolvedByRole?: string;
+  Resolver?: { name: string };
   resolvedAt?: string;
 }
 
@@ -112,6 +113,28 @@ export interface ResourceLoading {
   percentage: number;
   headcount: number;
   colorClass: string;
+}
+
+export interface ResourceRecord {
+  id: number | string;
+  type: 'ALLOCATION' | 'ASSIGNMENT_REQUEST';
+  projectId?: string | null;
+  userId?: number | null;
+  employeeName?: string | null;
+  projectTarget?: string | null;
+  assignedTask?: string | null;
+  hoursPerWeek: number;
+  pmRequesterName?: string | null;
+  requestedWorkEmail?: string | null;
+  department: string;
+  projectRoleTitle?: string | null;
+  businessJustification?: string | null;
+  approvalComment?: string | null;
+  rejectionComment?: string | null;
+  status: 'ACTIVE' | 'PENDING' | 'APPROVED' | 'REJECTED';
+  createdAt?: string;
+  project?: Project;
+  user?: UserItem;
 }
 
 export interface ApprovalRequest {
@@ -246,6 +269,7 @@ export interface UserItem {
   department: string;
   status: 'Active' | 'Inactive' | 'Pending';
   avatar: string;
+  responsibility?: string;
   projectsAssigned: number;
   title?: string;
   phone?: string;
@@ -284,6 +308,8 @@ export interface TaskItem {
   hoursLogged?: number;
   description?: string;
   comments?: TaskItemComment[];
+  parentTaskId?: string | null;
+  subTasks?: TaskItem[];
 }
 
 export interface BudgetItem {
@@ -317,6 +343,7 @@ export interface DiscussionItem {
   timestamp: string;
   repliesCount: number;
   projectTag: string;
+  createdAt?: string;
 }
 
 export interface NotificationItem {

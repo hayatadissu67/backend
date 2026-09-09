@@ -52,11 +52,32 @@ const Task = sequelize.define(
       type: DataTypes.TEXT,
       allowNull: true,
     },
+    progressUpdatedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Timestamp of last progress increase — used for BLOCKED auto-detection after 3 days stalled',
+    },
+    parentTaskId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      defaultValue: null,
+      references: {
+        model: 'tasks',
+        key: 'id',
+      },
+      onUpdate: 'CASCADE',
+      onDelete: 'CASCADE',
+    },
   },
   {
     timestamps: true,
     tableName: 'tasks',
   }
 );
+
+// Self-referencing association: a Task can have many sub-tasks
+Task.hasMany(Task, { as: 'subTasks', foreignKey: 'parentTaskId' });
+Task.belongsTo(Task, { as: 'parentTask', foreignKey: 'parentTaskId' });
 
 export {Task};

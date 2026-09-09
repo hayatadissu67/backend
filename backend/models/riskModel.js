@@ -14,7 +14,19 @@ const Risk = sequelize.define('Risk', {
   owner: { type: DataTypes.STRING, allowNull: false },
   category: { type: DataTypes.ENUM('Risk', 'Issue'), defaultValue: 'Risk' },
   projectRef: { type: DataTypes.STRING },
-  status: { type: DataTypes.STRING, defaultValue: 'OPEN' }
+  status: { type: DataTypes.ENUM('OPEN', 'REPORTED', 'ESCALATED', 'IN_REVIEW', 'MITIGATED', 'RESOLVED'), defaultValue: 'OPEN' },
+  assignedRiskManager: { type: DataTypes.STRING },
+  flaggedBy: { type: DataTypes.STRING },
+  submittedBy: { type: DataTypes.STRING },
+  milestoneRef: { type: DataTypes.STRING },
+  delegationNotes: { type: DataTypes.TEXT },
+  escalationNotes: { type: DataTypes.TEXT },
+  resolutionNotes: { type: DataTypes.TEXT },
+  resolvedBy: { type: DataTypes.INTEGER },
+  resolvedByRole: { type: DataTypes.STRING },
+  delegatedAt: { type: DataTypes.DATE },
+  escalatedAt: { type: DataTypes.DATE },
+  resolvedAt: { type: DataTypes.DATE }
 }, {
   timestamps: true,
   tableName: 'risks',

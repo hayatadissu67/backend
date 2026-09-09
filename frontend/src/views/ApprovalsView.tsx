@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ApprovalRequest, NavigationTab, Project } from '../types';
+import { ExecutiveProjectDetailsModal } from '../components/ExecutiveProjectDetailsModal';
 
 interface ApprovalsViewProps {
   approvals: ApprovalRequest[];
@@ -13,7 +14,7 @@ interface ApprovalsViewProps {
 }
 
 export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
-  approvals,
+  approvals = [],
   onAction,
   onApproveMemberAssignment,
   onNavigate,
@@ -24,6 +25,9 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
 }) => {
   const [rejectingProjectId, setRejectingProjectId] = useState<string | null>(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
+  
+  // Project Details Modal State
+  const [detailsProject, setDetailsProject] = useState<Project | null>(null);
 
   // Provision Modal State for Executive
   const [provisioningRequest, setProvisioningRequest] = useState<ApprovalRequest | null>(null);
@@ -78,8 +82,13 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const isPendingProject = (p: Project) => {
+    const s = (p.approvalStatus || '').toUpperCase().trim();
+    return s !== 'APPROVED' && s !== 'REJECTED' && s !== 'ARCHIVED';
+  };
+
   return (
-    <div className="space-y-6 animate-fadeIn">
+    <div className="space-y-6">
       {/* Toast Notification */}
       {toastMsg && (
         <div className="fixed top-6 right-6 z-50 bg-[#00174b] text-white px-5 py-3 rounded-xs shadow-2xl font-bold text-xs flex items-center gap-2 border border-amber-400 animate-fadeIn">
@@ -124,7 +133,7 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
       </div>
 
       {/* PROJECT CHARTERS & BUDGET APPROVALS TABLE */}
-      {projects.filter(p => p.approvalStatus === 'PENDING' || !p.approvalStatus).length > 0 && (
+      {Array.isArray(projects) && projects.filter(p => p && (p.approvalStatus === 'PENDING' || !p.approvalStatus)).length > 0 && (
         <div className="bg-white border-2 border-amber-300 rounded-sm overflow-hidden shadow-xs animate-fadeIn">
           <div className="p-4 bg-amber-50/80 border-b border-amber-200 flex justify-between items-center">
             <div className="flex items-center gap-2">
@@ -152,7 +161,7 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-amber-100 font-sans">
-                {projects.filter(p => p.approvalStatus === 'PENDING' || !p.approvalStatus).map((p) => (
+                {projects.filter(isPendingProject).map((p) => (
                   <tr key={p.id} className="hover:bg-amber-50/40 transition-colors">
                     <td className="px-5 py-4">
                       <span className="font-mono font-bold text-slate-900 block">{p.code}</span>
@@ -166,6 +175,14 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                     <td className="px-5 py-4 font-mono text-indigo-900 font-bold">{p.gate || 'Gate 1'}</td>
                     <td className="px-5 py-4 font-mono text-slate-600">{p.targetDate}</td>
                     <td className="px-5 py-4 text-right space-x-1.5 whitespace-nowrap">
+                      <button
+                        onClick={() => setDetailsProject(p)}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] uppercase rounded-xs shadow-2xs cursor-pointer inline-flex items-center gap-1 transition-colors"
+                        title="View Project Details"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">info</span>
+                        Details
+                      </button>
                       <button
                         onClick={() => onApproveProject && onApproveProject(p.id)}
                         className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] uppercase rounded-xs shadow-2xs cursor-pointer inline-flex items-center gap-1 transition-colors"
@@ -222,12 +239,25 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-200 font-sans">
               {approvals.map((app) => {
-                const isMemberAssignment = app.requestType.includes('Member') || !!app.memberName;
+                if (!app) return null;
+                const isMemberAssignment = (app.requestType || '').includes('Member') || !!app.memberName;
+                const projectCode = app.project || 'N/A';
+                const requestType = app.requestType || 'General';
+                const pmRequester = app.requestedBy || 'Unknown';
+                const memberName = app.memberName || '';
+                const memberRole = app.memberRole || '';
+                const memberEmail = app.memberEmail || '';
+                const justification = app.justification || '';
+                const amount = app.amount || 'N/A';
+                const date = app.date || 'N/A';
+                const status = app.status || 'Pending';
+                const loginEmail = app.loginEmail || '';
+                const generatedPassword = app.generatedPassword || '';
 
                 return (
                   <tr key={app.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="px-5 py-4 font-bold text-[#191c1e] whitespace-nowrap">
-                      {app.project}
+                      {projectCode}
                     </td>
 
                     <td className="px-5 py-4">
@@ -237,46 +267,46 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                           Team Member Assignment
                         </span>
                       ) : (
-                        <span className="font-semibold text-slate-800">{app.requestType}</span>
+                        <span className="font-semibold text-slate-800">{requestType}</span>
                       )}
                     </td>
 
                     <td className="px-5 py-4 font-medium text-slate-700 whitespace-nowrap">
-                      {app.requestedBy}
+                      {pmRequester}
                     </td>
 
                     <td className="px-5 py-4">
                       {isMemberAssignment ? (
                         <div className="space-y-0.5">
-                          <strong className="text-slate-900 font-bold block">{app.memberName}</strong>
-                          <span className="text-[10px] text-indigo-900 font-mono block">{app.memberRole || app.memberEmail}</span>
-                          {app.justification && (
-                            <p className="text-[10px] text-slate-500 line-clamp-1 italic">{app.justification}</p>
+                          <strong className="text-slate-900 font-bold block">{memberName}</strong>
+                          <span className="text-[10px] text-indigo-900 font-mono block">{memberRole || memberEmail}</span>
+                          {justification && (
+                            <p className="text-[10px] text-slate-500 line-clamp-1 italic">{justification}</p>
                           )}
                         </div>
                       ) : (
-                        <span className="font-mono font-bold text-slate-800">{app.amount || 'N/A'}</span>
+                        <span className="font-mono font-bold text-slate-800">{amount}</span>
                       )}
                     </td>
 
-                    <td className="px-5 py-4 font-mono text-slate-500 whitespace-nowrap">{app.date}</td>
+                    <td className="px-5 py-4 font-mono text-slate-500 whitespace-nowrap">{date}</td>
 
                     <td className="px-5 py-4 whitespace-nowrap">
                       <span
                         className={`px-2 py-0.5 font-extrabold text-[10px] rounded-xs uppercase tracking-wider ${
-                          app.status === 'Approved'
+                          status === 'Approved'
                             ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                            : app.status === 'Rejected'
+                            : status === 'Rejected'
                             ? 'bg-red-100 text-red-900 border border-red-300'
                             : 'bg-amber-100 text-amber-900 border border-amber-300'
                         }`}
                       >
-                        {app.status}
+                        {status}
                       </span>
                     </td>
 
                     <td className="px-5 py-4 whitespace-nowrap text-right">
-                      {app.status === 'Pending' ? (
+                      {status === 'Pending' ? (
                         <div className="flex justify-end gap-2">
                           {isMemberAssignment ? (
                             <button
@@ -307,12 +337,12 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                           <span className="material-symbols-outlined text-emerald-700 text-[16px]">verified</span>
                           <div>
                             <div className="text-[10px] font-bold text-slate-900">
-                              Email: <span className="font-mono text-indigo-950">{app.loginEmail}</span>
+                              Email: <span className="font-mono text-indigo-950">{loginEmail}</span>
                             </div>
                             <div className="text-[10px] font-mono text-slate-600 flex items-center gap-1">
                               <span>Pass:</span>
                               <strong className="text-slate-900">
-                                {showPassword[app.id] ? app.generatedPassword || 'ExecPass#1' : '••••••••'}
+                                {showPassword[app.id] ? generatedPassword || 'ExecPass#1' : '••••••••'}
                               </strong>
                               <button
                                 type="button"
@@ -323,7 +353,7 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                               </button>
                               <button
                                 type="button"
-                                onClick={() => copyToClipboard(`Email: ${app.loginEmail}\nPassword: ${app.generatedPassword}`, app.id)}
+                                onClick={() => copyToClipboard(`Email: ${loginEmail}\nPassword: ${generatedPassword}`, app.id)}
                                 className="text-slate-500 hover:text-slate-900 ml-1"
                                 title="Copy Credentials"
                               >
@@ -506,6 +536,15 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* EXECUTIVE PROJECT DETAILS MODAL */}
+      <ExecutiveProjectDetailsModal 
+        isOpen={!!detailsProject}
+        onClose={() => setDetailsProject(null)}
+        project={detailsProject}
+        onApprove={onApproveProject}
+        onReject={onRejectProject}
+      />
     </div>
   );
 };

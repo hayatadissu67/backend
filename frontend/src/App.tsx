@@ -1,10 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   fetchProjectsFromApi,
+  fetchProjectOptionsFromApi,
   createProjectApi,
   updateProjectApi,
   approveProjectApi,
   rejectProjectApi,
+  closeProjectApi,
+  rejectClosureApi,
+  submitClosureApi,
   fetchRisksFromApi,
   createRiskApi,
   updateRiskApi,
@@ -15,24 +19,28 @@ import {
   assignProjectTeamMembersApi,
   fetchChangeRequestsFromApi,
   createChangeRequestApi,
+  updateChangeRequestApi,
   approveChangeRequestApi,
   rejectChangeRequestApi,
+  deleteChangeRequestApi,
   fetchReportsApi,
   fetchTemplatesApi,
-  fetchDiscussionsApi,
   createDiscussionApi,
-  fetchMeetingsApi,
+  fetchDiscussionsApi,
   createMeetingApi,
+  fetchMeetingsApi,
   fetchNotificationsApi,
   markNotificationsReadApi,
   clearNotificationsApi,
   fetchUsersFromApi,
+  fetchTeamMembersFromApi,
   deleteUserApi,
   updateUserStatusApi,
   updateUserApi,
   getCurrentUserApi,
   fetchDepartmentLoadingApi,
   fetchResourcesFromApi,
+  createAssignmentRequestApi,
 } from './services/api';
 
 
@@ -43,6 +51,7 @@ import {
   RiskItem,
   ActivityItem,
   ResourceLoading,
+  ResourceRecord,
   ApprovalRequest,
   UserItem,
   TaskItem,
@@ -59,7 +68,6 @@ import { RestrictedAccessView } from "./views/RestrictedAccessView";
 
 import { SidebarNav } from './components/SidebarNav';
 import { TopHeader } from './components/TopHeader';
-import { AIAssistantModal } from './components/AIAssistantModal';
 import { NewProjectModal } from './components/NewProjectModal';
 import { ExportPDFModal } from './components/ExportPDFModal';
 import { UserProfileModal } from './components/UserProfileModal';
@@ -91,19 +99,61 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
-  // Authentication State: Always start on Login page
+  // Authentication lifecycle: CHECKING (resolving session) ->
+  // AUTHENTICATED (valid server-verified JWT) -> NOT_AUTHENTICATED (no/invalid session).
+  // Authentication is NEVER inferred from a stored boolean; it requires a real
+  // token validated against the backend /auth/me endpoint.
+  type AuthStatus = 'checking' | 'authenticated' | 'unauthenticated';
   const [currentUser, setCurrentUser] = useState<UserItem | null>(null);
+  const [authStatus, setAuthStatus] = useState<AuthStatus>('checking');
 
-  // Restore session on page load if token exists
+  // Stale/boolean auth keys left by previous dev builds or legacy localStorage
+  // sessions. These must never act as proof of authentication.
+  const STALE_AUTH_KEYS = [
+    'isAuthenticated', 'loggedIn', 'user', 'currentUser',
+    'authToken', 'accessToken', 'refreshToken', 'session', 'auth', 'persona',
+  ];
+
+  // Clear ONLY authentication-related persisted data. Unrelated application
+  // storage is intentionally left untouched.
+  const clearAuthData = () => {
+    ['token', ...STALE_AUTH_KEYS].forEach((key) => {
+      sessionStorage.removeItem(key);
+      localStorage.removeItem(key);
+    });
+  };
+
+  // Restore session on startup using the REAL backend-verified JWT mechanism.
   useEffect(() => {
-    const tryRestoreSession = async () => {
-      const token = localStorage.getItem('token');
-      if (!token) return;
+    let cancelled = false;
+
+    const restoreSession = async () => {
+      // One-time purge of stale/boolean auth state so a persisted
+      // "isAuthenticated=true" or a legacy localStorage token can never
+      // shortcut authentication. The active session token lives only in
+      // sessionStorage under "token" and is re-validated below.
+      STALE_AUTH_KEYS.forEach((key) => {
+        sessionStorage.removeItem(key);
+        localStorage.removeItem(key);
+      });
+      localStorage.removeItem('token');
+
+      const token = sessionStorage.getItem('token');
+      if (!token) {
+        if (!cancelled) {
+          setCurrentUser(null);
+          setAuthStatus('unauthenticated');
+        }
+        return;
+      }
 
       try {
         const user = await getCurrentUserApi();
+        if (cancelled) return;
+
         if (user) {
           setCurrentUser(user);
+          setAuthStatus('authenticated');
           // restore navigation based on role
           if (window.location.hash) {
             const hash = window.location.hash.replace('#', '') as NavigationTab;
@@ -122,17 +172,37 @@ export default function App() {
             else setCurrentTab('dashboard');
           }
         } else {
-          // token invalid or expired
-          localStorage.removeItem('token');
+          // token invalid or expired -> clear it, do NOT enter the application
+          clearAuthData();
+          if (!cancelled) {
+            setCurrentUser(null);
+            setAuthStatus('unauthenticated');
+          }
         }
-      } catch (err) {
-        console.error('Failed to restore session:', err);
-        localStorage.removeItem('token');
+      } catch {
+        if (cancelled) return;
+        clearAuthData();
+        setCurrentUser(null);
+        setAuthStatus('unauthenticated');
       }
     };
 
-    tryRestoreSession();
+    restoreSession();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      clearAuthData();
+      setCurrentUser(null);
+      setAuthStatus('unauthenticated');
+    };
+
+    window.addEventListener('auth-expired', handleAuthExpired);
+    return () => window.removeEventListener('auth-expired', handleAuthExpired);
   }, []);
 
   // Sync navigation with browser back/forward buttons via hash
@@ -161,8 +231,9 @@ export default function App() {
   };
 
   const handleLoginSuccess = (token: string, user: UserItem) => {
-    localStorage.setItem('token', token);
+    sessionStorage.setItem('token', token);
     setCurrentUser(user);
+    setAuthStatus('authenticated');
 
     // Role-based redirection upon verified login
     let targetTab: NavigationTab = 'dashboard';
@@ -171,7 +242,7 @@ export default function App() {
     } else if (user.role === 'TEAM_MEMBER') {
       targetTab = 'tasks';
     } else if (user.role === 'PROJECT_MANAGER') {
-      targetTab = 'dashboard';
+      targetTab = 'projects';
     } else {
       targetTab = 'dashboard';
     }
@@ -180,9 +251,9 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    localStorage.clear();
-    sessionStorage.clear();
+    clearAuthData();
     setCurrentUser(null);
+    setAuthStatus('unauthenticated');
     window.location.hash = '';
     window.location.replace('/');
   };
@@ -192,7 +263,7 @@ export default function App() {
     if (role === 'EXECUTIVE_MANAGER') return true;
 
     if (role === 'PROJECT_MANAGER') {
-      const restrictedForPM: NavigationTab[] = ['admin', 'approvals'];
+      const restrictedForPM: NavigationTab[] = ['admin', 'approvals', 'dashboard'];
       return !restrictedForPM.includes(tab);
     }
 
@@ -241,16 +312,16 @@ export default function App() {
     try {
       const updated = await approveProjectApi(projectId);
       if (updated) {
-        setProjects((prev) => prev.map((p) => (p.id === projectId ? updated : p)));
-      } else {
-        setProjects((prev) =>
-          prev.map((p) =>
-            p.id === projectId
-              ? { ...p, approvalStatus: 'APPROVED', status: 'ACTIVE', approvedBy: currentUser?.name }
-              : p
-          )
-        );
+        setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, ...updated, approvalStatus: 'APPROVED', status: 'ACTIVE' } : p)));
+        setSelectedProject((prev) => (prev?.id === projectId ? { ...prev, ...updated, approvalStatus: 'APPROVED', status: 'ACTIVE' } : prev));
       }
+      const apiProjects = await fetchProjectsFromApi();
+      if (apiProjects) {
+        setProjects(apiProjects);
+        const ref = apiProjects.find((p) => p.id === projectId);
+        if (ref) setSelectedProject((prev) => (prev?.id === projectId ? ref : prev));
+      }
+      
     } catch (err: any) {
       alert(err.message || 'Failed to approve project.');
     }
@@ -260,29 +331,82 @@ export default function App() {
     try {
       const updated = await rejectProjectApi(projectId, reason);
       if (updated) {
-        setProjects((prev) => prev.map((p) => (p.id === projectId ? updated : p)));
-      } else {
-        setProjects((prev) =>
-          prev.map((p) =>
-            p.id === projectId
-              ? { ...p, approvalStatus: 'REJECTED', status: 'DELAYED', rejectionReason: reason }
-              : p
-          )
-        );
+        setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, ...updated, approvalStatus: 'REJECTED', status: 'DELAYED', rejectionReason: reason } : p)));
+        setSelectedProject((prev) => (prev?.id === projectId ? { ...prev, ...updated, approvalStatus: 'REJECTED', status: 'DELAYED', rejectionReason: reason } : prev));
+      }
+      const apiProjects = await fetchProjectsFromApi();
+      if (apiProjects) {
+        setProjects(apiProjects);
+        const ref = apiProjects.find((p) => p.id === projectId);
+        if (ref) setSelectedProject((prev) => (prev?.id === projectId ? ref : prev));
       }
     } catch (err: any) {
       alert(err.message || 'Failed to reject project.');
     }
   };
 
+  const handleCloseProject = async (projectId: string) => {
+    try {
+      const updated = await closeProjectApi(projectId);
+      if (updated) {
+        setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, ...updated, approvalStatus: 'CLOSED', status: 'COMPLETED' } : p)));
+        setSelectedProject((prev) => (prev?.id === projectId ? { ...prev, ...updated, approvalStatus: 'CLOSED', status: 'COMPLETED' } : prev));
+      }
+      const apiProjects = await fetchProjectsFromApi();
+      if (apiProjects) {
+        setProjects(apiProjects);
+        const ref = apiProjects.find((p) => p.id === projectId);
+        if (ref) setSelectedProject((prev) => (prev?.id === projectId ? ref : prev));
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to close project.');
+    }
+  };
+
+  const handleRejectClosure = async (projectId: string, reason?: string) => {
+    try {
+      const updated = await rejectClosureApi(projectId, reason);
+      if (updated) {
+        setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, ...updated, approvalStatus: 'CLOSURE_REJECTED', status: 'ACTIVE', rejectionReason: reason } : p)));
+        setSelectedProject((prev) => (prev?.id === projectId ? { ...prev, ...updated, approvalStatus: 'CLOSURE_REJECTED', status: 'ACTIVE', rejectionReason: reason } : prev));
+      }
+      const apiProjects = await fetchProjectsFromApi();
+      if (apiProjects) {
+        setProjects(apiProjects);
+        const ref = apiProjects.find((p) => p.id === projectId);
+        if (ref) setSelectedProject((prev) => (prev?.id === projectId ? ref : prev));
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to reject closure request.');
+    }
+  };
+
+  const handleSubmitClosure = async (projectId: string) => {
+    try {
+      const updated = await submitClosureApi(projectId);
+      if (updated) {
+        setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, ...updated, approvalStatus: 'PENDING_CLOSURE' } : p)));
+        setSelectedProject((prev) => (prev?.id === projectId ? { ...prev, ...updated, approvalStatus: 'PENDING_CLOSURE' } : prev));
+      }
+      const apiProjects = await fetchProjectsFromApi();
+      if (apiProjects) {
+        setProjects(apiProjects);
+        const ref = apiProjects.find((p) => p.id === projectId);
+        if (ref) setSelectedProject((prev) => (prev?.id === projectId ? ref : prev));
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to submit project for closure.');
+    }
+  };
+
   const handleAssignTeamMember = async (projectId: string, userIds: string[]) => {
     try {
-      const assignedMembers = await assignProjectTeamMembersApi(projectId, userIds);
-      if (assignedMembers) {
-        // Optimistically, we could just alert success, 
-        // but let's re-fetch the users to ensure the UI updates if necessary.
-        const apiUsers = await fetchUsersFromApi();
-        if (apiUsers) setUsers(apiUsers);
+      const assignedMembers = await assignProjectTeamMembersApi(projectId, userIds.map(id => ({ userId: id })));
+      if (assignedMembers || true) {
+        // Refresh projects to get updated relationships/team members if the backend attaches them
+        const apiProjects = await fetchProjectsFromApi();
+        if (apiProjects) setProjects(apiProjects);
+        alert('Team members successfully assigned.');
       }
     } catch (err: any) {
       throw err;
@@ -323,13 +447,15 @@ export default function App() {
     }
   };
 
-  const handleNotifyPMTaskCompleted = (task: TaskItem, memberName: string) => {
+  const handleNotifyPMTaskCompleted = async (task: TaskItem, memberName: string) => {
     const updated: TaskItem = {
       ...task,
       status: 'Done',
       progress: 100
     };
+    // Persist the completion to the database
     setTasks((prev) => prev.map((t) => (t.id === task.id ? updated : t)));
+    await updateTaskApi(task.id, updated);
 
     const newNotif: NotificationItem = {
       id: `notif-${Date.now()}`,
@@ -354,14 +480,24 @@ export default function App() {
 
   // Main State
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectOptions, setProjectOptions] = useState<Project[]>([]);
   const [risks, setRisks] = useState<RiskItem[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [resources, setResources] = useState<ResourceLoading[]>([]);
+  const [resourceRecords, setResourceRecords] = useState<ResourceRecord[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
 
   const accessibleProjects = useMemo(() => {
+    if (!currentUser) return [];
+    if (currentUser.role === 'EXECUTIVE_MANAGER') return projects;
+    if (currentUser.role === 'PROJECT_MANAGER') {
+      return projects.filter(p => p.owner === currentUser.email || p.owner === currentUser.name);
+    }
+    if (currentUser.role === 'TEAM_MEMBER') {
+      return projects;
+    }
     return projects;
-  }, [projects]);
+  }, [projects, currentUser]);
 
   // Collections
   const [users, setUsers] = useState<UserItem[]>([]);
@@ -381,6 +517,20 @@ export default function App() {
     if (currentUser.role === 'EXECUTIVE_MANAGER') return budgets;
     return budgets.filter((b) => currentUser.assignedProjectCodes?.includes(b.projectCode));
   }, [budgets, currentUser]);
+
+  const combinedApprovals = useMemo(() => {
+    const pendingProjectDeletions: ApprovalRequest[] = projects
+      .filter((p) => p.approvalStatus === 'PENDING_DELETION')
+      .map((p) => ({
+        id: p.id,
+        project: p.code,
+        requestType: 'Project Deletion',
+        requestedBy: p.owner,
+        date: 'Just now',
+        status: 'Pending'
+      }));
+    return [...approvals, ...pendingProjectDeletions];
+  }, [projects, approvals]);
   const [meetings, setMeetings] = useState<MeetingItem[]>([]);
   const [discussions, setDiscussions] = useState<DiscussionItem[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -390,24 +540,58 @@ export default function App() {
   const [reportsError, setReportsError] = useState<string | null>(null);
   const [templates, setTemplates] = useState<ReportTemplate[]>([]);
 
+  useEffect(() => {
+    if (!currentUser) return;
+    const loadCommunication = async () => {
+      const [savedDiscussions, savedMeetings, savedNotifications] = await Promise.all([
+        fetchDiscussionsApi(),
+        fetchMeetingsApi(),
+        fetchNotificationsApi(),
+      ]);
+      if (savedDiscussions.length > 0) setDiscussions(savedDiscussions);
+      if (savedMeetings.length > 0) setMeetings(savedMeetings);
+      if (savedNotifications.length > 0) setNotifications(savedNotifications);
+    };
+    loadCommunication();
+  }, [currentUser]);
+
   const handleAddChangeRequest = async (request: Partial<ChangeRequestItem>) => {
     const created = await createChangeRequestApi(request);
-    if (created) {
-      setChangeRequests((prev) => [created, ...prev]);
-      const newNotif: NotificationItem = {
-        id: `notif-${Date.now()}`,
-        title: `New Change Request: ${created.id}`,
-        message: `${created.title} (${created.amount}) submitted for ${created.project || 'Project'}.`,
-        type: 'info',
-        timestamp: 'Just now',
-        isRead: false
-      };
-      setNotifications((prev) => [newNotif, ...prev]);
+    if (!created) {
+      throw new Error('The change request was not saved.');
     }
+
+    setChangeRequests((prev) => [created, ...prev]);
+    const refreshedRequests = await fetchChangeRequestsFromApi();
+    if (refreshedRequests) setChangeRequests(refreshedRequests);
+
+    const newNotif: NotificationItem = {
+      id: `notif-${Date.now()}`,
+      title: `New Change Request: ${created.id}`,
+      message: `${created.title} (${created.amount}) submitted for ${created.project || 'Project'}.`,
+      type: 'info',
+      timestamp: 'Just now',
+      isRead: false
+    };
+    setNotifications((prev) => [newNotif, ...prev]);
   };
 
-  const handleUpdateChangeRequest = (updated: ChangeRequestItem) => {
-    setChangeRequests((prev) => prev.map((cr) => (cr.id === updated.id ? updated : cr)));
+  const handleUpdateChangeRequest = async (updated: ChangeRequestItem) => {
+    try {
+      const result = await updateChangeRequestApi(String(updated.id), updated);
+      if (result) {
+        setChangeRequests((prev) => prev.map((cr) => (String(cr.id) === String(updated.id) ? result : cr)));
+      } else {
+        throw new Error('The change request update was not saved.');
+      }
+      const refreshedRequests = await fetchChangeRequestsFromApi();
+      if (refreshedRequests) setChangeRequests(refreshedRequests);
+    } catch (err: any) {
+      console.error('Failed to update change request:', err);
+      alert(err.message || 'Failed to update change request');
+      throw err;
+    }
+
     const newNotif: NotificationItem = {
       id: `notif-${Date.now()}`,
       title: `Change Request ${updated.id} Updated`,
@@ -419,25 +603,43 @@ export default function App() {
     setNotifications((prev) => [newNotif, ...prev]);
   };
 
-  const handleDeleteChangeRequest = (id: string) => {
-    setChangeRequests((prev) => prev.filter((cr) => cr.id !== id));
+  const handleDeleteChangeRequest = async (id: string) => {
+    try {
+      const deleted = await deleteChangeRequestApi(id);
+      if (!deleted) {
+        throw new Error('The change request could not be deleted.');
+      }
+      setChangeRequests((prev) => prev.filter((cr) => String(cr.id) !== String(id)));
+    } catch (err: any) {
+      const error = new Error(err.message || 'Failed to delete change request.');
+      alert(error.message);
+      throw error;
+    }
   };
 
   const handleApproveChangeRequest = async (id: string) => {
     try {
       const updated = await approveChangeRequestApi(id);
-      handleUpdateChangeRequest(updated);
+      if (!updated) throw new Error('The change request approval was not saved.');
+      setChangeRequests((prev) => prev.map((cr) => (String(cr.id) === String(id) ? updated : cr)));
+      const refreshedRequests = await fetchChangeRequestsFromApi();
+      if (refreshedRequests) setChangeRequests(refreshedRequests);
     } catch (err: any) {
       alert(err.message || 'Failed to approve change request');
+      throw err;
     }
   };
 
   const handleRejectChangeRequest = async (id: string, reason: string) => {
     try {
       const updated = await rejectChangeRequestApi(id, reason);
-      handleUpdateChangeRequest(updated);
+      if (!updated) throw new Error('The change request rejection was not saved.');
+      setChangeRequests((prev) => prev.map((cr) => (String(cr.id) === String(id) ? updated : cr)));
+      const refreshedRequests = await fetchChangeRequestsFromApi();
+      if (refreshedRequests) setChangeRequests(refreshedRequests);
     } catch (err: any) {
       alert(err.message || 'Failed to reject change request');
+      throw err;
     }
   };
 
@@ -447,6 +649,7 @@ export default function App() {
   const [selectedUserProfile, setSelectedUserProfile] = useState<UserItem | null>(null);
   const [isUserProfileModalOpen, setIsUserProfileModalOpen] = useState(false);
   const [isAssignMemberModalOpen, setIsAssignMemberModalOpen] = useState(false);
+  const [assignMemberModalMode, setAssignMemberModalMode] = useState<'assign' | 'request'>('assign');
 
   const handleOpenUserProfile = (user?: UserItem) => {
     if (user) {
@@ -465,28 +668,30 @@ export default function App() {
 
     const syncWithBackendApi = async () => {
 
+      const isExecutive = currentUser.role === 'EXECUTIVE_MANAGER';
+
       try {
         const [
-          apiUsers, apiProjects, apiRisks, apiTasks, apiBudgets, apiCRs, apiReports, apiTemplates,
+          apiUsers, apiProjects, apiProjectOptions, apiRisks, apiTasks, apiBudgets, apiCRs, apiReports, apiTemplates,
           apiDiscussions, apiMeetings, apiNotifications, apiDepartmentLoading, apiResources
         ] = await Promise.all([
-          fetchUsersFromApi(),
+          // Executives can list all users; PMs/Risk Managers/Team Members only see TEAM_MEMBERs.
+          isExecutive ? fetchUsersFromApi() : fetchTeamMembersFromApi(),
           fetchProjectsFromApi(),
+          fetchProjectOptionsFromApi(),
           fetchRisksFromApi(),
           fetchTasksFromApi(),
           fetchBudgetsFromApi(),
           fetchChangeRequestsFromApi(),
           fetchReportsApi(),
           fetchTemplatesApi(),
-          fetchDiscussionsApi(),
-          fetchMeetingsApi(),
-          fetchNotificationsApi(),
           fetchDepartmentLoadingApi(),
           fetchResourcesFromApi(),
         ]);
 
         if (apiUsers) setUsers(apiUsers);
         if (apiProjects) setProjects(apiProjects);
+        if (apiProjectOptions) setProjectOptions(apiProjectOptions);
         if (apiRisks) setRisks(apiRisks);
         if (apiTasks && Array.isArray(apiTasks)) {
           const normalizeStatus = (s: string) => {
@@ -516,13 +721,8 @@ export default function App() {
           setReportsError('Reports could not be loaded from the backend.');
         }
         if (apiTemplates) setTemplates(apiTemplates);
-        if (apiDiscussions) setDiscussions(apiDiscussions);
-        if (apiMeetings) setMeetings(apiMeetings);
-        if (apiNotifications) setNotifications(apiNotifications);
         if (apiDepartmentLoading && apiDepartmentLoading.length > 0) setResources(apiDepartmentLoading);
-        if (apiResources) {
-          // Raw resource records are available via fetchResourcesFromApi() on demand.
-        }
+        if (apiResources) setResourceRecords(apiResources);
       } catch (err) {
         setReportsError('Reports could not be loaded from the backend.');
         console.error('Failed to sync data with backend API:', err);
@@ -533,29 +733,25 @@ export default function App() {
 
     syncWithBackendApi();
 
-    // Polling interval for messages and notifications
-    const interval = setInterval(async () => {
-      try {
-        const [apiNotifications] = await Promise.all([
-          fetchNotificationsApi()
-        ]);
-        if (apiNotifications) setNotifications(apiNotifications);
-      } catch (e) {
-        // silent fail on poll
-      }
-    }, 10000);
-
-    return () => clearInterval(interval);
+    return undefined;
   }, [currentUser?.id]);
 
   // Handlers
   const handleAddProject = async (newProject: Project) => {
-    const { id: _frontendId, ...projectPayload } = newProject;
-    const createdProject = await createProjectApi(projectPayload);
-    if (!createdProject) {
-      throw new Error('Project could not be created.');
+    const pendingProject = { ...newProject, approvalStatus: 'PENDING' as const };
+    setProjects((prev) => [pendingProject, ...prev]);
+
+    try {
+      const savedProject = await createProjectApi(pendingProject);
+      if (savedProject) {
+        setProjects((prev) => prev.map((project) => (
+          project.id === newProject.id ? { ...savedProject, approvalStatus: savedProject.approvalStatus || 'PENDING' } : project
+        )));
+      }
+    } catch (err: any) {
+      console.error('Failed to save new project:', err);
+      alert(err.message || 'Failed to save new project.');
     }
-    setProjects((current) => [createdProject, ...current]);
     const act: ActivityItem = {
       id: `a-${createdProject.id}`,
       type: 'gate',
@@ -567,9 +763,24 @@ export default function App() {
     setActivities((current) => [act, ...current]);
   };
 
-  const handleUpdateProject = (updated: Project) => {
-    setProjects(projects.map((p) => (p.id === updated.id ? updated : p)));
-    updateProjectApi(updated.id, updated);
+  const handleUpdateProject = async (updated: Project) => {
+    try {
+      const result = await updateProjectApi(updated.id, updated);
+      if (result) {
+        setProjects(projects.map((p) => (p.id === result.id ? result : p)));
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to update project.');
+    }
+  };
+
+  const handleRefreshProjects = async () => {
+    try {
+      const apiProjects = await fetchProjectsFromApi();
+      if (apiProjects) setProjects(apiProjects);
+    } catch (err) {
+      console.error('Failed to refresh projects:', err);
+    }
   };
 
   const handleAddUser = (newUser: UserItem) => {
@@ -593,65 +804,99 @@ export default function App() {
     updateUserApi(updatedUser.id, updatedUser).catch(console.error);
   };
 
-  const handleAddTask = (newTask: TaskItem) => {
-    setTasks([newTask, ...tasks]);
-    createTaskApi(newTask);
+  const handleAddTask = async (newTask: TaskItem) => {
+    // Optimistically add to UI immediately
+    setTasks((prev) => [newTask, ...prev]);
+    // Persist to DB and replace the temp record with the real DB record
+    const saved = await createTaskApi(newTask);
+    if (saved) {
+      setTasks((prev) => prev.map((t) => t.id === newTask.id ? saved : t));
+    }
   };
 
-  const handleUpdateTaskStatus = (taskId: string, newStatus: TaskItem['status']) => {
+  const handleAddSubTask = async (subTask: TaskItem) => {
+    await createTaskApi(subTask);
+    const apiTasks = await fetchTasksFromApi();
+    if (apiTasks) {
+      setTasks(apiTasks);
+    }
+  };
+
+  const handleUpdateTaskStatus = async (taskId: string, newStatus: TaskItem['status']) => {
     setTasks(tasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)));
-    updateTaskApi(taskId, { status: newStatus });
+    const saved = await updateTaskApi(taskId, { status: newStatus });
+    if (saved) {
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? saved : t)));
+    }
   };
 
-  const handleUpdateTask = (updatedTask: TaskItem) => {
+  const handleUpdateTask = async (updatedTask: TaskItem) => {
     setTasks(tasks.map((t) => (t.id === updatedTask.id ? updatedTask : t)));
-    updateTaskApi(updatedTask.id, updatedTask);
+    const saved = await updateTaskApi(updatedTask.id, updatedTask);
+    if (saved) {
+      setTasks((prev) => prev.map((t) => (t.id === updatedTask.id ? saved : t)));
+    }
   };
 
   const handleDeleteTask = (taskId: string) => {
     setTasks(tasks.filter((t) => t.id !== taskId));
   };
 
-  const handleAddRisk = (newRisk: RiskItem) => {
-    setRisks([newRisk, ...risks]);
-    createRiskApi(newRisk);
+  const handleAddRisk = async (newRisk: RiskItem): Promise<boolean> => {
+    try {
+      const created = await createRiskApi(newRisk);
+      if (created) {
+        setRisks([created, ...risks]);
+        
+        const assignee = created.assignedRiskManager || created.owner || 'Risk Manager';
+        const notif: NotificationItem = {
+          id: `notif-risk-${Date.now()}`,
+          title: `New Risk Reported: ${created.ref}`,
+          message: `Risk "${created.subject}" requires attention. Delegated to ${assignee}.`,
+          type: 'alert',
+          timestamp: 'Just now',
+          isRead: false
+        };
+        setNotifications((prev) => [notif, ...prev]);
 
-    const assignee = newRisk.assignedRiskManager || newRisk.owner || 'Risk Manager';
-    const notif: NotificationItem = {
-      id: `notif-risk-${Date.now()}`,
-      title: `Risk Delegated: ${newRisk.ref}`,
-      message: `Risk "${newRisk.subject}" linked to ${newRisk.projectRef || 'PMO Project'} delegated to ${assignee}.`,
-      type: newRisk.severity === 'CRITICAL' || newRisk.severity === 'HIGH' ? 'alert' : 'warning',
-      timestamp: 'Just now',
-      isRead: false
-    };
-    setNotifications((prev) => [notif, ...prev]);
-
-    const act: ActivityItem = {
-      id: `act-risk-${Date.now()}`,
-      type: 'risk',
-      title: `Risk Registered & Delegated (${newRisk.ref})`,
-      subtitle: `"${newRisk.subject}" assigned to ${assignee} • Flagged by ${newRisk.flaggedBy || 'PMO Team'}`,
-      timestamp: 'Just now',
-      badgeType: 'warning'
-    };
-    setActivities((prev) => [act, ...prev]);
+        const act: ActivityItem = {
+          id: `act-risk-${Date.now()}`,
+          type: 'risk',
+          title: `Risk Registered & Delegated (${created.ref})`,
+          subtitle: `"${created.subject}" assigned to ${assignee} • Flagged by ${created.flaggedBy || 'PMO Team'}`,
+          timestamp: 'Just now',
+          badgeType: 'warning'
+        };
+        setActivities((prev) => [act, ...prev]);
+        return true;
+      }
+      return false;
+    } catch (err: any) {
+      alert(err.message || "Failed to create risk");
+      return false;
+    }
   };
 
-  const handleUpdateRisk = (updated: RiskItem) => {
-    setRisks(risks.map((r) => (r.id === updated.id ? updated : r)));
-    updateRiskApi(updated.id, updated);
-
-    const assignee = updated.assignedRiskManager || updated.owner || 'Risk Manager';
-    const notif: NotificationItem = {
-      id: `notif-risk-up-${Date.now()}`,
-      title: `Risk ${updated.ref} Updated`,
-      message: `Risk "${updated.subject}" status set to ${updated.status}. Delegated Manager: ${assignee}.`,
-      type: updated.status === 'MITIGATED' ? 'success' : 'info',
-      timestamp: 'Just now',
-      isRead: false
-    };
-    setNotifications((prev) => [notif, ...prev]);
+  const handleUpdateRisk = async (updated: RiskItem) => {
+    try {
+      const saved = await updateRiskApi(updated.id, updated);
+      if (saved) {
+        setRisks((prev) => prev.map((r) => (r.id === saved.id ? saved : r)));
+        
+        const assignee = saved.assignedRiskManager || saved.owner || 'Risk Manager';
+        const notif: NotificationItem = {
+          id: `notif-risk-up-${Date.now()}`,
+          title: `Risk ${saved.ref} Updated`,
+          message: `Risk "${saved.subject}" status set to ${saved.status}. Delegated Manager: ${assignee}.`,
+          type: saved.status === 'MITIGATED' ? 'success' : 'info',
+          timestamp: 'Just now',
+          isRead: false
+        };
+        setNotifications((prev) => [notif, ...prev]);
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to update risk");
+    }
   };
 
   const handleUpdateResource = (dept: string, newPct: number) => {
@@ -672,9 +917,12 @@ export default function App() {
     setActivities((prev) => [act, ...prev]);
   };
 
-  const handleAddDiscussion = (newDiscussion: DiscussionItem) => {
-    setDiscussions([newDiscussion, ...discussions]);
-    createDiscussionApi(newDiscussion);
+  const handleAddDiscussion = async (newDiscussion: DiscussionItem) => {
+    setDiscussions((prev) => [newDiscussion, ...prev]);
+    const saved = await createDiscussionApi(newDiscussion);
+    if (saved) {
+      setDiscussions((prev) => prev.map((discussion) => discussion.id === newDiscussion.id ? saved : discussion));
+    }
   };
 
   const handleMarkAllNotificationsRead = () => {
@@ -688,8 +936,8 @@ export default function App() {
   };
 
   const handleApprovalAction = (id: string, status: 'Approved' | 'Rejected') => {
-    setApprovals(
-      approvals.map((a) => (a.id === id ? { ...a, status } : a))
+    setApprovals((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, status } : a))
     );
 
     const act: ActivityItem = {
@@ -811,7 +1059,21 @@ export default function App() {
       )
     : risks;
 
-  if (!currentUser) {
+  // Authentication gate: CHECKING -> loading, NOT_AUTHENTICATED -> Login,
+  // AUTHENTICATED -> protected application. The protected app is never rendered
+  // before authentication is resolved.
+  if (authStatus === 'checking') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="flex items-center gap-3 text-slate-600">
+          <span className="material-symbols-outlined animate-spin">progress_activity</span>
+          <span className="text-sm font-medium">Checking authentication…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (authStatus === 'unauthenticated') {
     return <LoginView onLoginSuccess={handleLoginSuccess} />;
   }
 
@@ -845,6 +1107,8 @@ export default function App() {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         unreadNotificationsCount={unreadNotificationsCount}
+        notificationsList={notifications}
+        onMarkNotificationsRead={handleMarkAllNotificationsRead}
         onOpenNewProject={() => setIsNewProjectOpen(true)}
         onOpenUserProfile={() => handleOpenUserProfile()}
         onLogout={handleLogout}
@@ -871,13 +1135,12 @@ export default function App() {
           <>
             {/* Render Tab Views */}
             {currentTab === 'dashboard' && (
-              currentUser.role === 'EXECUTIVE_MANAGER' ? (
-                <ExecutiveDashboardView
+              <ExecutiveDashboardView
                   projects={searchedProjects}
                   risks={searchedRisks}
                   activities={activities}
                   resources={resources}
-                  approvals={approvals}
+                  approvals={combinedApprovals}
                   tasks={accessibleTasks}
                   budgets={accessibleBudgets}
                   meetings={meetings}
@@ -888,47 +1151,13 @@ export default function App() {
                   onUpdateRiskStatus={handleUpdateRisk}
                   onSelectProject={handleSelectProject}
                 />
-              ) : currentUser.role === 'PROJECT_MANAGER' ? (
-                <PMDashboardView
-                  projects={searchedProjects}
-                  tasks={tasks}
-                  users={users}
-                  resources={resources}
-                  currentPersona={currentPersona}
-                  onNavigate={(tab) => handleSelectTab(tab)}
-                  onOpenAssignMemberModal={() => setIsAssignMemberModalOpen(true)}
-                />
-              ) : currentUser.role === 'TEAM_MEMBER' ? (
-                <TeamMemberDashboardView
-                  projects={searchedProjects}
-                  tasks={tasks}
-                  risks={risks}
-                  currentPersona={currentPersona}
-                  onNavigate={(tab) => handleSelectTab(tab)}
-                />
-              ) : (
-                <ProjectsView
-                  projects={searchedProjects}
-                  risks={searchedRisks}
-                  tasks={tasks}
-                  users={users}
-                  selectedProject={selectedProject}
-                  onSelectProject={handleSelectProject}
-                  onOpenNewProject={() => setIsNewProjectOpen(true)}
-                  onUpdateProject={handleUpdateProject}
-                  onAddProject={handleAddProject}
-                  onOpenAssignMemberModal={() => setIsAssignMemberModalOpen(true)}
-                  currentPersona={currentPersona}
-                  onApproveProject={handleApproveProject}
-                  onRejectProject={handleRejectProject}
-                />
-              )
             )}
 
             {/* Users Views */}
             {(currentTab === 'users' || currentTab === 'users_add') && (
               <UsersView
                 users={users}
+                projects={projects}
                 onAddUser={handleAddUser}
                 onDeleteUser={handleDeleteUser}
                 onToggleUserStatus={handleToggleUserStatus}
@@ -950,6 +1179,7 @@ export default function App() {
                 onUpdateTaskStatus={handleUpdateTaskStatus}
                 onUpdateTask={handleUpdateTask}
                 onDeleteTask={handleDeleteTask}
+                onAddSubTask={handleAddSubTask}
                 onAddRisk={handleAddRisk}
                 currentPersona={currentPersona}
                 onNotifyPM={handleNotifyPMTaskCompleted}
@@ -959,12 +1189,14 @@ export default function App() {
             {/* Portfolio View */}
             {currentTab === 'portfolio' && (
               <PortfolioView
-              projects={searchedProjects}
-              risks={searchedRisks}
-              resources={resources}
-              onNavigate={handleSelectTab}
-              onSelectProject={handleSelectProject}
-            />
+                projects={searchedProjects}
+                budgets={budgets}
+                risks={searchedRisks}
+                resources={resources}
+                onNavigate={(tab) => handleSelectTab(tab)}
+                onSelectProject={handleSelectProject}
+                currentPersona={currentPersona}
+              />
             )}
 
             {/* Projects View */}
@@ -983,6 +1215,10 @@ export default function App() {
                 currentPersona={currentPersona}
                 onApproveProject={handleApproveProject}
                 onRejectProject={handleRejectProject}
+                onCloseProject={handleCloseProject}
+                onRejectClosure={handleRejectClosure}
+                onSubmitClosure={handleSubmitClosure}
+                onRefreshProjects={handleRefreshProjects}
               />
             )}
 
@@ -990,11 +1226,20 @@ export default function App() {
             {currentTab === 'resources' && (
               <ResourcesView
               resources={resources}
-              onUpdateResource={handleUpdateResource}
-              onOpenAssignMemberModal={() => setIsAssignMemberModalOpen(true)}
+              resourceRecords={resourceRecords}
+              projects={projects}
+              users={users}
+              onOpenAssignMemberModal={() => {
+                setAssignMemberModalMode('request');
+                setIsAssignMemberModalOpen(true);
+              }}
               onRefresh={async () => {
-                const loading = await fetchDepartmentLoadingApi();
+                const [loading, records] = await Promise.all([
+                  fetchDepartmentLoadingApi(),
+                  fetchResourcesFromApi(),
+                ]);
                 if (loading && loading.length > 0) setResources(loading);
+                if (records) setResourceRecords(records);
               }}
             />
             )}
@@ -1003,7 +1248,7 @@ export default function App() {
             {currentTab === 'change_requests' && (
               <ChangeRequestsView
                 changeRequests={changeRequests}
-                projects={projects}
+                projects={projectOptions}
                 onAddChangeRequest={handleAddChangeRequest}
                 onUpdateChangeRequest={handleUpdateChangeRequest}
                 onDeleteChangeRequest={handleDeleteChangeRequest}
@@ -1028,6 +1273,9 @@ export default function App() {
             {currentTab === 'budget' && (
               <BudgetView
                 budgets={budgets}
+                projects={projects}
+                onApproveProject={handleApproveProject}
+                onRejectProject={handleRejectProject}
                 currentPersona={currentPersona}
               />
             )}
@@ -1046,6 +1294,7 @@ export default function App() {
                 meetings={meetings}
                 onAddMeeting={handleAddMeeting}
                 notifications={notifications}
+                searchQuery={searchQuery}
                 onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
                 onClearNotifications={handleClearNotifications}
                 activeSubTab={
@@ -1076,7 +1325,7 @@ export default function App() {
             {/* Approvals View */}
             {currentTab === 'approvals' && (
               <ApprovalsView
-                approvals={approvals}
+                approvals={combinedApprovals}
                 onAction={handleApprovalAction}
                 onApproveMemberAssignment={handleApproveMemberAssignment}
                 onNavigate={(tab) => handleSelectTab(tab)}
@@ -1122,14 +1371,12 @@ export default function App() {
         )}
       </main>
 
-      {/* Floating AI Assistant */}
-      <AIAssistantModal />
-
       {/* New Project Modal */}
       <NewProjectModal
         isOpen={isNewProjectOpen}
         onClose={() => setIsNewProjectOpen(false)}
         onAddProject={handleAddProject}
+        users={users}
       />
 
       {/* PDF Export Modal */}
@@ -1151,11 +1398,26 @@ export default function App() {
       {/* Assign Member Modal */}
       <AssignMemberModal
         isOpen={isAssignMemberModalOpen}
-        onClose={() => setIsAssignMemberModalOpen(false)}
+        onClose={() => {
+          setIsAssignMemberModalOpen(false);
+          setAssignMemberModalMode('assign');
+        }}
         projects={projects}
         selectedProject={selectedProject}
         users={users}
+        resourceRecords={resourceRecords}
         onAssign={handleAssignTeamMember}
+        mode={assignMemberModalMode}
+        requesterName={currentUser?.name || 'Project Manager'}
+        onRequest={async (payload) => {
+          await createAssignmentRequestApi(payload);
+          const [loading, records] = await Promise.all([
+            fetchDepartmentLoadingApi(),
+            fetchResourcesFromApi(),
+          ]);
+          if (loading) setResources(loading);
+          if (records) setResourceRecords(records);
+        }}
       />
     </div>
   );
